@@ -1,0 +1,5 @@
+{
+  "name": "Convocatorias Fútbol Base",
+  "description": "Generador de convocatorias de partidos para entrenadores, con integración de WhatsApp.",
+  "requestFramePermissions": []
+}
