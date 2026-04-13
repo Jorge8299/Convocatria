@@ -309,7 +309,7 @@ export default function App() {
             <div className="bg-blue-600 p-2 rounded-lg">
               <Trophy className="text-white w-5 h-5" />
             </div>
-            <h1 className="font-bold text-lg tracking-tight">Convocatorias</h1>
+            <h1 className="font-bold text-lg tracking-tight">CONVO</h1>
           </div>
           <div className="flex gap-1">
             <button 
@@ -785,7 +785,7 @@ export default function App() {
 
       <footer className="max-w-md mx-auto px-4 mt-8 text-center">
         <p className="text-xs text-slate-400 font-medium">
-          U.D. OLIVA - Gestión de Convocatorias ⚽️
+          U.D. OLIVA - Gestión de CONVO ⚽️
         </p>
       </footer>
     </div>
