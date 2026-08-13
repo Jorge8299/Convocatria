@@ -356,15 +356,13 @@ export default function App() {
       </div>
 
       {activeView === 'pizarra' ? (
-        <main className="mx-auto mt-4 w-full max-w-[760px] px-2 sm:px-4">
-          <div className="mb-3 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-            La pizarra recibe automáticamente el rival y la fecha de la convocatoria. La plantilla y las jornadas se guardan en este dispositivo.
-          </div>
+        <main className="mx-auto mt-2 w-full max-w-[760px] px-1 sm:px-4">
           <iframe
             key={pizarraUrl}
             title="Pizarra Fútbol 8"
             src={pizarraUrl}
-            className="h-[calc(100vh-190px)] min-h-[720px] w-full rounded-2xl border border-slate-200 bg-white shadow-sm"
+            allowFullScreen
+            className="h-[calc(100vh-145px)] min-h-[650px] w-full rounded-xl border border-slate-200 bg-white shadow-sm"
           />
         </main>
       ) : (

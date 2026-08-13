@@ -76,6 +76,25 @@ button.orange{background:#a15c00}
 .small-actions{display:flex;gap:3px}
 .small-actions button{padding:3px 5px;font-size:9px}
 .hidden{display:none}
+@media(max-width:560px){
+  .app{padding:4px}.card{padding:6px;margin-bottom:5px}.topbar{margin-bottom:3px}
+  h1{font-size:15px}.tabs{margin-bottom:4px}.tabs button{padding:6px 8px}
+  .formations{margin-bottom:4px}.pitch-wrap{border-radius:10px}
+}
+body.field-mode{overflow:hidden;background:#08140d}
+body.field-mode .app{max-width:none;height:100dvh;padding:4px;display:flex;flex-direction:column}
+body.field-mode .topbar,body.field-mode .tabs,body.field-mode #match-card,body.field-mode #journeys-card{display:none}
+body.field-mode #tab-pizarra{display:flex!important;flex:1;min-height:0;flex-direction:column}
+body.field-mode #squad-card{order:2;margin:4px 0 0;padding:4px;background:#f7f9fb;flex:0 0 auto}
+body.field-mode #squad-card .section-title{font-size:10px;margin:0}
+body.field-mode #squad-card #absentTitle,body.field-mode #squad-card #absentRoster,body.field-mode #squad-card .guest-row{display:none}
+body.field-mode .roster{min-height:48px;padding-bottom:2px}
+body.field-mode .bench-player{width:50px;padding:2px}.bench-kid{transform:scale(.88);transform-origin:center bottom}
+body.field-mode .formations{order:0;flex:0 0 auto;margin:0 0 3px}
+body.field-mode .pitch-wrap{order:1;flex:1;min-height:0;width:auto;max-width:100%;aspect-ratio:auto;margin:auto}
+body.field-mode .toolbar{order:3;flex:0 0 auto;margin-top:4px;justify-content:center}
+body.field-mode #fullscreenBtn{background:#b42318}
+body.field-mode #fullscreenBtn::after{content:' Salir'}
 </style>
 </head>
 <body>
@@ -92,7 +111,7 @@ button.orange{background:#a15c00}
   </div>
 
   <section id="tab-pizarra">
-    <div class="card">
+    <div class="card" id="match-card">
       <div class="section-title">Jornada</div>
       <div class="row">
         <input id="rival" placeholder="Rival">
@@ -100,7 +119,7 @@ button.orange{background:#a15c00}
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="journeys-card">
       <div class="section-title">Jornadas guardadas</div>
       <div class="row">
         <select id="journeyNumber">
@@ -140,15 +159,15 @@ button.orange{background:#a15c00}
       <div class="lineup-list" id="lineupList" style="margin-top:6px"></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="squad-card">
       <div class="row" style="align-items:center;justify-content:space-between">
         <div class="section-title" style="margin:0">Plantilla de la jornada</div>
         <div class="status" id="attendanceSummary" style="margin:0"></div>
       </div>
       <div id="roster" class="roster"></div>
-      <div class="section-title" style="margin-top:6px">Ausentes</div>
+      <div class="section-title" id="absentTitle" style="margin-top:6px">Ausentes</div>
       <div id="absentRoster" class="roster"></div>
-      <div class="row" style="margin-top:6px">
+      <div class="row guest-row" style="margin-top:6px">
         <input id="guestName" placeholder="Jugador B / invitado">
         <input id="guestNumber" placeholder="#" inputmode="numeric" style="max-width:58px">
         <button class="green" id="addGuest">+ B</button>
@@ -169,6 +188,7 @@ button.orange{background:#a15c00}
     </div>
 
     <div class="toolbar">
+      <button class="green" id="fullscreenBtn">⛶ Campo completo</button>
       <button class="gray" id="benchAll">Todos al banquillo</button>
     </div>
   </section>
@@ -621,6 +641,25 @@ document.getElementById('addPlayer').onclick=addPlayer;
 document.getElementById('saveLineup').onclick=saveLineup;
 document.querySelectorAll('[data-form]').forEach(b=>b.onclick=()=>applyFormation(b.dataset.form));
 document.getElementById('benchAll').onclick=()=>{state.players.forEach(p=>p.onField=false);save();renderAll()};
+const fullscreenBtn=document.getElementById('fullscreenBtn');
+function syncFieldMode(){
+  const active=!!document.fullscreenElement || document.body.classList.contains('field-mode');
+  fullscreenBtn.textContent=active?'⛶':'⛶ Campo completo';
+}
+fullscreenBtn.onclick=async()=>{
+  if(document.body.classList.contains('field-mode')){
+    document.body.classList.remove('field-mode');
+    if(document.fullscreenElement && document.exitFullscreen) await document.exitFullscreen().catch(()=>{});
+  }else{
+    document.body.classList.add('field-mode');
+    if(document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen().catch(()=>{});
+  }
+  syncFieldMode();
+};
+document.addEventListener('fullscreenchange',()=>{
+  if(!document.fullscreenElement) document.body.classList.remove('field-mode');
+  syncFieldMode();
+});
 document.getElementById('rival').oninput=e=>{state.rival=e.target.value;save()};
 document.getElementById('matchDate').onchange=e=>{state.matchDate=e.target.value;save()};
 document.getElementById('addGuest').onclick=addGuest;
