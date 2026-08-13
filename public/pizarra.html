@@ -648,22 +648,21 @@ document.querySelectorAll('[data-form]').forEach(b=>b.onclick=()=>applyFormation
 document.getElementById('benchAll').onclick=()=>{state.players.forEach(p=>p.onField=false);save();renderAll()};
 const fullscreenBtn=document.getElementById('fullscreenBtn');
 function syncFieldMode(){
-  const active=!!document.fullscreenElement || document.body.classList.contains('field-mode');
+  const active=document.body.classList.contains('field-mode');
   fullscreenBtn.textContent=active?'⛶':'⛶ Abrir campo completo';
 }
-fullscreenBtn.onclick=async()=>{
+fullscreenBtn.onclick=()=>{
   if(document.body.classList.contains('field-mode')){
     document.body.classList.remove('field-mode');
-    if(document.fullscreenElement && document.exitFullscreen) await document.exitFullscreen().catch(()=>{});
+    parent.postMessage({type:'convo-pizarra-expanded',expanded:false},location.origin);
   }else{
     document.body.classList.add('field-mode');
-    if(document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen().catch(()=>{});
+    parent.postMessage({type:'convo-pizarra-expanded',expanded:true},location.origin);
   }
   syncFieldMode();
 };
-document.addEventListener('fullscreenchange',()=>{
-  if(!document.fullscreenElement) document.body.classList.remove('field-mode');
-  syncFieldMode();
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape' && document.body.classList.contains('field-mode')) fullscreenBtn.click();
 });
 document.getElementById('rival').oninput=e=>{state.rival=e.target.value;save()};
 document.getElementById('matchDate').onchange=e=>{state.matchDate=e.target.value;save()};
