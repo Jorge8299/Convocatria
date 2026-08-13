@@ -91,6 +91,7 @@ const INITIAL_STATE: FormData = {
 export default function App() {
   const [formData, setFormData] = useState<FormData>(INITIAL_STATE);
   const [activeView, setActiveView] = useState<'convocatoria' | 'pizarra'>('convocatoria');
+  const [pizarraExpanded, setPizarraExpanded] = useState(false);
 
   const [rivales, setRivales] = useState<Rival[]>(() => {
     const saved = localStorage.getItem('convocatoria_rivales');
@@ -103,6 +104,17 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('convocatoria_rivales', JSON.stringify(rivales));
   }, [rivales]);
+
+  useEffect(() => {
+    const handlePizarraMode = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === 'convo-pizarra-expanded') {
+        setPizarraExpanded(Boolean(event.data.expanded));
+      }
+    };
+    window.addEventListener('message', handlePizarraMode);
+    return () => window.removeEventListener('message', handlePizarraMode);
+  }, []);
 
   const calculateCitacionTime = (matchTime: string, isCasa: boolean) => {
     if (!matchTime) return "";
@@ -361,8 +373,9 @@ export default function App() {
             key={pizarraUrl}
             title="Pizarra Fútbol 8"
             src={pizarraUrl}
-            allowFullScreen
-            className="h-[calc(100vh-145px)] min-h-[650px] w-full rounded-xl border border-slate-200 bg-white shadow-sm"
+            className={pizarraExpanded
+              ? 'fixed inset-0 z-[100] h-[100dvh] w-screen border-0 bg-white'
+              : 'h-[calc(100vh-145px)] min-h-[650px] w-full rounded-xl border border-slate-200 bg-white shadow-sm'}
           />
         </main>
       ) : (
