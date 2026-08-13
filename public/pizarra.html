@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#0b7a37">
+<title>Pizarra Fútbol 8 Pro</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:#eef1f4;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#15202b}
+.app{max-width:720px;margin:auto;padding:8px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px}
+h1{font-size:18px;margin:0}
+.badge{font-size:11px;background:#172b4d;color:#fff;padding:5px 8px;border-radius:999px;font-weight:800}
+.card{background:#fff;border-radius:12px;padding:8px;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-bottom:8px}
+.row{display:flex;gap:6px}
+input,select{flex:1;min-width:0;border:1px solid #cfd6dd;border-radius:9px;padding:8px 9px;font-size:13px;background:#fff}
+button{border:0;border-radius:9px;padding:7px 9px;font-weight:800;font-size:11px;background:#172b4d;color:#fff}
+button.green{background:#087a3b}
+button.gray{background:#e8edf2;color:#172b4d}
+button.red{background:#b42318}
+button.orange{background:#a15c00}
+.status{font-size:10px;color:#5d6875;margin-top:4px}
+.tabs{display:flex;gap:5px;margin-bottom:7px;overflow-x:auto}
+.tabs button{white-space:nowrap;background:#dfe5ea;color:#172b4d}
+.tabs button.active{background:#172b4d;color:#fff}
+.section-title{font-size:12px;font-weight:900;margin-bottom:5px}
+.roster{display:flex;gap:5px;overflow-x:auto;padding:2px 2px 5px;min-height:54px;scrollbar-width:thin}
+.roster::-webkit-scrollbar{height:4px}
+.bench-player{flex:0 0 auto;width:54px;background:#f2f5f8;border:1px solid #d8dee5;border-radius:9px;padding:3px 3px;text-align:center;position:relative}
+.bench-kid{position:relative;width:26px;height:32px;margin:auto}
+.head{position:absolute;width:10px;height:10px;border-radius:50%;background:#f0c7a5;left:8px;top:0;border:1px solid rgba(0,0,0,.12)}
+.hair{position:absolute;width:10px;height:5px;border-radius:8px 8px 3px 3px;background:#5b402d;left:8px;top:0}
+.body{position:absolute;width:14px;height:14px;background:#1565c0;left:6px;top:9px;border-radius:4px;border:1px solid rgba(255,255,255,.75)}
+.armL,.armR{position:absolute;width:4px;height:13px;background:#1565c0;top:10px;border-radius:4px}
+.armL{left:2px;transform:rotate(13deg)} .armR{right:2px;transform:rotate(-13deg)}
+.legL,.legR{position:absolute;width:4px;height:10px;background:#123f76;top:22px;border-radius:3px}
+.legL{left:7px}.legR{right:7px}
+.bench-name{font-size:8px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.dorsal{position:absolute;right:3px;top:2px;font-size:8px;background:#172b4d;color:#fff;border-radius:999px;min-width:14px;height:14px;display:grid;place-items:center;font-weight:900}
+.minutes{font-size:8px;color:#5d6875;margin-top:1px}
+.formations{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px}
+.formations button{background:#0b7a37;padding:5px 7px;font-size:10px}
+.pitch-wrap{position:relative;width:100%;aspect-ratio:68/105;border-radius:16px;overflow:hidden;box-shadow:0 5px 16px rgba(0,0,0,.15);touch-action:none;background:#188d45}
+.stripe{position:absolute;inset:0;background:repeating-linear-gradient(90deg,rgba(255,255,255,.035) 0 14.28%,rgba(0,0,0,.025) 14.28% 28.56%)}
+.line{position:absolute;border:2px solid rgba(255,255,255,.9);pointer-events:none}
+.outer{inset:3.5%}
+.half{left:3.5%;right:3.5%;top:50%;border-width:2px 0 0}
+.circle{width:22%;aspect-ratio:1;border-radius:50%;left:39%;top:39%}
+.dot{position:absolute;left:50%;top:50%;width:6px;height:6px;border-radius:50%;background:#fff;transform:translate(-50%,-50%)}
+.box-top,.box-bottom{width:48%;height:15%;left:26%}
+.box-top{top:3.5%}.box-bottom{bottom:3.5%}
+.goal-top,.goal-bottom{width:23%;height:4%;left:38.5%}
+.goal-top{top:0}.goal-bottom{bottom:0}
+.player{position:absolute;width:62px;transform:translate(-50%,-50%);z-index:10;touch-action:none;user-select:none;text-align:center}
+.kid{position:relative;width:32px;height:42px;margin:auto;filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))}
+.kid .head{width:12px;height:12px;left:10px}
+.kid .hair{width:12px;height:6px;left:10px}
+.kid .body{width:17px;height:17px;left:7.5px;top:11px}
+.kid .armL,.kid .armR{height:15px;top:12px}
+.kid .legL,.kid .legR{height:12px;top:27px}
+.kid .legL{left:8px}.kid .legR{right:8px}
+.player-name{display:inline-block;max-width:62px;background:rgba(0,0,0,.72);color:#fff;border-radius:7px;padding:2px 5px;font-size:8px;font-weight:700;margin-top:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.player-meta{font-size:8px;color:white;background:rgba(0,0,0,.5);display:inline-block;padding:1px 4px;border-radius:6px}.player-actions{margin-top:2px}.player-actions button{padding:3px 5px;font-size:9px;background:#fff;color:#172b4d;border-radius:6px}
+.toolbar{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.toolbar button{padding:6px 8px;font-size:10px}
+.lineup-list{display:flex;gap:5px;overflow-x:auto}
+.lineup-pill{flex:0 0 auto;display:flex;align-items:center;gap:4px;background:#eef2f5;border-radius:999px;padding:4px 5px}
+.lineup-pill.active{background:#172b4d;color:#fff}
+.lineup-pill button{padding:3px 6px;font-size:9px}
+.clock{font-size:20px;font-weight:900;letter-spacing:.5px}
+.clock-controls{display:flex;gap:5px;flex-wrap:wrap}
+.table{width:100%;border-collapse:collapse;font-size:11px}
+.table th,.table td{padding:5px 4px;border-bottom:1px solid #edf0f2;text-align:left}
+.table th{font-size:10px;color:#5d6875}
+.small-actions{display:flex;gap:3px}
+.small-actions button{padding:3px 5px;font-size:9px}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <h1>⚽ Pizarra Fútbol 8</h1>
+    <div class="badge" id="topBadge">0/8</div>
+  </div>
+
+  <div class="tabs">
+    <button class="active" data-tab="pizarra">Pizarra</button>
+    <button data-tab="plantilla">Plantilla</button>
+    <button data-tab="post">Después</button>
+  </div>
+
+  <section id="tab-pizarra">
+    <div class="card">
+      <div class="section-title">Jornada</div>
+      <div class="row">
+        <input id="rival" placeholder="Rival">
+        <input id="matchDate" type="date">
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Jornadas guardadas</div>
+      <div class="row">
+        <select id="journeyNumber">
+          <option value="1">Jornada 1</option>
+          <option value="2">Jornada 2</option>
+          <option value="3">Jornada 3</option>
+          <option value="4">Jornada 4</option>
+          <option value="5">Jornada 5</option>
+          <option value="6">Jornada 6</option>
+          <option value="7">Jornada 7</option>
+          <option value="8">Jornada 8</option>
+          <option value="9">Jornada 9</option>
+          <option value="10">Jornada 10</option>
+          <option value="11">Jornada 11</option>
+          <option value="12">Jornada 12</option>
+          <option value="13">Jornada 13</option>
+          <option value="14">Jornada 14</option>
+          <option value="15">Jornada 15</option>
+          <option value="16">Jornada 16</option>
+          <option value="17">Jornada 17</option>
+          <option value="18">Jornada 18</option>
+          <option value="19">Jornada 19</option>
+          <option value="20">Jornada 20</option>
+          <option value="21">Jornada 21</option>
+          <option value="22">Jornada 22</option>
+          <option value="23">Jornada 23</option>
+          <option value="24">Jornada 24</option>
+          <option value="25">Jornada 25</option>
+          <option value="26">Jornada 26</option>
+          <option value="27">Jornada 27</option>
+          <option value="28">Jornada 28</option>
+          <option value="29">Jornada 29</option>
+          <option value="30">Jornada 30</option>
+        </select>
+        <button class="green" id="saveLineup">Guardar jornada</button>
+      </div>
+      <div class="lineup-list" id="lineupList" style="margin-top:6px"></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="align-items:center;justify-content:space-between">
+        <div class="section-title" style="margin:0">Plantilla de la jornada</div>
+        <div class="status" id="attendanceSummary" style="margin:0"></div>
+      </div>
+      <div id="roster" class="roster"></div>
+      <div class="section-title" style="margin-top:6px">Ausentes</div>
+      <div id="absentRoster" class="roster"></div>
+      <div class="row" style="margin-top:6px">
+        <input id="guestName" placeholder="Jugador B / invitado">
+        <input id="guestNumber" placeholder="#" inputmode="numeric" style="max-width:58px">
+        <button class="green" id="addGuest">+ B</button>
+      </div>
+    </div>
+
+    <div class="formations">
+      <button data-form="3-3-1">3-3-1</button>
+      <button data-form="2-3-2">2-3-2</button>
+      <button data-form="3-2-2">3-2-2</button>
+      <button data-form="2-1-3-1">2-1-3-1</button>
+    </div>
+
+    <div class="pitch-wrap" id="pitch">
+      <div class="stripe"></div>
+      <div class="line outer"></div><div class="line half"></div><div class="line circle"></div><div class="dot"></div>
+      <div class="line box-top"></div><div class="line box-bottom"></div><div class="line goal-top"></div><div class="line goal-bottom"></div>
+    </div>
+
+    <div class="toolbar">
+      <button class="gray" id="benchAll">Todos al banquillo</button>
+    </div>
+  </section>
+
+  <section id="tab-plantilla" class="hidden">
+    <div class="card">
+      <div class="row">
+        <input id="playerName" placeholder="Nombre">
+        <input id="playerNumber" placeholder="Dorsal" inputmode="numeric" style="max-width:72px">
+        <select id="playerRole" style="max-width:100px">
+          <option value="field">Jugador</option>
+          <option value="gk">Portero</option>
+        </select>
+        <button class="green" id="addPlayer">Añadir</button>
+      </div>
+      <div class="status" id="rosterStatus"></div>
+    </div>
+    <div class="card">
+      <table class="table">
+        <thead><tr><th>#</th><th>Jugador</th><th>Rol</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="playerTable"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="tab-post" class="hidden">
+    <div class="card">
+      <div class="section-title">Después del partido</div>
+      <div class="row">
+        <input id="resultHome" placeholder="Goles nosotros" inputmode="numeric">
+        <input id="resultAway" placeholder="Goles rival" inputmode="numeric">
+      </div>
+      <div class="row" style="margin-top:6px">
+        <input id="scorers" placeholder="Goleadores (opcional)">
+      </div>
+      <div class="row" style="margin-top:6px">
+        <input id="notes" placeholder="Observación rápida del partido">
+      </div>
+      <div class="status">Se guarda automáticamente en la jornada activa.</div>
+    </div>
+  </section>
+</div>
+
+<script>
+const KEY='pizarra_futbol8_pro_v1';
+let state={
+  players:[],
+  lineups:[],
+  activeLineupId:null,
+  rival:'',
+  matchDate:'',
+  resultHome:'',
+  resultAway:'',
+  scorers:'',
+  notes:'',
+  journeyPlayerState:{},
+  guestsByJourney:{}
+};
+const pitch=document.getElementById('pitch');
+
+function save(){localStorage.setItem(KEY,JSON.stringify(state))}
+function load(){
+  try{
+    const cur=JSON.parse(localStorage.getItem(KEY)||'null');
+    if(cur) state={...state,...cur};
+    else{
+      const old=JSON.parse(localStorage.getItem('pizarra_futbol8_v3')||'null');
+      if(old&&Array.isArray(old.players)){
+        state.players=old.players.map((p,i)=>({...p,number:p.number||i+1,minutes:0}));
+      }
+    }
+  }catch(e){}
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function field(){return journeyField()}
+function bench(){return journeyBench()}
+function playerById(id){return state.players.find(p=>p.id===id)}
+function ensurePlayerShape(){
+  state.players=state.players.map((p,i)=>({number:i+1,role:'field',...p}));
+}
+function kidMarkup(small=false){
+  return `<div class="${small?'bench-kid':'kid'}"><div class="head"></div><div class="hair"></div><div class="body"></div><div class="armL"></div><div class="armR"></div><div class="legL"></div><div class="legR"></div></div>`;
+}
+
+function currentJourney(){
+  return Number(document.getElementById('journeyNumber')?.value || 1);
+}
+function journeyKey(){ return String(currentJourney()); }
+function getPlayerStatus(id){
+  const key=journeyKey();
+  return state.journeyPlayerState?.[key]?.[id] || 'available';
+}
+function setPlayerStatus(id,status){
+  const key=journeyKey();
+  if(!state.journeyPlayerState) state.journeyPlayerState={};
+  if(!state.journeyPlayerState[key]) state.journeyPlayerState[key]={};
+  state.journeyPlayerState[key][id]=status;
+  const p=playerById(id);
+  if(status==='absent' && p) p.onField=false;
+  save(); renderAll();
+}
+function guestList(){
+  const key=journeyKey();
+  if(!state.guestsByJourney) state.guestsByJourney={};
+  if(!state.guestsByJourney[key]) state.guestsByJourney[key]=[];
+  return state.guestsByJourney[key];
+}
+function allJourneyPlayers(){
+  return [...state.players, ...guestList()];
+}
+function isGuest(p){ return !!p.guest; }
+function journeyField(){
+  return allJourneyPlayers().filter(p=>p.onField && getPlayerStatus(p.id)!=='absent');
+}
+function journeyBench(){
+  return allJourneyPlayers().filter(p=>!p.onField);
+}
+function allPlayerById(id){
+  return allJourneyPlayers().find(p=>p.id===id);
+}
+function addGuest(){
+  const name=document.getElementById('guestName').value.trim();
+  const number=document.getElementById('guestNumber').value.trim();
+  if(!name)return;
+  guestList().push({
+    id:'g'+Date.now()+Math.random(),
+    name,
+    number:number||'B',
+    role:'field',
+    guest:true,
+    onField:false,
+    x:50,y:82
+  });
+  document.getElementById('guestName').value='';
+  document.getElementById('guestNumber').value='';
+  save();renderAll();
+}
+function removeGuest(id){
+  const key=journeyKey();
+  state.guestsByJourney[key]=(state.guestsByJourney[key]||[]).filter(p=>p.id!==id);
+  save();renderAll();
+}
+
+function addPlayer(){
+  const name=document.getElementById('playerName').value.trim();
+  const number=document.getElementById('playerNumber').value.trim();
+  const role=document.getElementById('playerRole').value;
+  if(!name)return;
+  state.players.push({id:String(Date.now())+Math.random(),name,number:number||state.players.length+1,role,onField:false,x:50,y:82,minutes:0});
+  document.getElementById('playerName').value='';
+  document.getElementById('playerNumber').value='';
+  document.getElementById('playerRole').value='field';
+  save();renderAll();
+}
+function putOnField(id){
+  if(field().length>=8){alert('Ya hay 8 titulares.');return}
+  const p=allPlayerById(id);if(!p)return;
+  if(getPlayerStatus(p.id)==='absent')return;
+
+  if(p.role==='gk'){
+    const currentGK=field().find(x=>x.role==='gk');
+    if(currentGK){currentGK.onField=false;}
+    p.onField=true;p.x=50;p.y=91;
+  }else{
+    p.onField=true;
+    const outfield=field().filter(x=>x.role!=='gk');
+    const spots=[[25,72],[50,72],[75,72],[25,48],[50,48],[75,48],[50,23]];
+    const pos=spots[Math.max(0,outfield.length-1)]||[50,50];
+    p.x=pos[0];p.y=pos[1];
+  }
+  save();renderAll();
+}
+function toBench(id){const p=allPlayerById(id);if(p){p.onField=false;save();renderAll()}}
+function deletePlayer(id){
+  const p=playerById(id);if(!p)return;
+  if(confirm('¿Eliminar a '+p.name+'?')){
+    state.players=state.players.filter(x=>x.id!==id);
+    state.lineups.forEach(l=>l.positions=l.positions.filter(x=>x.id!==id));
+    save();renderAll();
+  }
+}
+function saveLineup(){
+  const journey=currentJourney();
+  const name='Jornada '+journey;
+  const positions=allJourneyPlayers().map(p=>({id:p.id,onField:p.onField,x:p.x,y:p.y}));
+  const snapshot={
+    rival:state.rival||'',
+    matchDate:state.matchDate||'',
+    playerState:JSON.parse(JSON.stringify(state.journeyPlayerState?.[String(journey)]||{})),
+    guests:JSON.parse(JSON.stringify(guestList())),
+    resultHome:state.resultHome||'',
+    resultAway:state.resultAway||'',
+    scorers:state.scorers||'',
+    notes:state.notes||''
+  };
+  const existing=state.lineups.find(l=>Number(l.journey)===journey || l.name===name);
+  if(existing){
+    Object.assign(existing,{name,journey,positions,snapshot});
+    state.activeLineupId=existing.id;
+  }else{
+    const lineup={id:String(Date.now())+Math.random(),name,journey,positions,snapshot};
+    state.lineups.push(lineup);state.activeLineupId=lineup.id;
+  }
+  save();renderAll();
+}
+function loadLineup(id){
+  const l=state.lineups.find(x=>x.id===id);if(!l)return;
+  document.getElementById('journeyNumber').value=String(l.journey||1);
+  const key=String(l.journey||1);
+  if(l.snapshot){
+    if(!state.guestsByJourney)state.guestsByJourney={};
+    state.guestsByJourney[key]=JSON.parse(JSON.stringify(l.snapshot.guests||[]));
+    if(!state.journeyPlayerState)state.journeyPlayerState={};
+    state.journeyPlayerState[key]=JSON.parse(JSON.stringify(l.snapshot.playerState||{}));
+    state.rival=l.snapshot.rival||'';
+    state.matchDate=l.snapshot.matchDate||'';
+    state.resultHome=l.snapshot.resultHome||'';
+    state.resultAway=l.snapshot.resultAway||'';
+    state.scorers=l.snapshot.scorers||'';
+    state.notes=l.snapshot.notes||'';
+  }
+  allJourneyPlayers().forEach(p=>{
+    const pos=l.positions.find(x=>x.id===p.id);
+    if(pos){p.onField=!!pos.onField;p.x=pos.x;p.y=pos.y}else p.onField=false;
+  });
+  state.activeLineupId=id;save();renderAll();
+}
+
+function deleteLineup(id){
+  state.lineups=state.lineups.filter(x=>x.id!==id);
+  if(state.activeLineupId===id)state.activeLineupId=null;
+  save();renderAll();
+}
+function applyFormation(name){
+  const gk=field().find(p=>p.role==='gk');
+  if(gk){gk.x=50;gk.y=91;}
+
+  const outfield=field().filter(p=>p.role!=='gk');
+  const slots=getFormationSlots(name);
+
+  // Respeta la posición previa: cada jugador va al hueco táctico más cercano.
+  const assigned=assignClosestSlots(outfield,slots);
+  assigned.forEach(({p,slot})=>{p.x=slot[0];p.y=slot[1]});
+
+  save();renderAll();
+}
+
+function dist(a,b){
+  const dx=a.x-b.x,dy=a.y-b.y;
+  return Math.sqrt(dx*dx+dy*dy);
+}
+function getFormationSlots(name){
+  const maps={
+    '3-3-1':[[25,72],[50,72],[75,72],[25,48],[50,48],[75,48],[50,23]],
+    '2-3-2':[[35,70],[65,70],[22,48],[50,48],[78,48],[36,23],[64,23]],
+    '3-2-2':[[25,72],[50,72],[75,72],[38,48],[62,48],[36,23],[64,23]],
+    '2-1-3-1':[[35,74],[65,74],[50,61],[22,43],[50,43],[78,43],[50,22]]
+  };
+  return maps[name]||[];
+}
+function assignClosestSlots(players,slots){
+  const remaining=[...slots];
+  const result=[];
+  // Asigna primero los jugadores con posición más extrema para conservar mejor su zona.
+  const ordered=[...players].sort((a,b)=>{
+    const da=Math.abs(a.x-50)+Math.abs(a.y-50);
+    const db=Math.abs(b.x-50)+Math.abs(b.y-50);
+    return db-da;
+  });
+  ordered.forEach(p=>{
+    if(!remaining.length)return;
+    let best=0,bestD=Infinity;
+    remaining.forEach((s,i)=>{
+      const d=Math.hypot(p.x-s[0],p.y-s[1]);
+      if(d<bestD){bestD=d;best=i}
+    });
+    const slot=remaining.splice(best,1)[0];
+    result.push({p,slot});
+  });
+  return result;
+}
+function swapIfOverlapping(dragged){
+  const others=field().filter(x=>x.id!==dragged.id);
+  let target=null,best=999;
+  others.forEach(o=>{
+    const d=dist(dragged,o);
+    if(d<best){best=d;target=o}
+  });
+  if(target && best<10){
+    const tx=target.x,ty=target.y;
+    target.x=dragged._startX; target.y=dragged._startY;
+    dragged.x=tx; dragged.y=ty;
+    delete dragged._startX; delete dragged._startY;
+    save();renderAll();
+    return true;
+  }
+  delete dragged._startX; delete dragged._startY;
+  return false;
+}
+
+function makeDraggable(el,p){
+  let active=false,rect,moved=false,startClientX=0,startClientY=0;
+  el.addEventListener('pointerdown',e=>{
+    if(e.target.tagName==='BUTTON')return;
+    active=true;moved=false;
+    startClientX=e.clientX;startClientY=e.clientY;
+    p._startX=p.x;p._startY=p.y;
+    rect=pitch.getBoundingClientRect();
+    el.setPointerCapture(e.pointerId);
+  });
+  el.addEventListener('pointermove',e=>{
+    if(!active)return;
+    const pixelMove=Math.hypot(e.clientX-startClientX,e.clientY-startClientY);
+    if(pixelMove<6)return;
+    moved=true;
+    let x=(e.clientX-rect.left)/rect.width*100,y=(e.clientY-rect.top)/rect.height*100;
+    x=Math.max(5,Math.min(95,x));y=Math.max(5,Math.min(95,y));
+    p.x=x;p.y=y;el.style.left=x+'%';el.style.top=y+'%';
+    e.preventDefault();
+  });
+  el.addEventListener('pointerup',()=>{
+    if(!active)return;
+    active=false;
+    if(moved){
+      if(!swapIfOverlapping(p)){save();renderAll();}
+    }else{
+      delete p._startX;delete p._startY;
+    }
+  });
+  el.addEventListener('pointercancel',()=>{
+    active=false;
+    delete p._startX;delete p._startY;
+    save();renderAll();
+  });
+}
+function renderPitch(){
+  pitch.querySelectorAll('.player').forEach(e=>e.remove());
+  field().forEach(p=>{
+    const el=document.createElement('div');
+    el.className='player';el.style.left=p.x+'%';el.style.top=p.y+'%';
+    el.innerHTML=`${kidMarkup(false)}<div class="player-name">${p.role==='gk'?'🧤 ':''}#${esc(p.number)} ${esc(p.name)}</div><div class="player-actions"><button type="button">Banquillo</button></div>`;
+    el.querySelector('button').onclick=(e)=>{e.stopPropagation();toBench(p.id)};
+    el.addEventListener('dblclick',()=>toBench(p.id));
+    makeDraggable(el,p);pitch.appendChild(el);
+  });
+}
+function renderBench(){
+  const r=document.getElementById('roster');
+  const ar=document.getElementById('absentRoster');
+  r.innerHTML='';
+  ar.innerHTML='';
+
+  const all=allJourneyPlayers();
+  const normal=all.filter(p=>!p.onField && getPlayerStatus(p.id)!=='absent');
+  const absent=all.filter(p=>getPlayerStatus(p.id)==='absent');
+
+  if(!normal.length){
+    r.innerHTML='<div class="status">Sin suplentes</div>';
+  }else{
+    normal.forEach(p=>{
+      const c=document.createElement('div');
+      c.className='bench-player';
+      c.innerHTML=`<div class="dorsal">${isGuest(p)?'B':esc(p.number)}</div>${kidMarkup(true)}
+        <div class="bench-name">${p.role==='gk'?'🧤 ':''}${esc(p.name)}</div>
+        <div class="minutes">${isGuest(p)?'INVITADO':''}</div>`;
+      c.addEventListener('click',()=>putOnField(p.id));
+      r.appendChild(c);
+    });
+  }
+
+  if(!absent.length){
+    ar.innerHTML='<div class="status">Sin ausentes</div>';
+  }else{
+    absent.forEach(p=>{
+      const c=document.createElement('div');
+      c.className='bench-player';
+      c.style.filter='grayscale(1)';
+      c.style.opacity='.55';
+      c.style.background='#c7cbd1';
+      c.style.borderColor='#8b9199';
+      c.innerHTML=`<div class="dorsal">${isGuest(p)?'B':esc(p.number)}</div>${kidMarkup(true)}
+        <div class="bench-name">${p.role==='gk'?'🧤 ':''}${esc(p.name)}</div>
+        <div class="minutes">AUSENTE</div>`;
+      c.addEventListener('click',()=>setPlayerStatus(p.id,'available'));
+      ar.appendChild(c);
+    });
+  }
+
+  const available=all.filter(p=>getPlayerStatus(p.id)!=='absent').length;
+  const guests=guestList().length;
+  const summary=document.getElementById('attendanceSummary');
+  if(summary) summary.textContent=`${available} disp · ${absent.length} aus · ${guests} B`;
+}
+function renderPlayerTable(){
+  const tb=document.getElementById('playerTable');tb.innerHTML='';
+  state.players.forEach(p=>{
+    const tr=document.createElement('tr');
+    const st=getPlayerStatus(p.id);
+    tr.innerHTML=`<td>${esc(p.number)}</td><td>${esc(p.name)}</td><td>${p.role==='gk'?'Portero':'Jugador'}</td><td><button class="${st==='absent'?'red':'green'}" data-status="${p.id}">${st==='absent'?'Ausente':'Disponible'}</button></td><td><div class="small-actions"><button class="gray" data-edit="${p.id}">Editar</button><button class="red" data-del="${p.id}">×</button></div></td>`;
+    tb.appendChild(tr);
+  });
+  tb.querySelectorAll('[data-status]').forEach(b=>b.onclick=()=>setPlayerStatus(b.dataset.status,getPlayerStatus(b.dataset.status)==='absent'?'available':'absent'));
+  tb.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>deletePlayer(b.dataset.del));
+  tb.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{
+    const p=playerById(b.dataset.edit);if(!p)return;
+    const name=prompt('Nombre',p.name);if(name===null)return;
+    const number=prompt('Dorsal',p.number);if(number===null)return;
+    const role=prompt('Rol: escribe "portero" o "jugador"',p.role==='gk'?'portero':'jugador');if(role===null)return;
+    p.name=name.trim()||p.name;
+    p.number=number.trim()||p.number;
+    p.role=role.toLowerCase().startsWith('p')?'gk':'field';
+    save();renderAll();
+  });
+  document.getElementById('rosterStatus').textContent=`Plantilla: ${state.players.length} jugadores`;
+}
+function renderLineups(){
+  const box=document.getElementById('lineupList');box.innerHTML='';
+  [...state.lineups].sort((a,b)=>(a.journey||999)-(b.journey||999)).forEach(l=>{
+    const d=document.createElement('div');d.className='lineup-pill'+(l.id===state.activeLineupId?' active':'');
+    d.innerHTML=`<span>${esc(l.name)}</span><button class="green" data-load="${l.id}">Ver</button><button class="red" data-del="${l.id}">×</button>`;
+    box.appendChild(d);
+  });
+  box.querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>loadLineup(b.dataset.load));
+  box.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>deleteLineup(b.dataset.del));
+}
+function formatClock(sec){
+  const m=Math.floor(sec/60),s=sec%60;
+  return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+}
+function renderMeta(){
+  document.getElementById('topBadge').textContent=`${field().length}/8`;
+  document.getElementById('rival').value=state.rival||'';
+  document.getElementById('matchDate').value=state.matchDate||'';
+  document.getElementById('resultHome').value=state.resultHome||'';
+  document.getElementById('resultAway').value=state.resultAway||'';
+  document.getElementById('scorers').value=state.scorers||'';
+  document.getElementById('notes').value=state.notes||'';
+}
+function renderAll(){ensurePlayerShape();renderPitch();renderBench();renderPlayerTable();renderLineups();renderMeta()}
+
+
+
+document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  document.querySelectorAll('section[id^="tab-"]').forEach(s=>s.classList.add('hidden'));
+  document.getElementById('tab-'+b.dataset.tab).classList.remove('hidden');
+});
+document.getElementById('addPlayer').onclick=addPlayer;
+document.getElementById('saveLineup').onclick=saveLineup;
+document.querySelectorAll('[data-form]').forEach(b=>b.onclick=()=>applyFormation(b.dataset.form));
+document.getElementById('benchAll').onclick=()=>{state.players.forEach(p=>p.onField=false);save();renderAll()};
+document.getElementById('rival').oninput=e=>{state.rival=e.target.value;save()};
+document.getElementById('matchDate').onchange=e=>{state.matchDate=e.target.value;save()};
+document.getElementById('addGuest').onclick=addGuest;
+document.getElementById('journeyNumber').onchange=()=>{renderAll()};
+document.getElementById('resultHome').oninput=e=>{state.resultHome=e.target.value;save()};
+document.getElementById('resultAway').oninput=e=>{state.resultAway=e.target.value;save()};
+document.getElementById('scorers').oninput=e=>{state.scorers=e.target.value;save()};
+document.getElementById('notes').oninput=e=>{state.notes=e.target.value;save()};
+
+load();
+const integrationParams=new URLSearchParams(location.search);
+if(integrationParams.get('rival')) state.rival=integrationParams.get('rival');
+if(integrationParams.get('fecha')) state.matchDate=integrationParams.get('fecha');
+save();renderAll();
+
+</script>
+</body>
+</html>
+

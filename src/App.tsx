@@ -90,6 +90,7 @@ const INITIAL_STATE: FormData = {
 
 export default function App() {
   const [formData, setFormData] = useState<FormData>(INITIAL_STATE);
+  const [activeView, setActiveView] = useState<'convocatoria' | 'pizarra'>('convocatoria');
 
   const [rivales, setRivales] = useState<Rival[]>(() => {
     const saved = localStorage.getItem('convocatoria_rivales');
@@ -223,6 +224,13 @@ export default function App() {
 
   const getRival = () => rivales.find(r => r.id === formData.rivalId) || rivales[0];
 
+  const getRivalName = () => {
+    if (formData.tipoPartido === 'liga') return rivales.find(r => r.id === formData.rivalId)?.nombre || '';
+    return formData.rivalManual;
+  };
+
+  const pizarraUrl = `/pizarra.html?rival=${encodeURIComponent(getRivalName())}&fecha=${encodeURIComponent(formData.fecha)}`;
+
   const generateMessage = () => {
     const rival = getRival();
     let local = "";
@@ -330,6 +338,36 @@ export default function App() {
         </div>
       </header>
 
+      <div className="max-w-md mx-auto px-4 pt-4">
+        <div className="grid grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+          <button
+            onClick={() => setActiveView('convocatoria')}
+            className={`rounded-xl py-3 text-sm font-bold transition-all ${activeView === 'convocatoria' ? 'bg-blue-600 text-white shadow' : 'text-slate-500'}`}
+          >
+            Convocatoria
+          </button>
+          <button
+            onClick={() => setActiveView('pizarra')}
+            className={`rounded-xl py-3 text-sm font-bold transition-all ${activeView === 'pizarra' ? 'bg-emerald-700 text-white shadow' : 'text-slate-500'}`}
+          >
+            Pizarra
+          </button>
+        </div>
+      </div>
+
+      {activeView === 'pizarra' ? (
+        <main className="mx-auto mt-4 w-full max-w-[760px] px-2 sm:px-4">
+          <div className="mb-3 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+            La pizarra recibe automáticamente el rival y la fecha de la convocatoria. La plantilla y las jornadas se guardan en este dispositivo.
+          </div>
+          <iframe
+            key={pizarraUrl}
+            title="Pizarra Fútbol 8"
+            src={pizarraUrl}
+            className="h-[calc(100vh-190px)] min-h-[720px] w-full rounded-2xl border border-slate-200 bg-white shadow-sm"
+          />
+        </main>
+      ) : (
       <main className="max-w-md mx-auto px-4 mt-6 space-y-8">
         {/* Mode Toggle */}
         <div className="flex bg-white p-1 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
@@ -706,6 +744,7 @@ export default function App() {
           </button>
         </section>
       </main>
+      )}
 
       {/* Rivals Editor Modal */}
       <AnimatePresence>
