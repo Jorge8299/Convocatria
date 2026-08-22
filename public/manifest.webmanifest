@@ -1,0 +1,16 @@
+{
+  "name": "CONVO · U.D. Oliva",
+  "short_name": "CONVO",
+  "description": "Área técnica de U.D. Oliva Fútbol Base",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f8fc",
+  "theme_color": "#0b2344",
+  "lang": "es",
+  "icons": [
+    { "src": "/escudo-ud-oliva.jpg", "sizes": "1575x1575", "type": "image/jpeg", "purpose": "any" },
+    { "src": "/escudo-ud-oliva.jpg", "sizes": "1575x1575", "type": "image/jpeg", "purpose": "maskable" }
+  ]
+}
