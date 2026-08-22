@@ -84,26 +84,28 @@ body.field-mode #free-note{display:none!important}
   h1{font-size:15px}.tabs{margin-bottom:4px}.tabs button{padding:6px 8px}
   .formations{margin-bottom:4px}.pitch-wrap{border-radius:10px}
 }
-body.field-mode{overflow:hidden;background:#08140d}
+body.field-mode{--bench-width:clamp(150px,22vw,230px);overflow:hidden;background:#08140d}
 body.field-mode .app{max-width:none;height:100dvh;padding:4px;display:flex;flex-direction:column}
 body.field-mode .topbar,body.field-mode .tabs,body.field-mode #match-card,body.field-mode #journeys-card{display:none}
 body.field-mode #tab-pizarra{display:flex!important;flex:1;min-height:0;flex-direction:column}
-body.field-mode #squad-card{order:2;margin:4px 0 0;padding:4px;background:#f7f9fb;flex:0 0 auto}
+body.field-mode #squad-card{position:fixed;top:88px;right:6px;bottom:6px;width:var(--bench-width);z-index:35;margin:0;padding:8px;background:rgba(247,249,251,.98);overflow:hidden;transition:transform .25s ease,box-shadow .25s ease;box-shadow:-10px 0 28px rgba(0,0,0,.24)}
 body.field-mode #squad-card.drop-ready{outline:3px solid #2474e5;background:#e7f1ff;box-shadow:0 0 0 5px #2474e533}.bench-drop-hint{display:none;color:#2474e5;font-size:9px;font-weight:900}body.field-mode .bench-drop-hint{display:block}
-body.field-mode #squad-card .section-title{font-size:10px;margin:0}
+body.field-mode #squad-card .row{display:block}body.field-mode #squad-card .section-title{font-size:13px;margin:0 0 2px}body.field-mode #squad-card .status{font-size:9px;margin-top:2px!important}
 body.field-mode #squad-card .guest-row{display:none}
-body.field-mode .roster{min-height:78px;padding:5px 3px 6px;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch}
-body.field-mode .bench-player{width:88px;padding:5px 4px}.bench-kid{transform:scale(1);transform-origin:center bottom}
-body.field-mode .bench-name{margin-top:3px;font-size:11px;line-height:1.25}
+body.field-mode .roster{height:calc(100% - 48px);min-height:0;padding:7px 2px;display:grid;grid-template-columns:1fr;align-content:start;gap:8px;overflow-x:hidden;overflow-y:auto;scroll-snap-type:y proximity;-webkit-overflow-scrolling:touch}
+body.field-mode .bench-player{width:100%;min-height:82px;padding:8px 5px;scroll-snap-align:start}.bench-kid{transform:scale(1);transform-origin:center bottom}
+body.field-mode .bench-name{margin-top:4px;font-size:12px;line-height:1.3}
 body.field-mode .dorsal{right:5px;top:4px;min-width:18px;height:18px;font-size:9px}
-body.field-mode .formations{order:0;flex:0 0 auto;margin:0 0 3px}
-body.field-mode .pitch-wrap{order:1;flex:1;min-height:0;width:100%;max-width:560px;aspect-ratio:auto;margin:0 auto}
-body.field-mode .toolbar{order:3;flex:0 0 auto;margin-top:4px;justify-content:center}
+body.field-mode .toolbar{order:0;flex:0 0 auto;margin:0 0 4px;min-height:34px;justify-content:center;align-items:center;z-index:45}
+body.field-mode .toolbar button{padding:8px 11px;font-size:11px}
+body.field-mode .formations{order:1;flex:0 0 auto;margin:0 0 4px;justify-content:center;z-index:34}
+body.field-mode .pitch-wrap{order:2;flex:1;min-height:0;width:100%;max-width:560px;aspect-ratio:auto;margin:0 auto}
 body.field-mode #fullscreenBtn{background:#b42318}
 body.field-mode #fullscreenBtn::after{content:' Salir'}
-body.field-mode #benchToggle{display:block;position:fixed;right:12px;bottom:58px;z-index:40;background:#0b2344;box-shadow:0 7px 20px rgba(0,0,0,.28)}
-body.field-mode.bench-hidden #squad-card{display:none!important}
-body.field-mode.bench-hidden #benchToggle{bottom:12px;background:#2474e5}
+body.field-mode #benchToggle{display:block;position:fixed;top:50px;right:6px;width:var(--bench-width);z-index:42;padding:9px 10px;border:2px solid #fff;border-radius:12px;background:#2474e5;color:#fff;font-size:11px;box-shadow:0 7px 20px rgba(0,0,0,.32);transition:top .25s ease,right .25s ease,width .25s ease,transform .25s ease}
+body.field-mode.bench-hidden #squad-card{transform:translateX(calc(100% + 12px));pointer-events:none;box-shadow:none}
+body.field-mode.bench-hidden #benchToggle{top:50%;right:0;width:auto;transform:translateY(-50%);border-radius:12px 0 0 12px;padding:12px 9px}
+@media(min-width:760px){body.field-mode #squad-card .roster{grid-template-columns:repeat(2,minmax(0,1fr))}}
 body:not(.field-mode) #pitch,body:not(.field-mode) .formations{display:none}
 body:not(.field-mode) #benchAll,body:not(.field-mode) #benchToggle{display:none}
 body:not(.field-mode) .toolbar{margin:8px 0;display:block}
@@ -185,7 +187,7 @@ body:not(.field-mode) #fullscreenBtn{display:block;width:100%;padding:13px 16px;
     <div class="toolbar">
       <button class="green" id="fullscreenBtn">⛶ Abrir campo completo</button>
       <button class="gray" id="benchAll">Todos al banquillo</button>
-      <button class="gray" id="benchToggle">Ocultar banquillo</button>
+      <button class="gray" id="benchToggle" aria-label="Ocultar banquillo">Ocultar banquillo →</button>
     </div>
 
     <div class="formations">
@@ -689,7 +691,9 @@ const benchToggle=document.getElementById('benchToggle');
 function syncFieldMode(){
   const active=document.body.classList.contains('field-mode');
   fullscreenBtn.textContent=active?'⛶':'⛶ Abrir campo completo';
-  benchToggle.textContent=document.body.classList.contains('bench-hidden')?'Mostrar banquillo':'Ocultar banquillo';
+  const hidden=document.body.classList.contains('bench-hidden');
+  benchToggle.textContent=hidden?'← Mostrar banquillo':'Ocultar banquillo →';
+  benchToggle.setAttribute('aria-label',hidden?'Mostrar banquillo':'Ocultar banquillo');
 }
 benchToggle.onclick=()=>{
   document.body.classList.toggle('bench-hidden');
