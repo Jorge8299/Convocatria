@@ -84,7 +84,7 @@ body.field-mode #free-note{display:none!important}
   h1{font-size:15px}.tabs{margin-bottom:4px}.tabs button{padding:6px 8px}
   .formations{margin-bottom:4px}.pitch-wrap{border-radius:10px}
 }
-body.field-mode{--bench-width:clamp(150px,22vw,230px);overflow:hidden;background:#08140d}
+body.field-mode{--bench-width:clamp(150px,22vw,230px);--bench-offset:clamp(75px,11vw,115px);overflow:hidden;background:#08140d}
 body.field-mode .app{max-width:none;height:100dvh;padding:4px;display:flex;flex-direction:column}
 body.field-mode .topbar,body.field-mode .tabs,body.field-mode #match-card,body.field-mode #journeys-card{display:none}
 body.field-mode #tab-pizarra{display:flex!important;flex:1;min-height:0;flex-direction:column}
@@ -99,7 +99,8 @@ body.field-mode .dorsal{right:5px;top:4px;min-width:18px;height:18px;font-size:9
 body.field-mode .toolbar{order:0;flex:0 0 auto;margin:0 0 4px;min-height:34px;justify-content:center;align-items:center;z-index:45}
 body.field-mode .toolbar button{padding:8px 11px;font-size:11px}
 body.field-mode .formations{order:1;flex:0 0 auto;margin:0 0 4px;justify-content:center;z-index:34}
-body.field-mode .pitch-wrap{order:2;flex:1;min-height:0;width:100%;max-width:560px;aspect-ratio:auto;margin:0 auto}
+body.field-mode .pitch-wrap{order:2;flex:1;min-height:0;width:100%;max-width:560px;aspect-ratio:auto;margin:0 auto;transition:width .25s ease,transform .25s ease}
+body.field-mode:not(.bench-hidden) .pitch-wrap{width:calc(100% - var(--bench-width) - 68px);transform:translateX(calc(0px - var(--bench-offset)))}
 body.field-mode #fullscreenBtn{background:#b42318}
 body.field-mode #fullscreenBtn::after{content:' Salir'}
 body.field-mode #benchToggle{display:block;position:static;width:132px;min-width:132px;transform:none;padding:8px 8px;border:0;border-radius:10px;background:#2474e5;color:#fff;font-size:11px;box-shadow:none}
