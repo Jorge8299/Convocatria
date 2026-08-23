@@ -10,6 +10,7 @@ import {
 } from "./_lib/server.js";
 
 interface ImportedRival {
+  id?: string;
   nombre: string;
   campo: string;
 }
@@ -120,7 +121,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return;
     }
     const body = jsonBody<{
-      action: "extract" | "save";
+      action: "extract" | "save" | "replace";
       fileName?: string;
       mimeType?: string;
       base64?: string;
@@ -203,6 +204,31 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           total: merged.length,
           skipped: rivals.length - additions.length,
         });
+      return;
+    }
+    if (body.action === "replace") {
+      if (!body.accountId) {
+        res.status(400).json({ error: "Selecciona un equipo." });
+        return;
+      }
+      const sql = getSql();
+      const coaches =
+        await sql`SELECT id FROM club_accounts WHERE id=${body.accountId} AND role='entrenador' LIMIT 1`;
+      if (!coaches[0]) {
+        res.status(404).json({ error: "El entrenador seleccionado ya no está disponible." });
+        return;
+      }
+      const rivals = (body.rivals || [])
+        .map((item) => ({
+          id: item.id || `admin-${randomUUID()}`,
+          nombre: clean(item.nombre || ""),
+          campo: clean(item.campo || ""),
+        }))
+        .filter((item) => item.nombre)
+        .slice(0, 80);
+      await sql`INSERT INTO club_stores (account_id,area,data) VALUES (${body.accountId},'rivals',${JSON.stringify(rivals)}::jsonb)
+        ON CONFLICT (account_id,area) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()`;
+      res.status(200).json({ rivals });
       return;
     }
     res.status(400).json({ error: "Acción no válida." });

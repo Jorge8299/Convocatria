@@ -12,6 +12,7 @@ export interface BootstrapPayload {
   stores?: StoreRow[];
 }
 export interface ImportedRival {
+  id?: string;
   nombre: string;
   campo: string;
 }
@@ -98,6 +99,11 @@ export const clubApi = {
         body: JSON.stringify({ action: "save", accountId, rivals }),
       },
     ),
+  replaceRivals: (accountId: string, rivals: ImportedRival[]) =>
+    request<{ rivals: Required<ImportedRival>[] }>("/api/calendar-import", {
+      method: "POST",
+      body: JSON.stringify({ action: "replace", accountId, rivals }),
+    }),
 };
 
 export function getStored<T>(

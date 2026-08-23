@@ -11,8 +11,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       ? await sql`SELECT account_id,area,data FROM club_stores WHERE account_id=${session.id} OR (area='team' AND account_id IN (SELECT id FROM club_accounts WHERE role='entrenador' AND active=TRUE))`
       : session.role === 'coordinador'
         ? await sql`SELECT account_id,area,data FROM club_stores WHERE area IN ('team','stats')`
-        : [];
+        : await sql`SELECT account_id,area,data FROM club_stores WHERE area IN ('team','rivals')`;
     res.status(200).json({ accounts, session: publicAccount(session), stores });
   } catch (error) { fail(res, error) }
 }
-

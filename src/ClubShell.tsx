@@ -47,6 +47,11 @@ interface StoredTeam {
   season: string;
   players: StoredPlayer[];
 }
+interface StoredRival {
+  id: string;
+  nombre: string;
+  campo: string;
+}
 interface StoredEntry {
   playerId: string;
   goals: number;
@@ -125,6 +130,8 @@ export default function ClubShell() {
       <AdminPanel
         account={session}
         accounts={accounts}
+        stores={bootstrap.stores || []}
+        onRefresh={refresh}
         onAccounts={(next) =>
           setBootstrap((current) =>
             current ? { ...current, accounts: next } : current,
@@ -326,11 +333,15 @@ function LoginScreen({
 function AdminPanel({
   account: _account,
   accounts,
+  stores,
+  onRefresh,
   onAccounts,
   onLogout,
 }: {
   account: ClubAccount;
   accounts: ClubAccount[];
+  stores: StoreRow[];
+  onRefresh: () => Promise<void>;
   onAccounts: (accounts: ClubAccount[]) => void;
   onLogout: () => void;
 }) {
@@ -357,6 +368,47 @@ function AdminPanel({
   const [calendarRows, setCalendarRows] = useState<ImportedRival[]>([]);
   const [calendarFile, setCalendarFile] = useState("");
   const [calendarBusy, setCalendarBusy] = useState(false);
+  const [overviewCoachId, setOverviewCoachId] = useState("");
+  const [overviewRivals, setOverviewRivals] = useState<StoredRival[]>([]);
+  const [overviewSaving, setOverviewSaving] = useState(false);
+  const overviewCoach = coaches.find((coach) => coach.id === overviewCoachId);
+  const overviewTeam = getStored<StoredTeam>(stores, overviewCoachId, "team", {
+    name: "U.D. Oliva",
+    season: "",
+    players: [],
+  });
+  const selectOverviewCoach = (coachId: string) => {
+    setOverviewCoachId(coachId);
+    setOverviewRivals(
+      getStored<StoredRival[]>(stores, coachId, "rivals", []).map((rival) => ({
+        ...rival,
+      })),
+    );
+    setMessage("");
+  };
+  const saveOverviewRivals = async () => {
+    if (!overviewCoachId) return;
+    if (overviewRivals.some((rival) => !rival.nombre.trim())) {
+      setMessage("Todos los rivales deben tener nombre.");
+      return;
+    }
+    setOverviewSaving(true);
+    try {
+      const result = await clubApi.replaceRivals(
+        overviewCoachId,
+        overviewRivals,
+      );
+      setOverviewRivals(result.rivals);
+      await onRefresh();
+      setMessage("Rivales y campos actualizados correctamente.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "No se pudieron actualizar.",
+      );
+    } finally {
+      setOverviewSaving(false);
+    }
+  };
   const analyzeCalendar = async (file?: File) => {
     if (!file) return;
     if (!calendarCoachId) {
@@ -404,6 +456,7 @@ function AdminPanel({
       );
       setCalendarRows([]);
       setCalendarFile("");
+      await onRefresh();
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -615,6 +668,132 @@ function AdminPanel({
               <Plus size={17} /> Crear usuario
             </button>
           </div>
+        </section>
+        <section className="team-overview-card">
+          <div className="team-overview-heading">
+            <div>
+              <span className="eyebrow">DATOS DE LOS EQUIPOS</span>
+              <h2>Plantilla, rivales y campos</h2>
+              <p>
+                Consulta los jugadores y corrige los rivales o sus campos.
+              </p>
+            </div>
+            <select
+              aria-label="Equipo que quieres consultar"
+              value={overviewCoachId}
+              onChange={(event) => selectOverviewCoach(event.target.value)}
+            >
+              <option value="">Selecciona un equipo</option>
+              {coaches.map((coach) => (
+                <option key={coach.id} value={coach.id}>
+                  {coach.teamLabel} · {coach.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {overviewCoach && (
+            <div className="team-overview-grid">
+              <div className="team-overview-panel players-overview">
+                <div className="overview-panel-heading">
+                  <div>
+                    <span>PLANTILLA</span>
+                    <strong>{overviewTeam.players.length} jugadores</strong>
+                  </div>
+                  <Users size={20} />
+                </div>
+                <div className="overview-player-list">
+                  {overviewTeam.players.map((player) => (
+                    <div key={`${player.group}-${player.id}`}>
+                      <span className="overview-player-number">
+                        {player.number || "—"}
+                      </span>
+                      <span>
+                        <strong>{player.name}</strong>
+                        <small>
+                          {player.role === "portero" ? "Portero" : "Jugador"}
+                          {player.group === "b" ? " · Jugador B" : ""}
+                          {!player.active ? " · Inactivo" : ""}
+                        </small>
+                      </span>
+                    </div>
+                  ))}
+                  {overviewTeam.players.length === 0 && (
+                    <div className="inline-empty">
+                      Este equipo todavía no tiene jugadores.
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="team-overview-panel rivals-overview">
+                <div className="overview-panel-heading">
+                  <div>
+                    <span>RIVALES Y CAMPOS</span>
+                    <strong>{overviewRivals.length} creados</strong>
+                  </div>
+                  <FileText size={20} />
+                </div>
+                <div className="overview-rival-list">
+                  {overviewRivals.map((rival, index) => (
+                    <div key={rival.id}>
+                      <label>
+                        <span>Rival</span>
+                        <input
+                          aria-label={`Rival ${index + 1}`}
+                          value={rival.nombre}
+                          onChange={(event) =>
+                            setOverviewRivals((current) =>
+                              current.map((item) =>
+                                item.id === rival.id
+                                  ? { ...item, nombre: event.target.value }
+                                  : item,
+                              ),
+                            )
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>Campo</span>
+                        <input
+                          aria-label={`Campo de ${rival.nombre}`}
+                          value={rival.campo}
+                          placeholder="Campo pendiente"
+                          onChange={(event) =>
+                            setOverviewRivals((current) =>
+                              current.map((item) =>
+                                item.id === rival.id
+                                  ? { ...item, campo: event.target.value }
+                                  : item,
+                              ),
+                            )
+                          }
+                        />
+                      </label>
+                    </div>
+                  ))}
+                  {overviewRivals.length === 0 && (
+                    <div className="inline-empty">
+                      Este equipo todavía no tiene rivales creados.
+                    </div>
+                  )}
+                </div>
+                {overviewRivals.length > 0 && (
+                  <button
+                    className="primary-button save-overview-button"
+                    disabled={overviewSaving}
+                    onClick={() => void saveOverviewRivals()}
+                  >
+                    <Check size={17} />
+                    {overviewSaving ? "Guardando…" : "Guardar rivales y campos"}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          {!overviewCoach && (
+            <div className="team-overview-empty">
+              Selecciona un equipo para consultar sus datos.
+            </div>
+          )}
         </section>
         <section className="calendar-import-card">
           <div className="calendar-import-heading">
