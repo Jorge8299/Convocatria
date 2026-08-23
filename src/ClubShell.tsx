@@ -63,6 +63,7 @@ interface StoredMatch {
   id: string;
   date: string;
   rival: string;
+  home?: boolean;
   ourScore: number;
   rivalScore: number;
   notes: string;
@@ -1460,15 +1461,27 @@ function CoordinatorPanel({
               .map((match) => (
                 <article key={`${match.coach.id}-${match.id}`}>
                   <div className="match-result">
-                    <strong>{match.ourScore}</strong>
+                    <strong>
+                      {match.home !== false
+                        ? match.ourScore
+                        : match.rivalScore}
+                    </strong>
                     <span>—</span>
-                    <strong>{match.rivalScore}</strong>
+                    <strong>
+                      {match.home !== false
+                        ? match.rivalScore
+                        : match.ourScore}
+                    </strong>
                   </div>
                   <div className="match-club-copy">
                     <span>
                       {match.coach.teamLabel} · {match.coach.name}
                     </span>
-                    <h3>U.D. OLIVA vs {match.rival}</h3>
+                    <h3>
+                      {match.home !== false
+                        ? `U.D. OLIVA vs ${match.rival}`
+                        : `${match.rival} vs U.D. OLIVA`}
+                    </h3>
                     <small>
                       {match.date || "Sin fecha"} · {match.players.length}{" "}
                       jugadores
