@@ -1187,6 +1187,15 @@ function CoordinatorPanel({
       })),
     [accounts, stores],
   );
+  const originalTeamLabels = useMemo(
+    () =>
+      new Map(
+        accounts
+          .filter((item) => item.role === "entrenador" && item.active)
+          .map((coach) => [coach.id, coach.teamLabel]),
+      ),
+    [accounts],
+  );
   const filtered =
     coachFilter === "all"
       ? data
@@ -1231,6 +1240,9 @@ function CoordinatorPanel({
     filtered.forEach(({ coach, team, stats }) => {
       team.players.forEach((storedPlayer) => {
         const player = canonicalPlayers.get(storedPlayer.id) || storedPlayer;
+        const originalTeamLabel =
+          originalTeamLabels.get(player.ownerCoachId || coach.id) ||
+          coach.teamLabel;
         if (!rows.has(player.id))
           rows.set(player.id, {
             id: player.id,
@@ -1244,7 +1256,7 @@ function CoordinatorPanel({
             assists: 0,
             ratingTotal: 0,
           });
-        rows.get(player.id)!.teams.add(coach.teamLabel);
+        rows.get(player.id)!.teams.add(originalTeamLabel);
       });
       stats.forEach((match) =>
         match.players.forEach((entry) => {
@@ -1253,6 +1265,9 @@ function CoordinatorPanel({
           );
           if (!storedPlayer) return;
           const player = canonicalPlayers.get(storedPlayer.id) || storedPlayer;
+          const originalTeamLabel =
+            originalTeamLabels.get(player.ownerCoachId || coach.id) ||
+            coach.teamLabel;
           if (!rows.has(player.id))
             rows.set(player.id, {
               id: player.id,
@@ -1260,7 +1275,7 @@ function CoordinatorPanel({
               number: player.number,
               role: player.role,
               owner: player.ownerCoachId || coach.id,
-              teams: new Set([coach.teamLabel]),
+              teams: new Set([originalTeamLabel]),
               matches: 0,
               goals: 0,
               assists: 0,
@@ -1282,7 +1297,7 @@ function CoordinatorPanel({
       .sort(
         (a, b) => b[sortBy] - a[sortBy] || a.name.localeCompare(b.name, "es"),
       );
-  }, [canonicalPlayers, filtered, sortBy]);
+  }, [canonicalPlayers, filtered, originalTeamLabels, sortBy]);
   const goals = playerRows.reduce((total, row) => total + row.goals, 0);
   const assists = playerRows.reduce((total, row) => total + row.assists, 0);
   const coordinatorName = account.name.trim().split(/\s+/)[0];
