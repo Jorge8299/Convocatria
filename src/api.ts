@@ -48,7 +48,14 @@ export const clubApi = {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  updateAccount: (input: { id: string; pin?: string; active?: boolean }) =>
+  updateAccount: (input: {
+    id: string;
+    name?: string;
+    role?: "entrenador" | "coordinador";
+    teamLabel?: string;
+    pin?: string;
+    active?: boolean;
+  }) =>
     request<{ accounts: ClubAccount[] }>("/api/accounts", {
       method: "PATCH",
       body: JSON.stringify(input),

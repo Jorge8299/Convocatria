@@ -8,9 +8,11 @@ import {
   FileUp,
   KeyRound,
   LogOut,
+  Pencil,
   Plus,
   Trash2,
   Users,
+  X,
 } from "lucide-react";
 import { CoachApp } from "./App";
 import { ClubAccount, ClubRole } from "./clubTypes";
@@ -339,6 +341,12 @@ function AdminPanel({
     pin: "",
   });
   const [pinDrafts, setPinDrafts] = useState<Record<string, string>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({
+    name: "",
+    role: "entrenador" as "entrenador" | "coordinador",
+    teamLabel: "",
+  });
   const [message, setMessage] = useState("");
   const [migrationPin, setMigrationPin] = useState("");
   const legacySnapshot = useMemo(() => buildLegacySnapshot(), []);
@@ -440,6 +448,40 @@ function AdminPanel({
       onAccounts(result.accounts);
       setPinDrafts((current) => ({ ...current, [id]: "" }));
       setMessage("PIN actualizado.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "No se pudo actualizar.",
+      );
+    }
+  };
+  const startEditing = (item: ClubAccount) => {
+    setEditingId(item.id);
+    setEditDraft({
+      name: item.name,
+      role: item.role as "entrenador" | "coordinador",
+      teamLabel: item.role === "entrenador" ? item.teamLabel : "",
+    });
+    setMessage("");
+  };
+  const saveAccount = async () => {
+    if (
+      !editingId ||
+      !editDraft.name.trim() ||
+      (editDraft.role === "entrenador" && !editDraft.teamLabel.trim())
+    ) {
+      setMessage("Completa el nombre y el equipo del entrenador.");
+      return;
+    }
+    try {
+      const result = await clubApi.updateAccount({
+        id: editingId,
+        name: editDraft.name.trim(),
+        role: editDraft.role,
+        teamLabel: editDraft.teamLabel.trim(),
+      });
+      onAccounts(result.accounts);
+      setEditingId(null);
+      setMessage("Usuario actualizado correctamente.");
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "No se pudo actualizar.",
@@ -819,13 +861,71 @@ function AdminPanel({
                       <BarChart3 size={20} />
                     )}
                   </span>
-                  <div className="account-copy">
-                    <strong>{item.name}</strong>
-                    <small>
-                      {roleLabel[item.role]} · {item.teamLabel}
-                    </small>
-                  </div>
-                  <div className="account-actions">
+                  {editingId === item.id ? (
+                    <div className="account-edit-form">
+                      <input
+                        aria-label="Nombre y apellidos"
+                        placeholder="Nombre y apellidos"
+                        value={editDraft.name}
+                        onChange={(event) =>
+                          setEditDraft((current) => ({
+                            ...current,
+                            name: event.target.value,
+                          }))
+                        }
+                      />
+                      <select
+                        aria-label="Tipo de acceso"
+                        value={editDraft.role}
+                        onChange={(event) =>
+                          setEditDraft((current) => ({
+                            ...current,
+                            role: event.target.value as
+                              | "entrenador"
+                              | "coordinador",
+                          }))
+                        }
+                      >
+                        <option value="entrenador">Entrenador</option>
+                        <option value="coordinador">Coordinador</option>
+                      </select>
+                      {editDraft.role === "entrenador" && (
+                        <input
+                          aria-label="Equipo"
+                          placeholder="Equipo, por ejemplo Benjamín A"
+                          value={editDraft.teamLabel}
+                          onChange={(event) =>
+                            setEditDraft((current) => ({
+                              ...current,
+                              teamLabel: event.target.value,
+                            }))
+                          }
+                        />
+                      )}
+                      <div className="account-edit-actions">
+                        <button
+                          className="primary-button"
+                          onClick={() => void saveAccount()}
+                        >
+                          <Check size={16} /> Guardar cambios
+                        </button>
+                        <button onClick={() => setEditingId(null)}>
+                          <X size={16} /> Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="account-copy">
+                        <strong>{item.name}</strong>
+                        <small>
+                          {roleLabel[item.role]} · {item.teamLabel}
+                        </small>
+                      </div>
+                      <div className="account-actions">
+                    <button onClick={() => startEditing(item)}>
+                      <Pencil size={16} /> Editar
+                    </button>
                     <input
                       type="password"
                       inputMode="numeric"
@@ -854,7 +954,9 @@ function AdminPanel({
                     >
                       <Trash2 size={16} />
                     </button>
-                  </div>
+                      </div>
+                    </>
+                  )}
                 </article>
               ))}
             {accounts.filter((item) => item.role !== "superadmin").length ===
