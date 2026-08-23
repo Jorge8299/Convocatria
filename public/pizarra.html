@@ -102,9 +102,9 @@ body.field-mode .formations{order:1;flex:0 0 auto;margin:0 0 4px;justify-content
 body.field-mode .pitch-wrap{order:2;flex:1;min-height:0;width:100%;max-width:560px;aspect-ratio:auto;margin:0 auto}
 body.field-mode #fullscreenBtn{background:#b42318}
 body.field-mode #fullscreenBtn::after{content:' Salir'}
-body.field-mode #benchToggle{display:block;position:fixed;top:50px;right:6px;width:var(--bench-width);z-index:42;padding:9px 10px;border:2px solid #fff;border-radius:12px;background:#2474e5;color:#fff;font-size:11px;box-shadow:0 7px 20px rgba(0,0,0,.32);transition:top .25s ease,right .25s ease,width .25s ease,transform .25s ease}
+body.field-mode #benchToggle{display:block;position:static;width:132px;min-width:132px;transform:none;padding:8px 8px;border:0;border-radius:10px;background:#2474e5;color:#fff;font-size:11px;box-shadow:none}
 body.field-mode.bench-hidden #squad-card{transform:translateX(calc(100% + 12px));pointer-events:none;box-shadow:none}
-body.field-mode.bench-hidden #benchToggle{top:50%;right:0;width:auto;transform:translateY(-50%);border-radius:12px 0 0 12px;padding:12px 9px}
+body.field-mode.bench-hidden #benchToggle{position:static;width:132px;transform:none}
 @media(min-width:760px){body.field-mode #squad-card .roster{grid-template-columns:repeat(2,minmax(0,1fr))}}
 body:not(.field-mode) #pitch,body:not(.field-mode) .formations{display:none}
 body:not(.field-mode) #benchAll,body:not(.field-mode) #benchToggle{display:none}
@@ -187,7 +187,7 @@ body:not(.field-mode) #fullscreenBtn{display:block;width:100%;padding:13px 16px;
     <div class="toolbar">
       <button class="green" id="fullscreenBtn">⛶ Abrir campo completo</button>
       <button class="gray" id="benchAll">Todos al banquillo</button>
-      <button class="gray" id="benchToggle" aria-label="Ocultar banquillo">Ocultar banquillo →</button>
+      <button class="gray" id="benchToggle" aria-label="Ocultar banquillo">Ocultar banquillo</button>
     </div>
 
     <div class="formations">
@@ -692,7 +692,7 @@ function syncFieldMode(){
   const active=document.body.classList.contains('field-mode');
   fullscreenBtn.textContent=active?'⛶':'⛶ Abrir campo completo';
   const hidden=document.body.classList.contains('bench-hidden');
-  benchToggle.textContent=hidden?'← Mostrar banquillo':'Ocultar banquillo →';
+  benchToggle.textContent=hidden?'Mostrar banquillo':'Ocultar banquillo';
   benchToggle.setAttribute('aria-label',hidden?'Mostrar banquillo':'Ocultar banquillo');
 }
 benchToggle.onclick=()=>{
