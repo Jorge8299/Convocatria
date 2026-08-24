@@ -1421,13 +1421,6 @@ function CoordinatorPanel({
               <MetricCard label="Goles" value={goals} />
               <MetricCard label="Asistencias" value={assists} />
             </div>
-            <section className="coordinator-panel">
-              <div className="section-heading">
-                <span className="eyebrow">DESTACADOS</span>
-                <h2>Mejor valoración</h2>
-              </div>
-              <CoordinatorRanking rows={playerRows.slice(0, 8)} />
-            </section>
           </>
         )}
         {tab === "jugadores" && (
