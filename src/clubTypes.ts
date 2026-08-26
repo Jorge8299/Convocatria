@@ -1,10 +1,14 @@
 export type ClubRole = 'entrenador' | 'coordinador' | 'superadmin';
+export type FootballStage = 'prebenjamin' | 'benjamin' | 'alevin';
+export type TrainingYear = 'primero' | 'segundo' | 'mixto';
 
 export interface ClubAccount {
   id: string;
   name: string;
   role: ClubRole;
   teamLabel: string;
+  footballStage: FootballStage | null;
+  trainingYear: TrainingYear | null;
   pinHash?: string;
   active: boolean;
   createdAt: string;

@@ -1,6 +1,6 @@
-import type { ClubAccount } from "./clubTypes";
+import type { ClubAccount, FootballStage, TrainingYear } from "./clubTypes";
 
-export type StoreArea = "team" | "stats" | "journeys" | "rivals" | "boards";
+export type StoreArea = "team" | "stats" | "journeys" | "rivals" | "boards" | "agenda";
 export interface StoreRow {
   account_id: string;
   area: StoreArea;
@@ -17,7 +17,201 @@ export interface ImportedRival {
   campo: string;
 }
 
+export const IS_LOCAL_DEMO = import.meta.env.DEV;
+const LOCAL_ACCOUNTS_KEY = "convo_local_demo_accounts_v1";
+const LOCAL_STORES_KEY = "convo_local_demo_stores_v1";
+const LOCAL_SESSION_KEY = "convo_local_demo_session_v1";
+type LocalAccount = ClubAccount & { pin: string };
+
+const localSeedAccounts = (): LocalAccount[] => [
+  {
+    id: "superadmin",
+    name: "Administrador local",
+    role: "superadmin",
+    teamLabel: "Administración",
+    footballStage: null,
+    trainingYear: null,
+    active: true,
+    createdAt: new Date().toISOString(),
+    pin: "0000",
+  },
+  {
+    id: "local-coach",
+    name: "Jorge",
+    role: "entrenador",
+    teamLabel: "Benjamín A",
+    footballStage: "benjamin",
+    trainingYear: "segundo",
+    active: true,
+    createdAt: new Date().toISOString(),
+    pin: "1111",
+  },
+];
+
+function readLocalAccounts(): LocalAccount[] {
+  const saved = localStorage.getItem(LOCAL_ACCOUNTS_KEY);
+  if (saved) return JSON.parse(saved) as LocalAccount[];
+  const seeded = localSeedAccounts();
+  localStorage.setItem(LOCAL_ACCOUNTS_KEY, JSON.stringify(seeded));
+  return seeded;
+}
+
+function publicLocalAccount(account: LocalAccount): ClubAccount {
+  const { pin: _pin, ...safe } = account;
+  return safe;
+}
+
+function readLocalStores(): StoreRow[] {
+  const stores = JSON.parse(
+    localStorage.getItem(LOCAL_STORES_KEY) || "[]",
+  ) as StoreRow[];
+  const existingTeam = stores.find(
+    (store) => store.account_id === "local-coach" && store.area === "team",
+  );
+  const existingPlayers = (existingTeam?.data as { players?: unknown[] } | undefined)?.players;
+  if (!existingTeam || !Array.isArray(existingPlayers) || existingPlayers.length === 0) {
+    const names = [
+      ["demo-1", "Hugo", "1", "portero"],
+      ["demo-2", "Martín", "2", "jugador"],
+      ["demo-3", "Álex", "3", "jugador"],
+      ["demo-4", "Pablo", "4", "jugador"],
+      ["demo-5", "Lucas", "5", "jugador"],
+      ["demo-6", "Leo", "6", "jugador"],
+      ["demo-7", "Mateo", "7", "jugador"],
+      ["demo-8", "Daniel", "8", "jugador"],
+      ["demo-9", "Adrián", "9", "jugador"],
+      ["demo-10", "Bruno", "10", "jugador"],
+      ["demo-11", "Iker", "11", "jugador"],
+      ["demo-12", "Sergio", "12", "jugador"],
+    ];
+    const demoTeam: StoreRow = {
+      account_id: "local-coach",
+      area: "team",
+      data: {
+        name: "U.D. OLIVA",
+        season: "2026/27",
+        players: names.map(([id, name, number, role]) => ({
+          id,
+          name,
+          number,
+          role,
+          group: "plantilla",
+          active: true,
+        })),
+      },
+    };
+    if (existingTeam) existingTeam.data = demoTeam.data;
+    else stores.push(demoTeam);
+  }
+  const existingRivals = stores.find(
+    (store) => store.account_id === "local-coach" && store.area === "rivals",
+  );
+  if (!existingRivals || !Array.isArray(existingRivals.data) || existingRivals.data.length === 0) {
+    const demoRivals: StoreRow = {
+      account_id: "local-coach",
+      area: "rivals",
+      data: [
+        {
+          id: "demo-rival-1",
+          nombre: "C.F. Gandía",
+          campo: "Polideportivo Municipal de Gandía",
+        },
+      ],
+    };
+    if (existingRivals) existingRivals.data = demoRivals.data;
+    else stores.push(demoRivals);
+  }
+  localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
+  return stores;
+}
+
+async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const url = new URL(path, location.origin);
+  const method = init?.method || "GET";
+  const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
+  let accounts = readLocalAccounts();
+  let stores = readLocalStores();
+  const sessionId = sessionStorage.getItem(LOCAL_SESSION_KEY);
+  const session = accounts.find((account) => account.id === sessionId) || null;
+
+  if (url.pathname === "/api/bootstrap") {
+    return {
+      accounts: accounts.map(publicLocalAccount),
+      session: session ? publicLocalAccount(session) : null,
+      stores,
+    } as T;
+  }
+  if (url.pathname === "/api/login" && method === "POST") {
+    const account = body.accountId
+      ? accounts.find((item) => item.id === body.accountId)
+      : accounts.find((item) => item.role === "superadmin");
+    if (!account || account.pin !== body.pin)
+      throw new Error("El PIN no es correcto.");
+    sessionStorage.setItem(LOCAL_SESSION_KEY, account.id);
+    return { account: publicLocalAccount(account) } as T;
+  }
+  if (url.pathname === "/api/logout" && method === "POST") {
+    sessionStorage.removeItem(LOCAL_SESSION_KEY);
+    return { ok: true } as T;
+  }
+  if (url.pathname === "/api/accounts" && method === "POST") {
+    const now = new Date().toISOString();
+    accounts.push({
+      id: crypto.randomUUID(),
+      name: String(body.name || ""),
+      role: body.role as "entrenador" | "coordinador",
+      teamLabel: String(body.teamLabel || ""),
+      footballStage: (body.footballStage || null) as ClubAccount["footballStage"],
+      trainingYear: (body.trainingYear || null) as ClubAccount["trainingYear"],
+      active: true,
+      createdAt: now,
+      pin: String(body.pin || ""),
+    });
+  } else if (url.pathname === "/api/accounts" && method === "PATCH") {
+    accounts = accounts.map((account) =>
+      account.id === body.id
+        ? {
+            ...account,
+            ...(body.name !== undefined ? { name: String(body.name) } : {}),
+            ...(body.role !== undefined ? { role: body.role as ClubAccount["role"] } : {}),
+            ...(body.teamLabel !== undefined ? { teamLabel: String(body.teamLabel) } : {}),
+            ...(body.footballStage !== undefined
+              ? { footballStage: body.footballStage as ClubAccount["footballStage"] }
+              : {}),
+            ...(body.trainingYear !== undefined
+              ? { trainingYear: body.trainingYear as ClubAccount["trainingYear"] }
+              : {}),
+            ...(body.pin !== undefined ? { pin: String(body.pin) } : {}),
+            ...(body.active !== undefined ? { active: Boolean(body.active) } : {}),
+          }
+        : account,
+    );
+  } else if (url.pathname === "/api/accounts" && method === "DELETE") {
+    const id = url.searchParams.get("id");
+    accounts = accounts.filter((account) => account.id !== id);
+    stores = stores.filter((store) => store.account_id !== id);
+    localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
+  } else if (url.pathname === "/api/data" && method === "PUT") {
+    if (!session) throw new Error("Inicia sesión de nuevo.");
+    const area = body.area as StoreArea;
+    stores = stores.filter(
+      (store) => !(store.account_id === session.id && store.area === area),
+    );
+    stores.push({ account_id: session.id, area, data: body.data });
+    localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
+    return { ok: true } as T;
+  } else if (url.pathname === "/api/calendar-import") {
+    throw new Error("La importación de calendarios está desactivada en el modo local.");
+  } else if (url.pathname !== "/api/accounts") {
+    throw new Error("Esta función no está disponible en el modo local.");
+  }
+
+  localStorage.setItem(LOCAL_ACCOUNTS_KEY, JSON.stringify(accounts));
+  return { accounts: accounts.map(publicLocalAccount) } as T;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  if (IS_LOCAL_DEMO) return localDemoRequest<T>(path, init);
   const response = await fetch(path, {
     credentials: "include",
     headers: { "Content-Type": "application/json", ...init?.headers },
@@ -43,6 +237,8 @@ export const clubApi = {
     name: string;
     role: "entrenador" | "coordinador";
     teamLabel: string;
+    footballStage: FootballStage | null;
+    trainingYear: TrainingYear | null;
     pin: string;
   }) =>
     request<{ accounts: ClubAccount[] }>("/api/accounts", {
@@ -54,6 +250,8 @@ export const clubApi = {
     name?: string;
     role?: "entrenador" | "coordinador";
     teamLabel?: string;
+    footballStage?: FootballStage | null;
+    trainingYear?: TrainingYear | null;
     pin?: string;
     active?: boolean;
   }) =>
@@ -126,7 +324,7 @@ export function buildLegacySnapshot() {
   const stores: Array<{ accountId: string; area: StoreArea; data: unknown }> =
     [];
   for (const account of accounts) {
-    for (const area of ["team", "stats", "journeys", "rivals"] as StoreArea[]) {
+    for (const area of ["team", "stats", "journeys", "rivals", "agenda"] as StoreArea[]) {
       const raw = localStorage.getItem(`convo_account_${account.id}_${area}`);
       if (raw)
         stores.push({ accountId: account.id, area, data: JSON.parse(raw) });

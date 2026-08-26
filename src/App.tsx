@@ -2,14 +2,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   BarChart3, Calendar, Check, ChevronDown, ChevronRight, ClipboardList, Clock,
-  Copy, Home, LayoutDashboard, MapPin, Maximize2, PencilRuler, Plane, Plus,
+  Copy, Home, MapPin, Maximize2, PencilRuler, Plane, Plus,
   Save, Send, Settings2, Trash2, Users, X, Archive, UserPlus, Star, Share2, ArrowLeft, LogOut, Search,
 } from 'lucide-react';
 import { ClubAccount } from './clubTypes';
 import { getStored, StoreArea, StoreRow } from './api';
 import { randomFootballPhrase } from './motivational';
+import { AgendaEvent, AgendaView, MatchAgendaEvent } from './AgendaView';
 
-type View = 'inicio' | 'equipo' | 'convocatoria' | 'pizarra' | 'estadisticas' | 'guardados' | 'jugador';
+type View = 'inicio' | 'agenda' | 'equipo' | 'convocatoria' | 'pizarra' | 'estadisticas' | 'guardados' | 'jugador';
 type BoardMode = 'libre' | 'partido';
 type SavedTab = 'equipo' | 'convocatorias' | 'pizarras' | 'estadisticas';
 type MatchType = 'liga' | 'amistoso' | 'torneo';
@@ -46,7 +47,10 @@ const formatDate = (value: string) => value
   ? new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00`))
   : 'Fecha pendiente';
 const navItems: Array<{ id: View; label: string; icon: React.ElementType }> = [
-  { id: 'inicio', label: 'Inicio', icon: LayoutDashboard }, { id: 'guardados', label: 'Guardados', icon: Archive },
+  { id: 'agenda', label: 'Agenda', icon: Calendar },
+  { id: 'equipo', label: 'Equipo', icon: Users },
+  { id: 'convocatoria', label: 'Convocatoria', icon: ClipboardList },
+  { id: 'guardados', label: 'Guardados', icon: Archive },
 ];
 
 function syncLinkedPlayers(team: TeamData, accountId: string, accounts: ClubAccount[], stores: StoreRow[]): TeamData {
@@ -69,12 +73,15 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
   const [copySuccess, setCopySuccess] = useState(false);
   const [showRivals, setShowRivals] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [selectedAgendaMatch, setSelectedAgendaMatch] = useState<MatchAgendaEvent | null>(null);
+  const [agendaBoardMatch, setAgendaBoardMatch] = useState<MatchAgendaEvent | null>(null);
   const [phrase] = useState(randomFootballPhrase);
   const [rivales, setRivales] = useState<Rival[]>(() => getStored(stores, account.id, 'rivals', []));
   const [journeys, setJourneys] = useState<SavedJourney[]>(() => getStored(stores, account.id, 'journeys', []));
   const [team, setTeam] = useState<TeamData>(() => syncLinkedPlayers({ ...getStored(stores, account.id, 'team', DEFAULT_TEAM), name: TEAM_NAME }, account.id, accounts, stores));
   const [stats, setStats] = useState<MatchStat[]>(() => getStored(stores, account.id, 'stats', []));
   const [boards, setBoards] = useState<BoardState>(() => getStored(stores, account.id, 'boards', {lineups:[]}));
+  const [agendaEvents, setAgendaEvents] = useState<AgendaEvent[]>(() => getStored(stores, account.id, 'agenda', []));
   const saveTimer = React.useRef<Record<string,ReturnType<typeof setTimeout>>>({});
   const queueSave = (area:StoreArea,data:unknown) => { clearTimeout(saveTimer.current[area]); saveTimer.current[area]=setTimeout(()=>void onDataChange(area,data),450) };
   useEffect(() => queueSave('rivals',rivales), [rivales]);
@@ -82,6 +89,7 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
   useEffect(() => queueSave('team',team), [team]);
   useEffect(() => queueSave('stats',stats), [stats]);
   useEffect(() => queueSave('boards',boards), [boards]);
+  useEffect(() => queueSave('agenda',agendaEvents), [agendaEvents]);
   useEffect(() => {
     const listener = (event: MessageEvent) => {
       if (event.origin === location.origin && event.data?.type === 'convo-pizarra-expanded') setBoardExpanded(Boolean(event.data.expanded));
@@ -119,11 +127,24 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
   const goToView = (nextView: View) => { if (nextView !== view) { setPreviousView(view); setView(nextView) } };
   const goBack = () => { const destination = previousView; setPreviousView(view); setView(destination) };
   const startNew = () => { setForm(makeInitialForm()); goToView('convocatoria') };
-  const openBoard = (mode: BoardMode) => { setBoardMode(mode); goToView('pizarra') };
+  const openBoard = (mode: BoardMode) => { setAgendaBoardMatch(null); setBoardMode(mode); goToView('pizarra') };
+  const openAgendaBoard = (event: MatchAgendaEvent) => { setAgendaBoardMatch(event); setBoardMode('partido'); goToView('pizarra') };
+  useEffect(() => {
+    const returnToAgenda = (event: MessageEvent) => {
+      if (event.origin !== location.origin || event.data?.type !== 'convo-pizarra-saved' || !agendaBoardMatch) return;
+      setBoardExpanded(false);
+      setBoardMode(null);
+      setAgendaBoardMatch(null);
+      goToView('agenda');
+    };
+    addEventListener('message', returnToAgenda);
+    return () => removeEventListener('message', returnToAgenda);
+  }, [agendaBoardMatch]);
   const copyMessage = async () => { await navigator.clipboard.writeText(message); setCopySuccess(true); setTimeout(() => setCopySuccess(false), 1800) };
   const saveJourney = () => { setJourneys((list) => [{ id: uid(), createdAt: new Date().toISOString(), data: cloneData(form), message }, ...list]); setSavedTab('convocatorias'); goToView('guardados') };
   const titles: Record<View, [string, string, string]> = {
     inicio: ['U.D. OLIVA', 'Hola, míster', 'Todo lo necesario para el próximo partido, sin complicaciones.'],
+    agenda: ['TEMPORADA', 'Agenda', 'Entrenamientos y partidos guardados en el día correspondiente.'],
     equipo: ['TU EQUIPO', 'Equipo y plantilla', 'Configura una vez los jugadores que utilizarás en toda la app.'],
     convocatoria: ['ANTES DEL PARTIDO', 'Nueva convocatoria', 'Completa solo lo necesario y comparte el mensaje.'],
     pizarra: ['HERRAMIENTA DE CAMPO', 'Pizarra Fútbol 8', 'Tu plantilla disponible para preparar cualquier alineación.'],
@@ -132,16 +153,17 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
     jugador: ['PERFIL DEL JUGADOR', 'Estadísticas individuales', 'Evolución y partidos registrados.'],
   };
   return <div className="app-shell">
-    <aside className="desktop-sidebar"><Brand account={account} /><nav className="side-nav">{navItems.map((n) => { const Icon = n.icon; return <button key={n.id} className={view === n.id ? 'active' : ''} onClick={() => goToView(n.id)}><Icon size={19} /><span>{n.label}</span></button> })}</nav><div className="storage-note"><span>{account.teamLabel}</span><strong>{account.name}</strong><small>Sesión privada del entrenador.</small><button className="sidebar-logout" onClick={onLogout}><LogOut size={14} /> Cambiar usuario</button></div></aside>
-    <header className="mobile-header"><Brand account={account} /><button className="mobile-logout" onClick={onLogout} aria-label="Cambiar usuario"><LogOut size={18} /></button></header>
+    <aside className="desktop-sidebar"><Brand account={account} onHome={() => goToView('inicio')} /><nav className="side-nav">{navItems.map((n) => { const Icon = n.icon; return <button key={n.id} className={view === n.id ? 'active' : ''} onClick={() => goToView(n.id)}><Icon size={19} /><span>{n.label}</span></button> })}</nav><div className="storage-note"><span>{account.teamLabel}</span><strong>{account.name}</strong><small>Sesión privada del entrenador.</small><button className="sidebar-logout" onClick={onLogout}><LogOut size={14} /> Cambiar usuario</button></div></aside>
+    <header className="mobile-header"><Brand account={account} onHome={() => goToView('inicio')} /><button className="mobile-logout" onClick={onLogout} aria-label="Cambiar usuario"><LogOut size={18} /></button></header>
     <main className={`content ${view === 'pizarra' && boardMode ? 'content-wide' : ''}`}>
-      <header className="page-heading"><div><span className="eyebrow">{titles[view][0]} · {account.teamLabel}</span><h1>{titles[view][1]}</h1><p>{titles[view][2]}</p></div><div className="heading-actions">{view !== 'inicio' && view !== 'guardados' && <button className="icon-button" onClick={goBack} aria-label="Volver a la pantalla anterior"><ArrowLeft size={20} /></button>}{view === 'convocatoria' && <button className="icon-button" onClick={() => setShowRivals(true)} aria-label="Editar rivales"><Settings2 size={20} /></button>}</div></header>
+      <header className="page-heading"><div><span className="eyebrow">{titles[view][0]} · {account.teamLabel}</span><h1>{titles[view][1]}</h1><p>{titles[view][2]}</p></div><div className="heading-actions">{(['pizarra', 'estadisticas', 'jugador'] as View[]).includes(view) && <button className="icon-button" onClick={goBack} aria-label="Volver a la pantalla anterior"><ArrowLeft size={20} /></button>}{view === 'convocatoria' && <button className="icon-button" onClick={() => setShowRivals(true)} aria-label="Editar rivales"><Settings2 size={20} /></button>}</div></header>
       <AnimatePresence mode="wait"><motion.div key={`${view}-${boardMode || ''}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: .18 }}>
-        {view === 'inicio' && <HomeView phrase={phrase} onTeam={() => goToView('equipo')} onNew={startNew} onBoard={() => openBoard('libre')} onStats={() => goToView('estadisticas')} />}
+        {view === 'inicio' && <HomeView phrase={phrase} onAgenda={() => goToView('agenda')} onTeam={() => goToView('equipo')} onNew={startNew} onSaved={() => goToView('guardados')} />}
+        {view === 'agenda' && <AgendaView events={agendaEvents} rivals={rivales} matches={stats} footballStage={account.footballStage} categoryLabel={`${account.footballStage ? `${account.footballStage.charAt(0).toUpperCase()}${account.footballStage.slice(1)}` : 'Categoría pendiente'}${account.trainingYear ? ` · ${account.trainingYear} año` : ''}`} defaultPlayerCount={team.players.filter((player) => player.active).length} onChange={setAgendaEvents} onOpenBoard={openAgendaBoard} onOpenStats={(event) => { const completed = stats.some((match) => match.date === event.date && match.rival === event.rivalName && match.home === event.home); if (completed) { setSavedTab('estadisticas'); goToView('guardados') } else { setSelectedAgendaMatch(event); goToView('estadisticas') } }} />}
         {view === 'equipo' && <TeamView team={team} setTeam={setTeam} account={account} accounts={accounts} stores={stores} onPlayer={(id) => { setSelectedPlayerId(id); goToView('jugador') }} />}
         {view === 'convocatoria' && <ConvocatoriaView form={form} setForm={setForm} rivales={rivales} rivalName={rivalName} fieldName={fieldName} message={message} copySuccess={copySuccess} onCopy={copyMessage} onWhatsApp={() => open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank')} onSave={saveJourney} onMatchTime={updateTime} onHomeAway={updateHome} />}
-        {view === 'pizarra' && <BoardView mode={boardMode} expanded={boardExpanded} accountId={account.id} boards={boards} team={team} onChoose={setBoardMode} onBack={() => { setBoardExpanded(false); setBoardMode(null) }} />}
-        {view === 'estadisticas' && <StatsView team={team} rivales={rivales} onSave={(match) => { setStats((list) => [match, ...list]); setSavedTab('estadisticas'); goToView('guardados') }} />}
+        {view === 'pizarra' && <BoardView mode={boardMode} expanded={boardExpanded} accountId={account.id} boards={boards} team={team} matchContext={agendaBoardMatch} onChoose={setBoardMode} onBack={() => { setBoardExpanded(false); if (agendaBoardMatch) { setAgendaBoardMatch(null); setBoardMode(null); goToView('agenda') } else setBoardMode(null) }} />}
+        {view === 'estadisticas' && <StatsView team={team} rivales={rivales} initialMatch={selectedAgendaMatch} onSave={(match) => { setStats((list) => [match, ...list]); setSelectedAgendaMatch(null); setSavedTab('estadisticas'); goToView('guardados') }} />}
         {view === 'guardados' && <SavedView tab={savedTab} setTab={setSavedTab} team={team} rivales={rivales} journeys={journeys} stats={stats} boards={boards} onTeam={() => goToView('equipo')} onOpenBoard={() => openBoard('libre')} onLoadJourney={(j) => { setForm(cloneData(j.data)); goToView('convocatoria') }} onDeleteJourney={(id) => setJourneys((list) => list.filter((j) => j.id !== id))} onDeleteStat={(id) => setStats((list) => list.filter((m) => m.id !== id))} onUpdateStat={(match) => setStats((list) => list.map((item) => item.id === match.id ? match : item))} onOpenPlayer={(id) => { setSelectedPlayerId(id); goToView('jugador') }} />}
         {view === 'jugador' && selectedPlayerId && <PlayerProfile player={team.players.find((p) => p.id === selectedPlayerId)} stats={stats} onBack={goBack} />}
       </motion.div></AnimatePresence>
@@ -152,8 +174,8 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
 }
 
 function Crest({ className = '' }: { className?: string }) { return <span className={`crest ${className}`}><img src={CREST_PATH} alt="Escudo de U.D. Oliva" /></span> }
-function Brand({ account }: { account: ClubAccount }) { return <div className="brand"><Crest className="brand-crest" /><div><strong>CONVO</strong><span>{account.name} · {account.teamLabel}</span></div></div> }
-function HomeView({ phrase, onTeam, onNew, onBoard, onStats }: { phrase: string; onTeam: () => void; onNew: () => void; onBoard: () => void; onStats: () => void }) { return <div className="home-layout"><section className="hero-card quote-card"><div className="quote-copy"><span className="hero-label">FRASE DEL DÍA</span><h2>“{phrase}”</h2><p>Una idea para empezar la sesión con el equipo en mente.</p></div><Crest className="hero-crest" /></section><section><div className="section-heading"><span className="eyebrow">¿QUÉ NECESITAS HACER?</span><h2>Accesos rápidos</h2></div><div className="action-grid"><ActionCard icon={Users} tone="violet" title="Equipo" text="Edita la plantilla y los jugadores B." onClick={onTeam} /><ActionCard icon={ClipboardList} tone="blue" title="Convocatoria" text="Prepara, guarda y comparte por WhatsApp." onClick={onNew} /><ActionCard icon={PencilRuler} tone="green" title="Pizarra" text="Coloca tu plantilla y guarda la alineación." onClick={onBoard} /><ActionCard icon={BarChart3} tone="amber" title="Estadísticas" text="Registra cada partido y valora jugador a jugador." onClick={onStats} /></div></section></div> }
+function Brand({ account, onHome }: { account: ClubAccount; onHome: () => void }) { return <button type="button" className="brand brand-home" onClick={onHome} aria-label="Ir a la página de inicio"><Crest className="brand-crest" /><span className="brand-copy"><strong>CONVO</strong><small>{account.name} · {account.teamLabel}</small></span></button> }
+function HomeView({ phrase, onAgenda, onTeam, onNew, onSaved }: { phrase: string; onAgenda: () => void; onTeam: () => void; onNew: () => void; onSaved: () => void }) { return <div className="home-layout"><section className="hero-card quote-card"><div className="quote-copy"><span className="hero-label">FRASE DEL DÍA</span><h2>“{phrase}”</h2><p>Una idea para empezar la sesión con el equipo en mente.</p></div><Crest className="hero-crest" /></section><section><div className="section-heading"><span className="eyebrow">¿QUÉ NECESITAS HACER?</span><h2>Accesos rápidos</h2></div><div className="action-grid"><ActionCard icon={Calendar} tone="blue" title="Agenda" text="Organiza entrenamientos y partidos." onClick={onAgenda} /><ActionCard icon={Users} tone="violet" title="Equipo" text="Edita la plantilla y los jugadores B." onClick={onTeam} /><ActionCard icon={ClipboardList} tone="blue" title="Convocatoria" text="Prepara, guarda y comparte por WhatsApp." onClick={onNew} /><ActionCard icon={Archive} tone="green" title="Guardados" text="Consulta convocatorias, pizarras y estadísticas." onClick={onSaved} /></div></section></div> }
 function ActionCard({ icon: Icon, tone, title, text, onClick }: { icon: React.ElementType; tone: string; title: string; text: string; onClick: () => void }) { return <button className="action-card" onClick={onClick}><span className={`action-icon ${tone}`}><Icon size={22} /></span><span><strong>{title}</strong><small>{text}</small></span><ChevronRight size={19} /></button> }
 
 function TeamView({ team, setTeam, account, accounts, stores, onPlayer }: { team: TeamData; setTeam: React.Dispatch<React.SetStateAction<TeamData>>; account: ClubAccount; accounts: ClubAccount[]; stores:StoreRow[]; onPlayer: (id: string) => void }) {
@@ -202,9 +224,9 @@ const statsMessage = (match: MatchStat, team: TeamData) => {
   return text;
 };
 
-function StatsView({ team, rivales, onSave }: { team: TeamData; rivales: Rival[]; onSave: (match: MatchStat) => void }) {
+function StatsView({ team, rivales, initialMatch, onSave }: { team: TeamData; rivales: Rival[]; initialMatch?: MatchAgendaEvent | null; onSave: (match: MatchStat) => void }) {
   const activePlayers = team.players.filter((player) => player.active).sort((a, b) => Number(b.role === 'portero') - Number(a.role === 'portero'));
-  const [meta, setMeta] = useState({ date: '', rival: '', home: true, ourScore: 0, rivalScore: 0, notes: '' });
+  const [meta, setMeta] = useState(() => ({ date: initialMatch?.date || '', rival: initialMatch?.rivalName || '', home: initialMatch?.home ?? true, ourScore: 0, rivalScore: 0, notes: initialMatch?.notes || '' }));
   const [entries, setEntries] = useState<Record<string, PlayerStat>>({});
   const [absentIds, setAbsentIds] = useState<Set<string>>(() => new Set());
   const availablePlayers = activePlayers.filter((player) => !absentIds.has(player.id));
@@ -314,6 +336,6 @@ function NumberControl({ label, value, onChange }: { label: string; value: numbe
   return <div className="number-control"><button type="button" aria-label={`Restar uno a ${label}`} disabled={value <= 0} onClick={() => onChange(Math.max(0, value - 1))}>−</button><input aria-label={label} type="text" inputMode="numeric" pattern="[0-9]*" value={value} onFocus={(event) => event.currentTarget.select()} onChange={(event) => { const digits = event.target.value.replace(/\D/g, ''); onChange(digits ? Number(digits) : 0) }} /><button type="button" aria-label={`Sumar uno a ${label}`} onClick={() => onChange(value + 1)}>+</button></div>
 }
 function Field({ label, icon: Icon, children }: { label: string; icon?: React.ElementType; children: React.ReactNode }) { return <label className="field"><span>{Icon && <Icon size={14} />}{label}</span>{children}</label> }
-function BoardView({ mode, expanded, accountId, boards, team, onChoose, onBack }: { mode: BoardMode | null; expanded: boolean; accountId: string; boards:BoardState; team:TeamData; onChoose: (m: BoardMode) => void; onBack: () => void }) { const frame=React.useRef<HTMLIFrameElement>(null); const sendBoards=()=>frame.current?.contentWindow?.postMessage({type:'convo-pizarra-init',data:{boards,team}},location.origin); if (!mode) return <div className="board-choice"><ActionCard icon={PencilRuler} tone="green" title="Pizarra libre" text="Una mesa de trabajo rápida. No necesita rival, fecha ni convocatoria." onClick={() => onChoose('libre')} /><ActionCard icon={ClipboardList} tone="blue" title="Preparar un partido" text="Convocados, alineación guardada y estadísticas después del encuentro." onClick={() => onChoose('partido')} /></div>; return <div className={expanded ? 'board-overlay' : 'board-container'}>{!expanded && <div className="board-toolbar"><button className="text-button" onClick={onBack}>← Elegir otro modo</button><span><Maximize2 size={16} /> “Campo completo” ocupará toda la pantalla</span></div>}<iframe ref={frame} onLoad={sendBoards} title={mode === 'libre' ? 'Pizarra libre' : 'Pizarra de partido'} src={`/pizarra.html?mode=${mode}&account=${encodeURIComponent(accountId)}`} allow="fullscreen" allowFullScreen /></div> }
+function BoardView({ mode, expanded, accountId, boards, team, matchContext, onChoose, onBack }: { mode: BoardMode | null; expanded: boolean; accountId: string; boards:BoardState; team:TeamData; matchContext?: MatchAgendaEvent | null; onChoose: (m: BoardMode) => void; onBack: () => void }) { const frame=React.useRef<HTMLIFrameElement>(null); const sendBoards=()=>frame.current?.contentWindow?.postMessage({type:'convo-pizarra-init',data:{boards,team,matchContext}},location.origin); if (!mode) return <div className="board-choice"><ActionCard icon={PencilRuler} tone="green" title="Pizarra libre" text="Una mesa de trabajo rápida. No necesita rival, fecha ni convocatoria." onClick={() => onChoose('libre')} /><ActionCard icon={ClipboardList} tone="blue" title="Preparar un partido" text="Convocados, alineación guardada y estadísticas después del encuentro." onClick={() => onChoose('partido')} /></div>; const contextQuery=matchContext?`&context=agenda&event=${encodeURIComponent(matchContext.id)}`:''; return <div className={expanded ? 'board-overlay' : 'board-container'}>{!expanded && <div className="board-toolbar"><button className="text-button" onClick={onBack}>← {matchContext ? 'Volver a la agenda' : 'Elegir otro modo'}</button><span><Maximize2 size={16} /> “Campo completo” ocupará toda la pantalla</span></div>}<iframe ref={frame} onLoad={sendBoards} title={mode === 'libre' ? 'Pizarra libre' : 'Pizarra de partido'} src={`/pizarra.html?mode=${mode}&account=${encodeURIComponent(accountId)}${contextQuery}`} allow="fullscreen" allowFullScreen /></div> }
 function JourneysView({ journeys, onNew, onLoad, onDelete }: { journeys: SavedJourney[]; onNew: () => void; onLoad: (j: SavedJourney) => void; onDelete: (id: string) => void }) { if (!journeys.length) return <div className="empty-state"><span><Calendar size={28} /></span><h2>Aún no hay jornadas</h2><p>Guarda una convocatoria cuando quieras volver a consultarla.</p><button className="primary-button" onClick={onNew}><Plus size={18} /> Crear convocatoria</button></div>; return <div className="journey-list">{journeys.map((j) => <article key={j.id}><div className="date-block"><strong>{j.data.fecha ? new Date(`${j.data.fecha}T12:00:00`).getDate() : '—'}</strong><span>{j.data.fecha ? new Intl.DateTimeFormat('es-ES', { month: 'short' }).format(new Date(`${j.data.fecha}T12:00:00`)) : 'sin fecha'}</span></div><div><span className="journey-type">{j.data.tipoPartido}</span><h2>{j.data.rivalManual || 'Convocatoria guardada'}</h2><p>{j.data.hora || '--:--'} · {j.data.campoPropio || j.data.campoRival || j.data.campoManual || 'Campo pendiente'}</p></div><div className="journey-actions"><button onClick={() => onLoad(j)}>Abrir</button><button onClick={() => onDelete(j.id)} aria-label="Eliminar"><Trash2 size={17} /></button></div></article>)}</div> }
 function RivalsModal({ open, rivals, setRivals, onClose }: { open: boolean; rivals: Rival[]; setRivals: React.Dispatch<React.SetStateAction<Rival[]>>; onClose: () => void }) { return <AnimatePresence>{open && <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="modal" initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }}><header><div><span className="eyebrow">CONFIGURACIÓN</span><h2>Rivales</h2></div><button className="icon-button" onClick={onClose}><X size={20} /></button></header><div className="rival-list">{rivals.map((r) => <div className="rival-row" key={r.id}><input value={r.nombre} onChange={(e) => setRivals((list) => list.map((x) => x.id === r.id ? { ...x, nombre: e.target.value } : x))} /><input value={r.campo} onChange={(e) => setRivals((list) => list.map((x) => x.id === r.id ? { ...x, campo: e.target.value } : x))} /><button onClick={() => setRivals((list) => list.filter((x) => x.id !== r.id))}><Trash2 size={17} /></button></div>)}</div><footer><button className="text-button" onClick={() => setRivals((list) => [...list, { id: uid(), nombre: 'Nuevo rival', campo: '' }])}><Plus size={17} /> Añadir rival</button><button className="primary-button" onClick={onClose}>Listo</button></footer></motion.div></motion.div>}</AnimatePresence> }

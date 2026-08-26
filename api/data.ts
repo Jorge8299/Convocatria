@@ -1,5 +1,5 @@
 import { ApiRequest, ApiResponse, fail, getSession, getSql, jsonBody, methodNotAllowed } from './_lib/server.js';
-const AREAS = ['team','stats','journeys','rivals','boards'];
+const AREAS = ['team','stats','journeys','rivals','boards','agenda'];
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {
     const session = await getSession(req);
@@ -13,4 +13,3 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     res.status(200).json({ok:true});
   } catch(error) { fail(res,error) }
 }
-

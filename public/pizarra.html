@@ -75,6 +75,11 @@ button.orange{background:#a15c00}
 body.mode-libre #match-card,body.mode-libre [data-tab="post"],body.mode-libre [data-tab="plantilla"]{display:none!important}
 body.mode-libre .topbar h1::after{content:' · Libre';color:#2474e5}
 body.mode-libre #free-note{display:block}
+body.mode-agenda #match-card{display:none!important}
+body.mode-agenda #journeys-card .section-title,body.mode-agenda #journeyNumber{display:none!important}
+body.mode-agenda #journeys-card .row{grid-template-columns:1fr}
+body.mode-agenda #saveLineup{width:100%}
+body.mode-agenda [data-tab="post"]{display:none!important}
 body.field-mode #free-note{display:none!important}
 #lineupName{display:none}body.mode-libre #lineupName{display:block}body.mode-libre #journeyNumber{display:none}
 #free-note{display:none;background:#eaf4ff;color:#25517e;border-radius:12px;padding:10px 12px;margin-bottom:8px;font-size:11px;line-height:1.45}
@@ -249,6 +254,7 @@ body:not(.field-mode) #fullscreenBtn{display:block;width:100%;padding:13px 16px;
 <script>
 const integrationParams=new URLSearchParams(location.search);
 const accountId=integrationParams.get('account')||'';
+const agendaEventId=integrationParams.get('context')==='agenda'?(integrationParams.get('event')||''):'';
 const KEY=accountId?`pizarra_futbol8_pro_v1_${accountId}`:'pizarra_futbol8_pro_v1';
 let state={
   players:[],
@@ -310,7 +316,7 @@ function kidMarkup(small=false){
 function currentJourney(){
   return Number(document.getElementById('journeyNumber')?.value || 1);
 }
-function journeyKey(){ return String(currentJourney()); }
+function journeyKey(){ return agendaEventId||String(currentJourney()); }
 function getPlayerStatus(id){
   const key=journeyKey();
   return state.journeyPlayerState?.[key]?.[id] || 'available';
@@ -406,8 +412,9 @@ function deletePlayer(id){
 function saveLineup(){
   const journey=currentJourney();
   const freeMode=boardMode==='libre';
+  const agendaMode=Boolean(agendaEventId);
   const requestedName=document.getElementById('lineupName').value.trim();
-  const name=freeMode?(requestedName||`Pizarra ${state.lineups.filter(lineup=>lineup.free).length+1}`):'Jornada '+journey;
+  const name=agendaMode?`${state.rival||'Partido'} · ${state.matchDate||'sin fecha'}`:freeMode?(requestedName||`Pizarra ${state.lineups.filter(lineup=>lineup.free).length+1}`):'Jornada '+journey;
   const positions=allJourneyPlayers().map(p=>({id:p.id,onField:p.onField,x:p.x,y:p.y}));
   const snapshot={
     rival:state.rival||'',
@@ -422,12 +429,12 @@ function saveLineup(){
     rating:state.rating||'',
     notes:state.notes||''
   };
-  const existing=freeMode?state.lineups.find(l=>l.id===state.activeLineupId&&l.free):state.lineups.find(l=>Number(l.journey)===journey || l.name===name);
+  const existing=agendaMode?state.lineups.find(l=>l.agendaEventId===agendaEventId):freeMode?state.lineups.find(l=>l.id===state.activeLineupId&&l.free):state.lineups.find(l=>Number(l.journey)===journey || l.name===name);
   if(existing){
-    Object.assign(existing,{name,journey:freeMode?null:journey,free:freeMode,positions,snapshot});
+    Object.assign(existing,{name,journey:freeMode||agendaMode?null:journey,free:freeMode,agendaEventId:agendaMode?agendaEventId:null,positions,snapshot});
     state.activeLineupId=existing.id;
   }else{
-    const lineup={id:String(Date.now())+Math.random(),name,journey:freeMode?null:journey,free:freeMode,positions,snapshot};
+    const lineup={id:String(Date.now())+Math.random(),name,journey:freeMode||agendaMode?null:journey,free:freeMode,agendaEventId:agendaMode?agendaEventId:null,positions,snapshot};
     state.lineups.push(lineup);state.activeLineupId=lineup.id;
   }
   document.getElementById('lineupName').value=name;
@@ -753,11 +760,13 @@ document.getElementById('notes').oninput=e=>{state.notes=e.target.value;save()};
 load();
 const boardMode=integrationParams.get('mode')==='libre'?'libre':'partido';
 document.body.classList.add('mode-'+boardMode);
+if(agendaEventId)document.body.classList.add('mode-agenda');
 if(boardMode==='libre') document.querySelector('.topbar h1').textContent='Pizarra Fútbol 8';
 if(boardMode==='libre'){
   document.querySelector('#squad-card .section-title').textContent='Jugadores del equipo';
   document.getElementById('saveLineup').textContent='Guardar pizarra';
 }
+if(agendaEventId)document.getElementById('saveLineup').textContent='Guardar alineación';
 if(integrationParams.get('rival')) state.rival=integrationParams.get('rival');
 if(integrationParams.get('fecha')) state.matchDate=integrationParams.get('fecha');
 save();renderAll();
@@ -765,10 +774,13 @@ addEventListener('message',event=>{
   if(event.origin!==location.origin||event.data?.type!=='convo-pizarra-init')return;
   if(event.data.data?.boards)state={...state,...event.data.data.boards};
   applyTeam(event.data.data?.team);
+  if(event.data.data?.matchContext){
+    state.rival=event.data.data.matchContext.rivalName||'';
+    state.matchDate=event.data.data.matchContext.date||'';
+  }
   save();renderAll();
 });
 
 </script>
 </body>
 </html>
-

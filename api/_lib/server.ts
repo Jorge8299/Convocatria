@@ -2,8 +2,10 @@ import { createHash, randomBytes } from 'node:crypto';
 import { neon } from '@neondatabase/serverless';
 
 export type ClubRole = 'entrenador' | 'coordinador' | 'superadmin';
-export interface AccountRow { id: string; name: string; role: ClubRole; teamLabel: string; pinHash: string; active: boolean; createdAt: string }
-export interface PublicAccount { id: string; name: string; role: ClubRole; teamLabel: string; active: boolean; createdAt: string }
+export type FootballStage = 'prebenjamin' | 'benjamin' | 'alevin';
+export type TrainingYear = 'primero' | 'segundo' | 'mixto';
+export interface AccountRow { id: string; name: string; role: ClubRole; teamLabel: string; footballStage: FootballStage | null; trainingYear: TrainingYear | null; pinHash: string; active: boolean; createdAt: string }
+export interface PublicAccount { id: string; name: string; role: ClubRole; teamLabel: string; footballStage: FootballStage | null; trainingYear: TrainingYear | null; active: boolean; createdAt: string }
 export interface ApiRequest { method?: string; headers: Record<string, string | string[] | undefined>; body?: unknown; query?: Record<string, string | string[]> }
 export interface ApiResponse { status(code: number): ApiResponse; json(value: unknown): void; setHeader(name: string, value: string | string[]): void; end(): void }
 
@@ -22,17 +24,38 @@ export async function ensureSchema() {
     name TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('entrenador','coordinador','superadmin')),
     team_label TEXT NOT NULL DEFAULT '',
+    football_stage TEXT,
+    training_year TEXT,
     pin_hash TEXT NOT NULL,
     active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
+  await sql`ALTER TABLE club_accounts ADD COLUMN IF NOT EXISTS football_stage TEXT`;
+  await sql`ALTER TABLE club_accounts ADD COLUMN IF NOT EXISTS training_year TEXT`;
   await sql`CREATE TABLE IF NOT EXISTS club_stores (
     account_id TEXT NOT NULL REFERENCES club_accounts(id) ON DELETE CASCADE,
-    area TEXT NOT NULL CHECK (area IN ('team','stats','journeys','rivals','boards')),
+    area TEXT NOT NULL CHECK (area IN ('team','stats','journeys','rivals','boards','agenda')),
     data JSONB NOT NULL DEFAULT 'null'::jsonb,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (account_id, area)
   )`;
+  await sql`DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname='club_stores_area_check'
+          AND pg_get_constraintdef(oid) NOT LIKE '%agenda%'
+      ) THEN
+        ALTER TABLE club_stores DROP CONSTRAINT club_stores_area_check;
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname='club_stores_area_check'
+      ) THEN
+        ALTER TABLE club_stores ADD CONSTRAINT club_stores_area_check
+          CHECK (area IN ('team','stats','journeys','rivals','boards','agenda'));
+      END IF;
+    END
+  $$`;
   await sql`CREATE TABLE IF NOT EXISTS club_sessions (
     token_hash TEXT PRIMARY KEY,
     account_id TEXT NOT NULL REFERENCES club_accounts(id) ON DELETE CASCADE,
@@ -64,7 +87,7 @@ export async function getSession(req: ApiRequest): Promise<AccountRow | null> {
   const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
   if (!token) return null;
   const sql = sqlClient();
-  const rows = await sql`SELECT a.id,a.name,a.role,a.team_label,a.pin_hash,a.active,a.created_at
+  const rows = await sql`SELECT a.id,a.name,a.role,a.team_label,a.football_stage,a.training_year,a.pin_hash,a.active,a.created_at
     FROM club_sessions s JOIN club_accounts a ON a.id=s.account_id
     WHERE s.token_hash=${tokenHash(token)} AND s.expires_at>NOW() AND a.active=TRUE LIMIT 1`;
   return rows[0] ? mapAccount(rows[0]) : null;
@@ -87,7 +110,7 @@ export async function destroySession(req: ApiRequest, res: ApiResponse) {
 }
 
 export function publicAccount(account: AccountRow): PublicAccount { const { pinHash: _pinHash, ...safe } = account; return safe }
-export function mapAccount(row: Record<string, unknown>): AccountRow { return { id: String(row.id), name: String(row.name), role: row.role as ClubRole, teamLabel: String(row.team_label), pinHash: String(row.pin_hash), active: Boolean(row.active), createdAt: new Date(String(row.created_at)).toISOString() } }
+export function mapAccount(row: Record<string, unknown>): AccountRow { return { id: String(row.id), name: String(row.name), role: row.role as ClubRole, teamLabel: String(row.team_label), footballStage: row.football_stage ? row.football_stage as FootballStage : null, trainingYear: row.training_year ? row.training_year as TrainingYear : null, pinHash: String(row.pin_hash), active: Boolean(row.active), createdAt: new Date(String(row.created_at)).toISOString() } }
 export function getSql() { return sqlClient() }
 export function loginAttemptKey(req:ApiRequest,accountId:string) { const forwarded=req.headers['x-forwarded-for']; const ip=Array.isArray(forwarded)?forwarded[0]:forwarded?.split(',')[0] || 'unknown'; return createHash('sha256').update(`${ip}:${accountId}`).digest('hex') }
 export async function isRateLimited(key:string) { const sql=sqlClient(); const rows=await sql`SELECT COUNT(*)::int AS count FROM club_login_attempts WHERE attempt_key=${key} AND attempted_at>NOW()-INTERVAL '15 minutes'`; return Number(rows[0]?.count || 0)>=6 }

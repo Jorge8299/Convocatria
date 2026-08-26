@@ -15,13 +15,19 @@ import {
   X,
 } from "lucide-react";
 import { CoachApp } from "./App";
-import { ClubAccount, ClubRole } from "./clubTypes";
+import {
+  ClubAccount,
+  ClubRole,
+  FootballStage,
+  TrainingYear,
+} from "./clubTypes";
 import {
   BootstrapPayload,
   buildLegacySnapshot,
   clubApi,
   getStored,
   ImportedRival,
+  IS_LOCAL_DEMO,
   StoreRow,
 } from "./api";
 import { randomFootballPhrase } from "./motivational";
@@ -32,6 +38,20 @@ const roleLabel: Record<ClubRole, string> = {
   coordinador: "Coordinador",
   superadmin: "Superadmin",
 };
+const trainingYearLabel: Record<TrainingYear, string> = {
+  primero: "Primer año",
+  segundo: "Segundo año",
+  mixto: "Primer y segundo año",
+};
+
+function LocalDemoBanner() {
+  if (!IS_LOCAL_DEMO) return null;
+  return (
+    <div className="local-demo-banner" role="status">
+      Modo local · Los cambios solo se guardan en este navegador
+    </div>
+  );
+}
 
 interface StoredPlayer {
   id: string;
@@ -230,6 +250,7 @@ function LoginScreen({
   };
   return (
     <main className="login-page">
+      <LocalDemoBanner />
       <section className="login-card">
         <div className="login-crest">
           <img src="/escudo-ud-oliva.jpg" alt="Escudo de U.D. Oliva" />
@@ -292,7 +313,8 @@ function LoginScreen({
           <KeyRound size={18} /> Entrar
         </button>
         <small>Acceso privado para entrenadores y coordinación.</small>
-        {visibleAccounts.length === 0 &&
+        {!IS_LOCAL_DEMO &&
+          visibleAccounts.length === 0 &&
           legacySnapshot.accounts.length > 1 &&
           !migrationDone && (
             <section className="cloud-migration login-migration">
@@ -350,6 +372,8 @@ function AdminPanel({
     name: "",
     role: "entrenador" as ClubRole,
     teamLabel: "",
+    footballStage: "" as FootballStage | "",
+    trainingYear: "" as TrainingYear | "",
     pin: "",
   });
   const [pinDrafts, setPinDrafts] = useState<Record<string, string>>({});
@@ -358,6 +382,8 @@ function AdminPanel({
     name: "",
     role: "entrenador" as "entrenador" | "coordinador",
     teamLabel: "",
+    footballStage: "" as FootballStage | "",
+    trainingYear: "" as TrainingYear | "",
   });
   const [message, setMessage] = useState("");
   const [migrationPin, setMigrationPin] = useState("");
@@ -472,9 +498,14 @@ function AdminPanel({
     if (
       !draft.name.trim() ||
       !/^\d{4}$/.test(draft.pin) ||
-      (draft.role === "entrenador" && !draft.teamLabel.trim())
+      (draft.role === "entrenador" &&
+        (!draft.teamLabel.trim() ||
+          !draft.footballStage ||
+          !draft.trainingYear))
     ) {
-      setMessage("Completa el nombre, el equipo y un PIN de 4 números.");
+      setMessage(
+        "Completa el nombre, el equipo, la etapa, el año y un PIN de 4 números.",
+      );
       return;
     }
     try {
@@ -482,10 +513,21 @@ function AdminPanel({
         name: draft.name.trim(),
         role: draft.role as "entrenador" | "coordinador",
         teamLabel: draft.teamLabel.trim(),
+        footballStage:
+          draft.role === "entrenador" ? draft.footballStage || null : null,
+        trainingYear:
+          draft.role === "entrenador" ? draft.trainingYear || null : null,
         pin: draft.pin,
       });
       onAccounts(result.accounts);
-      setDraft({ name: "", role: "entrenador", teamLabel: "", pin: "" });
+      setDraft({
+        name: "",
+        role: "entrenador",
+        teamLabel: "",
+        footballStage: "",
+        trainingYear: "",
+        pin: "",
+      });
       setMessage("Usuario creado correctamente.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudo crear.");
@@ -514,6 +556,10 @@ function AdminPanel({
       name: item.name,
       role: item.role as "entrenador" | "coordinador",
       teamLabel: item.role === "entrenador" ? item.teamLabel : "",
+      footballStage:
+        item.role === "entrenador" ? item.footballStage || "" : "",
+      trainingYear:
+        item.role === "entrenador" ? item.trainingYear || "" : "",
     });
     setMessage("");
   };
@@ -521,9 +567,12 @@ function AdminPanel({
     if (
       !editingId ||
       !editDraft.name.trim() ||
-      (editDraft.role === "entrenador" && !editDraft.teamLabel.trim())
+      (editDraft.role === "entrenador" &&
+        (!editDraft.teamLabel.trim() ||
+          !editDraft.footballStage ||
+          !editDraft.trainingYear))
     ) {
-      setMessage("Completa el nombre y el equipo del entrenador.");
+      setMessage("Completa el nombre, el equipo, la etapa y el año.");
       return;
     }
     try {
@@ -532,6 +581,14 @@ function AdminPanel({
         name: editDraft.name.trim(),
         role: editDraft.role,
         teamLabel: editDraft.teamLabel.trim(),
+        footballStage:
+          editDraft.role === "entrenador"
+            ? editDraft.footballStage || null
+            : null,
+        trainingYear:
+          editDraft.role === "entrenador"
+            ? editDraft.trainingYear || null
+            : null,
       });
       onAccounts(result.accounts);
       setEditingId(null);
@@ -599,6 +656,7 @@ function AdminPanel({
   };
   return (
     <div className="role-shell">
+      <LocalDemoBanner />
       <RoleHeader
         title="Administración"
         subtitle="U.D. Oliva"
@@ -638,16 +696,49 @@ function AdminPanel({
               <option value="coordinador">Coordinador</option>
             </select>
             {draft.role === "entrenador" && (
-              <input
-                placeholder="Equipo, por ejemplo Benjamín A"
-                value={draft.teamLabel}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    teamLabel: event.target.value,
-                  }))
-                }
-              />
+              <>
+                <input
+                  aria-label="Equipo"
+                  placeholder="Equipo, por ejemplo Benjamín A"
+                  value={draft.teamLabel}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      teamLabel: event.target.value,
+                    }))
+                  }
+                />
+                <select
+                  aria-label="Etapa formativa"
+                  value={draft.footballStage}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      footballStage: event.target.value as FootballStage | "",
+                    }))
+                  }
+                >
+                  <option value="">Etapa formativa</option>
+                  <option value="prebenjamin">Prebenjamín</option>
+                  <option value="benjamin">Benjamín</option>
+                  <option value="alevin">Alevín</option>
+                </select>
+                <select
+                  aria-label="Año formativo"
+                  value={draft.trainingYear}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      trainingYear: event.target.value as TrainingYear | "",
+                    }))
+                  }
+                >
+                  <option value="">Año del equipo</option>
+                  <option value="primero">Primer año</option>
+                  <option value="segundo">Segundo año</option>
+                  <option value="mixto">Primer y segundo año</option>
+                </select>
+              </>
             )}
             <input
               type="password"
@@ -985,7 +1076,8 @@ function AdminPanel({
             </div>
           )}
         </section>
-        {accounts.filter((item) => item.role !== "superadmin").length === 0 &&
+        {!IS_LOCAL_DEMO &&
+          accounts.filter((item) => item.role !== "superadmin").length === 0 &&
           legacySnapshot.accounts.length > 1 && (
             <section className="cloud-migration">
               <CloudUpload size={24} />
@@ -1070,17 +1162,53 @@ function AdminPanel({
                         <option value="coordinador">Coordinador</option>
                       </select>
                       {editDraft.role === "entrenador" && (
-                        <input
-                          aria-label="Equipo"
-                          placeholder="Equipo, por ejemplo Benjamín A"
-                          value={editDraft.teamLabel}
-                          onChange={(event) =>
-                            setEditDraft((current) => ({
-                              ...current,
-                              teamLabel: event.target.value,
-                            }))
-                          }
-                        />
+                        <>
+                          <input
+                            aria-label="Equipo"
+                            placeholder="Equipo, por ejemplo Benjamín A"
+                            value={editDraft.teamLabel}
+                            onChange={(event) =>
+                              setEditDraft((current) => ({
+                                ...current,
+                                teamLabel: event.target.value,
+                              }))
+                            }
+                          />
+                          <select
+                            aria-label="Etapa formativa"
+                            value={editDraft.footballStage}
+                            onChange={(event) =>
+                              setEditDraft((current) => ({
+                                ...current,
+                                footballStage: event.target.value as
+                                  | FootballStage
+                                  | "",
+                              }))
+                            }
+                          >
+                            <option value="">Etapa formativa</option>
+                            <option value="prebenjamin">Prebenjamín</option>
+                            <option value="benjamin">Benjamín</option>
+                            <option value="alevin">Alevín</option>
+                          </select>
+                          <select
+                            aria-label="Año formativo"
+                            value={editDraft.trainingYear}
+                            onChange={(event) =>
+                              setEditDraft((current) => ({
+                                ...current,
+                                trainingYear: event.target.value as
+                                  | TrainingYear
+                                  | "",
+                              }))
+                            }
+                          >
+                            <option value="">Año del equipo</option>
+                            <option value="primero">Primer año</option>
+                            <option value="segundo">Segundo año</option>
+                            <option value="mixto">Primer y segundo año</option>
+                          </select>
+                        </>
                       )}
                       <div className="account-edit-actions">
                         <button
@@ -1100,6 +1228,9 @@ function AdminPanel({
                         <strong>{item.name}</strong>
                         <small>
                           {roleLabel[item.role]} · {item.teamLabel}
+                          {item.role === "entrenador" && item.trainingYear
+                            ? ` · ${trainingYearLabel[item.trainingYear]}`
+                            : ""}
                         </small>
                       </div>
                       <div className="account-actions">
