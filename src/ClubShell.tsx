@@ -1329,7 +1329,7 @@ function CoordinatorPanel({
   const [tab, setTab] = useState<
     "agenda" | "resumen" | "jugadores" | "partidos"
   >(
-    "agenda",
+    "resumen",
   );
   const today = new Date();
   const todayIso = coordinatorIsoDate(
@@ -1613,7 +1613,7 @@ function CoordinatorPanel({
           )}
         </section>
         <div className="coordinator-tabs">
-          {(["agenda", "resumen", "jugadores", "partidos"] as const).map((value) => (
+          {(["resumen", "agenda", "jugadores", "partidos"] as const).map((value) => (
             <button
               key={value}
               className={tab === value ? "active" : ""}
