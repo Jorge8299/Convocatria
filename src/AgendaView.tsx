@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { FootballStage } from "./clubTypes";
 import { TrainingBoard, type TrainingBoardAction, type TrainingBoardPiece } from "./TrainingBoard";
+import { downloadTrainingPdf } from "./trainingPdf";
 import {
   BarChart3,
   BookOpen,
@@ -8,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Download,
   Eye,
   ListChecks,
   PencilRuler,
@@ -279,6 +281,7 @@ export function AgendaView({
   );
   const [draft, setDraft] = useState<AgendaEvent | null>(null);
   const [trainingView, setTrainingView] = useState<"summary" | "planner">("planner");
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [exercisePreview, setExercisePreview] = useState<{
     exercise: PlannedExercise;
     blockId?: TrainingBlock["id"];
@@ -351,6 +354,22 @@ export function AgendaView({
     setDraft({ ...draft, session: { ...(draft.session || defaultSession(defaultPlayerCount)), ...change } });
   };
   const trainingSession = draft?.type === "training" ? { ...defaultSession(defaultPlayerCount), ...draft.session } : null;
+  const downloadSummaryPdf = async () => {
+    if (!draft || draft.type !== "training" || !trainingSession || downloadingPdf) return;
+    setDownloadingPdf(true);
+    try {
+      await downloadTrainingPdf({
+        categoryLabel,
+        date: draft.date,
+        startTime: draft.startTime,
+        endTime: draft.endTime,
+        notes: draft.notes,
+        session: trainingSession,
+      });
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
   const allocatedTrainingMinutes = trainingSession?.blocks.reduce((total, block) => total + block.minutes, 0) || 0;
   const usedTrainingMinutes = trainingSession?.blocks.reduce((total, block) => total + blockExercises(block).reduce((blockTotal, exercise) => blockTotal + exerciseDuration(exercise), 0), 0) || 0;
   const remainingTrainingMinutes = allocatedTrainingMinutes - usedTrainingMinutes;
@@ -596,7 +615,10 @@ export function AgendaView({
                   })}
                 </div>
                 {draft.notes && <div className="training-review-notes"><strong>Observaciones generales</strong><p>{draft.notes}</p></div>}
-                <button type="button" className="primary-button training-edit-button" onClick={() => setTrainingView("planner")}><PencilRuler size={16} /> Editar planificación</button>
+                <div className="training-review-actions">
+                  <button type="button" className="training-pdf-button" disabled={downloadingPdf} onClick={() => void downloadSummaryPdf()}><Download size={16} /> {downloadingPdf ? "Preparando PDF..." : "Descargar PDF"}</button>
+                  <button type="button" className="primary-button training-edit-button" onClick={() => setTrainingView("planner")}><PencilRuler size={16} /> Editar planificación</button>
+                </div>
               </section>
             ) : (
               <>
