@@ -1,20 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
+  Calendar,
   Check,
+  ChevronLeft,
   ChevronRight,
   CloudUpload,
+  Clock,
   FileText,
   FileUp,
   KeyRound,
   LogOut,
+  MapPin,
   Pencil,
   Plus,
   Trash2,
+  Trophy,
   Users,
   X,
 } from "lucide-react";
 import { CoachApp } from "./App";
+import type { AgendaEvent, MatchAgendaEvent } from "./AgendaView";
 import {
   ClubAccount,
   ClubRole,
@@ -89,6 +95,21 @@ interface StoredMatch {
   notes: string;
   players: StoredEntry[];
 }
+
+const coordinatorWeekDays = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const coordinatorMonthFormatter = new Intl.DateTimeFormat("es-ES", {
+  month: "long",
+  year: "numeric",
+});
+const coordinatorDayFormatter = new Intl.DateTimeFormat("es-ES", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+});
+const coordinatorIsoDate = (year: number, month: number, day: number) =>
+  `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+const normalizedMatchName = (value: string) =>
+  value.trim().toLocaleLowerCase("es").replace(/\s+/g, " ");
 
 export default function ClubShell() {
   const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
@@ -1298,9 +1319,21 @@ function CoordinatorPanel({
     (item) => item.role === "entrenador" && item.active,
   );
   const [coachFilter, setCoachFilter] = useState("all");
-  const [tab, setTab] = useState<"resumen" | "jugadores" | "partidos">(
-    "resumen",
+  const [tab, setTab] = useState<
+    "agenda" | "resumen" | "jugadores" | "partidos"
+  >(
+    "agenda",
   );
+  const today = new Date();
+  const todayIso = coordinatorIsoDate(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+  );
+  const [agendaCursor, setAgendaCursor] = useState(
+    () => new Date(today.getFullYear(), today.getMonth(), 1),
+  );
+  const [selectedAgendaDate, setSelectedAgendaDate] = useState(todayIso);
   const [showTeamPicker, setShowTeamPicker] = useState(false);
   const [sortBy, setSortBy] = useState<
     "rating" | "goals" | "assists" | "matches"
@@ -1316,6 +1349,7 @@ function CoordinatorPanel({
           players: [],
         }),
         stats: getStored<StoredMatch[]>(stores, coach.id, "stats", []),
+        agenda: getStored<AgendaEvent[]>(stores, coach.id, "agenda", []),
       })),
     [accounts, stores],
   );
@@ -1338,6 +1372,47 @@ function CoordinatorPanel({
       coach: item.coach,
       team: item.team,
     })),
+  );
+  const agendaMatches = filtered
+    .flatMap((item) =>
+      item.agenda
+        .filter((event): event is MatchAgendaEvent => event.type === "match")
+        .map((event) => ({
+          ...event,
+          coach: item.coach,
+          team: item.team,
+          stats: item.stats.find(
+            (match) =>
+              match.date === event.date &&
+              normalizedMatchName(match.rival) ===
+                normalizedMatchName(event.rivalName) &&
+              (match.home ?? true) === event.home,
+          ),
+        })),
+    )
+    .sort(
+      (first, second) =>
+        first.date.localeCompare(second.date) ||
+        first.startTime.localeCompare(second.startTime),
+    );
+  const agendaCells = useMemo(() => {
+    const year = agendaCursor.getFullYear();
+    const month = agendaCursor.getMonth();
+    const firstOffset = (new Date(year, month, 1).getDay() + 6) % 7;
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    return [
+      ...Array.from({ length: firstOffset }, () => null),
+      ...Array.from({ length: totalDays }, (_, index) => ({
+        day: index + 1,
+        date: coordinatorIsoDate(year, month, index + 1),
+      })),
+    ];
+  }, [agendaCursor]);
+  const selectedAgendaMatches = agendaMatches.filter(
+    (match) => match.date === selectedAgendaDate,
+  );
+  const selectedAgendaLabel = coordinatorDayFormatter.format(
+    new Date(`${selectedAgendaDate}T12:00:00`),
   );
   const canonicalPlayers = useMemo(() => {
     const players = new Map<string, StoredPlayer>();
@@ -1436,7 +1511,11 @@ function CoordinatorPanel({
   const selectedCoach = coaches.find((coach) => coach.id === coachFilter);
   const firstName = (name: string) => name.trim().split(/\s+/)[0];
   const viewTitle =
-    tab === "resumen"
+    tab === "agenda"
+      ? selectedCoach
+        ? `Agenda de ${selectedCoach.teamLabel}`
+        : "Agenda de partidos del club"
+      : tab === "resumen"
       ? selectedCoach
         ? `Resumen de ${selectedCoach.teamLabel}`
         : "Resumen general del club"
@@ -1527,7 +1606,7 @@ function CoordinatorPanel({
           )}
         </section>
         <div className="coordinator-tabs">
-          {(["resumen", "jugadores", "partidos"] as const).map((value) => (
+          {(["agenda", "resumen", "jugadores", "partidos"] as const).map((value) => (
             <button
               key={value}
               className={tab === value ? "active" : ""}
@@ -1543,6 +1622,205 @@ function CoordinatorPanel({
           </span>
           <h2>{viewTitle}</h2>
         </div>
+        {tab === "agenda" && (
+          <section className="coordinator-agenda-layout">
+            <div className="coordinator-agenda-calendar">
+              <header className="coordinator-agenda-toolbar">
+                <button
+                  type="button"
+                  aria-label="Mes anterior"
+                  onClick={() =>
+                    setAgendaCursor(
+                      (current) =>
+                        new Date(
+                          current.getFullYear(),
+                          current.getMonth() - 1,
+                          1,
+                        ),
+                    )
+                  }
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <div>
+                  <span>CALENDARIO DEL CLUB</span>
+                  <h3>{coordinatorMonthFormatter.format(agendaCursor)}</h3>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Mes siguiente"
+                  onClick={() =>
+                    setAgendaCursor(
+                      (current) =>
+                        new Date(
+                          current.getFullYear(),
+                          current.getMonth() + 1,
+                          1,
+                        ),
+                    )
+                  }
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </header>
+              <button
+                type="button"
+                className="coordinator-agenda-today"
+                onClick={() => {
+                  setAgendaCursor(
+                    new Date(today.getFullYear(), today.getMonth(), 1),
+                  );
+                  setSelectedAgendaDate(todayIso);
+                }}
+              >
+                Hoy
+              </button>
+              <div className="coordinator-agenda-weekdays">
+                {coordinatorWeekDays.map((day) => (
+                  <span key={day}>{day}</span>
+                ))}
+              </div>
+              <div className="coordinator-agenda-grid">
+                {agendaCells.map((cell, index) => {
+                  if (!cell)
+                    return (
+                      <span
+                        className="coordinator-agenda-empty-cell"
+                        key={`empty-${index}`}
+                      />
+                    );
+                  const dayMatches = agendaMatches.filter(
+                    (match) => match.date === cell.date,
+                  );
+                  return (
+                    <button
+                      type="button"
+                      key={cell.date}
+                      className={`${
+                        selectedAgendaDate === cell.date ? "selected " : ""
+                      }${dayMatches.length ? "has-matches" : ""}`.trim()}
+                      aria-label={`${cell.date}. ${dayMatches.length} ${
+                        dayMatches.length === 1 ? "partido" : "partidos"
+                      }`}
+                      onClick={() => setSelectedAgendaDate(cell.date)}
+                    >
+                      <span className="coordinator-agenda-day-number">
+                        {cell.day}
+                      </span>
+                      {dayMatches.length > 0 && (
+                        <>
+                          <span className="coordinator-agenda-markers">
+                            {dayMatches.slice(0, 3).map((match) => (
+                              <i
+                                className={match.stats ? "completed" : "scheduled"}
+                                key={`${match.coach.id}-${match.id}`}
+                              />
+                            ))}
+                          </span>
+                          <b className="coordinator-agenda-count">
+                            {dayMatches.length}
+                          </b>
+                        </>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <footer className="coordinator-agenda-legend">
+                <span><i className="scheduled" /> Programado</span>
+                <span><i className="completed" /> Con estadísticas</span>
+                <strong>{agendaMatches.length} partidos en la agenda</strong>
+              </footer>
+            </div>
+            <aside className="coordinator-agenda-day-panel">
+              <header>
+                <div>
+                  <span>JORNADA SELECCIONADA</span>
+                  <h3>{selectedAgendaLabel}</h3>
+                </div>
+                <b>{selectedAgendaMatches.length}</b>
+              </header>
+              {selectedAgendaMatches.length ? (
+                <div className="coordinator-agenda-match-list">
+                  {selectedAgendaMatches.map((match) => {
+                    const stats = match.stats;
+                    const isPast = match.date < todayIso;
+                    const homeName = match.home ? match.team.name : match.rivalName;
+                    const awayName = match.home ? match.rivalName : match.team.name;
+                    const homeScore = stats
+                      ? match.home
+                        ? stats.ourScore
+                        : stats.rivalScore
+                      : null;
+                    const awayScore = stats
+                      ? match.home
+                        ? stats.rivalScore
+                        : stats.ourScore
+                      : null;
+                    return (
+                      <article
+                        className={stats ? "completed" : isPast ? "pending" : "scheduled"}
+                        key={`${match.coach.id}-${match.id}`}
+                      >
+                        <div className="coordinator-agenda-match-status">
+                          {stats ? <Trophy size={16} /> : <Calendar size={16} />}
+                          <span>
+                            {stats
+                              ? "Finalizado"
+                              : isPast
+                                ? "Resultado pendiente"
+                                : "Programado"}
+                          </span>
+                        </div>
+                        <div className="coordinator-agenda-team-label">
+                          <strong>{match.coach.teamLabel}</strong>
+                          <span>{match.coach.name}</span>
+                        </div>
+                        <div className="coordinator-agenda-scoreline">
+                          <span>{homeName}</span>
+                          <b>{stats ? `${homeScore} — ${awayScore}` : "VS"}</b>
+                          <span>{awayName}</span>
+                        </div>
+                        <div className="coordinator-agenda-match-meta">
+                          <span><Clock size={14} /> {match.startTime || "Hora pendiente"}</span>
+                          <span><MapPin size={14} /> {match.field || "Campo pendiente"}</span>
+                        </div>
+                        {stats && (
+                          <details className="coordinator-agenda-statistics">
+                            <summary>
+                              <span><BarChart3 size={15} /> Ver estadísticas</span>
+                              <small>{stats.players.length} jugadores</small>
+                            </summary>
+                            <div>
+                              {stats.players.map((entry) => {
+                                const player = match.team.players.find(
+                                  (item) => item.id === entry.playerId,
+                                );
+                                return player ? (
+                                  <span key={entry.playerId}>
+                                    <strong>{player.role === "portero" ? "🧤 " : ""}{player.name}</strong>
+                                    <small>⚽ {entry.goals} · 🎯 {entry.assists} · ⭐ {entry.rating}/5</small>
+                                  </span>
+                                ) : null;
+                              })}
+                            </div>
+                            {stats.notes && <p>{stats.notes}</p>}
+                          </details>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="coordinator-agenda-no-matches">
+                  <Calendar size={24} />
+                  <strong>No hay partidos este día</strong>
+                  <span>Selecciona una fecha marcada para ver la jornada.</span>
+                </div>
+              )}
+            </aside>
+          </section>
+        )}
         {tab === "resumen" && (
           <>
             <div className="club-metrics">
