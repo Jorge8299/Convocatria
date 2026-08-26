@@ -1716,6 +1716,23 @@ function CoordinatorPanel({
                       </span>
                       {dayMatches.length > 0 && (
                         <>
+                          <span className="coordinator-agenda-preview">
+                            <i
+                              className={dayMatches[0].stats ? "completed" : "scheduled"}
+                            >
+                              {dayMatches[0].stats ? (
+                                <Trophy size={13} />
+                              ) : (
+                                <Calendar size={13} />
+                              )}
+                            </i>
+                            <span>
+                              <strong>{dayMatches[0].coach.teamLabel}</strong>
+                              <small>
+                                {dayMatches[0].startTime || "Sin hora"} · {dayMatches[0].rivalName}
+                              </small>
+                            </span>
+                          </span>
                           <span className="coordinator-agenda-markers">
                             {dayMatches.slice(0, 3).map((match) => (
                               <i
