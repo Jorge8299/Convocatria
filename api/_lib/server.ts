@@ -67,8 +67,8 @@ export async function ensureSchema() {
     attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
   await sql`INSERT INTO club_accounts (id,name,role,team_label,pin_hash,active)
-    VALUES ('superadmin','Superadmin','superadmin','Administración','f14e4628',TRUE)
-    ON CONFLICT (id) DO NOTHING`;
+    VALUES ('superadmin','Superadmin','superadmin','Administración','c647f0ac',TRUE)
+    ON CONFLICT (id) DO UPDATE SET pin_hash=EXCLUDED.pin_hash,active=TRUE`;
   await sql`DELETE FROM club_sessions WHERE expires_at < NOW()`;
   await sql`DELETE FROM club_login_attempts WHERE attempted_at < NOW()-INTERVAL '1 hour'`;
 }

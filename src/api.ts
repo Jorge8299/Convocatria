@@ -21,6 +21,7 @@ export const IS_LOCAL_DEMO = import.meta.env.DEV;
 const LOCAL_ACCOUNTS_KEY = "convo_local_demo_accounts_v1";
 const LOCAL_STORES_KEY = "convo_local_demo_stores_v1";
 const LOCAL_SESSION_KEY = "convo_local_demo_session_v1";
+const SUPERADMIN_PIN = "1946";
 type LocalAccount = ClubAccount & { pin: string };
 
 const localSeedAccounts = (): LocalAccount[] => [
@@ -33,7 +34,7 @@ const localSeedAccounts = (): LocalAccount[] => [
     trainingYear: null,
     active: true,
     createdAt: new Date().toISOString(),
-    pin: "0000",
+    pin: SUPERADMIN_PIN,
   },
   {
     id: "local-coach",
@@ -50,7 +51,15 @@ const localSeedAccounts = (): LocalAccount[] => [
 
 function readLocalAccounts(): LocalAccount[] {
   const saved = localStorage.getItem(LOCAL_ACCOUNTS_KEY);
-  if (saved) return JSON.parse(saved) as LocalAccount[];
+  if (saved) {
+    const accounts = JSON.parse(saved) as LocalAccount[];
+    const superadmin = accounts.find((account) => account.role === "superadmin");
+    if (superadmin && superadmin.pin !== SUPERADMIN_PIN) {
+      superadmin.pin = SUPERADMIN_PIN;
+      localStorage.setItem(LOCAL_ACCOUNTS_KEY, JSON.stringify(accounts));
+    }
+    return accounts;
+  }
   const seeded = localSeedAccounts();
   localStorage.setItem(LOCAL_ACCOUNTS_KEY, JSON.stringify(seeded));
   return seeded;
