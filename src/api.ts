@@ -1,6 +1,16 @@
 import type { ClubAccount, FootballStage, TrainingYear } from "./clubTypes";
 
 export type StoreArea = "team" | "stats" | "journeys" | "rivals" | "boards" | "agenda";
+export interface CoordinatorMatchInput {
+  date: string;
+  startTime: string;
+  notes: string;
+  matchType: "liga" | "amistoso" | "torneo";
+  home: boolean;
+  rivalId: string;
+  rivalName: string;
+  field: string;
+}
 export interface StoreRow {
   account_id: string;
   area: StoreArea;
@@ -209,6 +219,39 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
     stores.push({ account_id: session.id, area, data: body.data });
     localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
     return { ok: true } as T;
+  } else if (url.pathname === "/api/coordinator-agenda" && method === "POST") {
+    if (session?.role !== "coordinador")
+      throw new Error("Solo coordinación puede asignar partidos.");
+    const accountId = String(body.accountId || "");
+    const match = body.match as unknown as CoordinatorMatchInput;
+    const event = {
+      ...match,
+      id: crypto.randomUUID(),
+      type: "match" as const,
+      assignedByCoordinator: true,
+      assignedByName: session.name,
+      assignedAt: new Date().toISOString(),
+      acknowledgedAt: null,
+    };
+    const agendaStore = stores.find(
+      (store) => store.account_id === accountId && store.area === "agenda",
+    );
+    if (agendaStore) agendaStore.data = [...(agendaStore.data as unknown[]), event];
+    else stores.push({ account_id: accountId, area: "agenda", data: [event] });
+    localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
+    return { event } as T;
+  } else if (url.pathname === "/api/coordinator-agenda" && method === "PATCH") {
+    if (session?.role !== "entrenador")
+      throw new Error("Solo el entrenador puede confirmar el aviso.");
+    const acknowledgedAt = new Date().toISOString();
+    const agendaStore = stores.find(
+      (store) => store.account_id === session.id && store.area === "agenda",
+    );
+    agendaStore && (agendaStore.data = (agendaStore.data as Array<Record<string, unknown>>).map(
+      (event) => event.id === body.eventId ? { ...event, acknowledgedAt } : event,
+    ));
+    localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
+    return { ok: true, acknowledgedAt } as T;
   } else if (url.pathname === "/api/calendar-import") {
     throw new Error("La importación de calendarios está desactivada en el modo local.");
   } else if (url.pathname !== "/api/accounts") {
@@ -277,6 +320,19 @@ export const clubApi = {
     request<{ ok: boolean }>("/api/data", {
       method: "PUT",
       body: JSON.stringify({ area, data }),
+    }),
+  assignCoordinatorMatch: (accountId: string, match: CoordinatorMatchInput) =>
+    request<{ event: CoordinatorMatchInput & { id: string } }>(
+      "/api/coordinator-agenda",
+      {
+        method: "POST",
+        body: JSON.stringify({ accountId, match }),
+      },
+    ),
+  acknowledgeCoordinatorMatch: (eventId: string) =>
+    request<{ ok: true; acknowledgedAt: string }>("/api/coordinator-agenda", {
+      method: "PATCH",
+      body: JSON.stringify({ eventId }),
     }),
   extractCalendar: async (file: File) => {
     const base64 = await new Promise<string>((resolve, reject) => {

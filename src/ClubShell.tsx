@@ -9,11 +9,15 @@ import {
   Clock,
   FileText,
   FileUp,
+  Home,
   KeyRound,
   LogOut,
   MapPin,
   Pencil,
+  Plane,
   Plus,
+  Save,
+  ShieldCheck,
   Trash2,
   Trophy,
   Users,
@@ -31,6 +35,7 @@ import {
   BootstrapPayload,
   buildLegacySnapshot,
   clubApi,
+  CoordinatorMatchInput,
   getStored,
   ImportedRival,
   IS_LOCAL_DEMO,
@@ -110,6 +115,71 @@ const coordinatorIsoDate = (year: number, month: number, day: number) =>
   `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 const normalizedMatchName = (value: string) =>
   value.trim().toLocaleLowerCase("es").replace(/\s+/g, " ");
+const HOME_FIELDS = ["El Morer", "Campo C", "Polideportivo"];
+const QUICK_HOURS = Array.from({ length: 24 }, (_, hour) =>
+  String(hour).padStart(2, "0"),
+);
+const QUICK_MINUTES = ["00", "15", "30", "45"];
+
+const emptyCoordinatorMatch = (date: string): CoordinatorMatchInput => ({
+  date,
+  startTime: "18:00",
+  notes: "",
+  matchType: "liga",
+  home: true,
+  rivalId: "",
+  rivalName: "",
+  field: "",
+});
+
+function QuickTimeInput({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [hour = "18", minute = "00"] = value.split(":");
+  return (
+    <div className="quick-time-input">
+      <input
+        className="quick-time-native"
+        aria-label="Hora del partido"
+        type="time"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <div className="quick-time-desktop">
+        <label>
+          <span>Hora</span>
+          <select
+            aria-label="Hora"
+            value={hour}
+            onChange={(event) => onChange(`${event.target.value}:${minute}`)}
+          >
+            {QUICK_HOURS.map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <span className="quick-time-separator">:</span>
+        <fieldset>
+          <legend>Minutos</legend>
+          <div>
+            {QUICK_MINUTES.map((option) => (
+              <button
+                type="button"
+                className={minute === option ? "active" : ""}
+                key={option}
+                onClick={() => onChange(`${hour}:${option}`)}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      </div>
+    </div>
+  );
+}
 
 export default function ClubShell() {
   const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
@@ -188,6 +258,7 @@ export default function ClubShell() {
         account={session}
         accounts={accounts}
         stores={bootstrap.stores || []}
+        onRefresh={refresh}
         onLogout={logout}
       />
     );
@@ -1315,11 +1386,13 @@ function CoordinatorPanel({
   account,
   accounts,
   stores,
+  onRefresh,
   onLogout,
 }: {
   account: ClubAccount;
   accounts: ClubAccount[];
   stores: StoreRow[];
+  onRefresh: () => Promise<void>;
   onLogout: () => void;
 }) {
   const coaches = accounts.filter(
@@ -1342,6 +1415,13 @@ function CoordinatorPanel({
   );
   const [selectedAgendaDate, setSelectedAgendaDate] = useState(todayIso);
   const [showTeamPicker, setShowTeamPicker] = useState(false);
+  const [pendingMatchCreation, setPendingMatchCreation] = useState(false);
+  const [showMatchCreator, setShowMatchCreator] = useState(false);
+  const [matchDraft, setMatchDraft] = useState<CoordinatorMatchInput>(() =>
+    emptyCoordinatorMatch(todayIso),
+  );
+  const [matchSaving, setMatchSaving] = useState(false);
+  const [matchMessage, setMatchMessage] = useState("");
   const [sortBy, setSortBy] = useState<
     "rating" | "goals" | "assists" | "matches"
   >("rating");
@@ -1356,6 +1436,7 @@ function CoordinatorPanel({
           players: [],
         }),
         stats: getStored<StoredMatch[]>(stores, coach.id, "stats", []),
+        rivals: getStored<StoredRival[]>(stores, coach.id, "rivals", []),
         agenda: getStored<AgendaEvent[]>(stores, coach.id, "agenda", []),
       })),
     [accounts, stores],
@@ -1516,6 +1597,7 @@ function CoordinatorPanel({
   const assists = playerRows.reduce((total, row) => total + row.assists, 0);
   const coordinatorName = account.name.trim().split(/\s+/)[0];
   const selectedCoach = coaches.find((coach) => coach.id === coachFilter);
+  const selectedCoachData = data.find((item) => item.coach.id === coachFilter);
   const firstName = (name: string) => name.trim().split(/\s+/)[0];
   const viewTitle =
     tab === "agenda"
@@ -1536,6 +1618,56 @@ function CoordinatorPanel({
   const chooseTeam = (id: string) => {
     setCoachFilter(id);
     setShowTeamPicker(false);
+    if (pendingMatchCreation && id !== "all") {
+      setMatchDraft(emptyCoordinatorMatch(selectedAgendaDate));
+      setShowMatchCreator(true);
+      setPendingMatchCreation(false);
+      setMatchMessage("");
+      setTab("agenda");
+    } else if (id === "all") {
+      setPendingMatchCreation(false);
+    }
+  };
+  const openMatchCreator = () => {
+    setTab("agenda");
+    setMatchMessage("");
+    if (!selectedCoach) {
+      setPendingMatchCreation(true);
+      setShowTeamPicker(true);
+      setMatchMessage("Selecciona el equipo que recibirá el partido.");
+      return;
+    }
+    setMatchDraft(emptyCoordinatorMatch(selectedAgendaDate));
+    setShowMatchCreator(true);
+  };
+  const updateCoordinatorRival = (rivalId: string) => {
+    const rival = selectedCoachData?.rivals.find((item) => item.id === rivalId);
+    setMatchDraft((current) => ({
+      ...current,
+      rivalId,
+      rivalName: rival?.nombre || "",
+      field: current.home ? current.field : rival?.campo || "",
+    }));
+  };
+  const saveCoordinatorMatch = async () => {
+    if (!selectedCoach || !matchDraft.date || !matchDraft.startTime || !matchDraft.rivalId || !matchDraft.field) {
+      setMatchMessage("Completa fecha, hora, rival y campo.");
+      return;
+    }
+    setMatchSaving(true);
+    try {
+      await clubApi.assignCoordinatorMatch(selectedCoach.id, matchDraft);
+      await onRefresh();
+      const date = new Date(`${matchDraft.date}T12:00:00`);
+      setAgendaCursor(new Date(date.getFullYear(), date.getMonth(), 1));
+      setSelectedAgendaDate(matchDraft.date);
+      setShowMatchCreator(false);
+      setMatchMessage(`Partido añadido a la agenda de ${selectedCoach.teamLabel}.`);
+    } catch (error) {
+      setMatchMessage(error instanceof Error ? error.message : "No se pudo añadir el partido.");
+    } finally {
+      setMatchSaving(false);
+    }
   };
 
   return (
@@ -1630,6 +1762,55 @@ function CoordinatorPanel({
           <h2>{viewTitle}</h2>
         </div>
         {tab === "agenda" && (
+          <>
+          <section className="coordinator-match-command">
+            <div>
+              <span><ShieldCheck size={15} /> ORGANIZACIÓN DE PARTIDOS</span>
+              <strong>{selectedCoach ? `Agenda de ${selectedCoach.teamLabel}` : "Añade un partido a un equipo"}</strong>
+              <small>{selectedCoach ? "El entrenador recibirá un aviso y podrá confirmar que lo ha visto." : "Usaremos la lista de equipos para elegir el destinatario."}</small>
+            </div>
+            <button type="button" onClick={openMatchCreator}><Plus size={17} /> Añadir partido</button>
+          </section>
+          {matchMessage && <div className="coordinator-match-message" role="status">{matchMessage}</div>}
+          {showMatchCreator && selectedCoach && selectedCoachData && (
+            <section className="coordinator-match-form">
+              <header>
+                <div>
+                  <span>PARTIDO PARA</span>
+                  <h3>{selectedCoach.teamLabel}</h3>
+                  <small>{selectedCoach.name}</small>
+                </div>
+                <button type="button" aria-label="Cerrar formulario" onClick={() => setShowMatchCreator(false)}><X size={18} /></button>
+              </header>
+              <div className="coordinator-match-type">
+                {(["liga", "amistoso", "torneo"] as const).map((type) => (
+                  <button type="button" className={matchDraft.matchType === type ? "active" : ""} key={type} onClick={() => setMatchDraft((current) => ({ ...current, matchType: type }))}>
+                    {type[0].toUpperCase() + type.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <div className="coordinator-match-home-away">
+                <button type="button" className={matchDraft.home ? "active" : ""} onClick={() => setMatchDraft((current) => ({ ...current, home: true, field: "" }))}><Home size={17} /> En casa</button>
+                <button type="button" className={!matchDraft.home ? "active" : ""} onClick={() => { const rival = selectedCoachData.rivals.find((item) => item.id === matchDraft.rivalId); setMatchDraft((current) => ({ ...current, home: false, field: rival?.campo || current.field })); }}><Plane size={17} /> Fuera</button>
+              </div>
+              <div className="coordinator-match-grid">
+                <label><span>Fecha</span><input type="date" value={matchDraft.date} onChange={(event) => setMatchDraft((current) => ({ ...current, date: event.target.value }))} /></label>
+                <label><span>Rival</span><select value={matchDraft.rivalId} onChange={(event) => updateCoordinatorRival(event.target.value)}><option value="">Selecciona rival</option>{selectedCoachData.rivals.map((rival) => <option key={rival.id} value={rival.id}>{rival.nombre}</option>)}</select></label>
+                <label className="coordinator-time-field"><span>Hora del partido</span><QuickTimeInput value={matchDraft.startTime} onChange={(startTime) => setMatchDraft((current) => ({ ...current, startTime }))} /></label>
+                {matchDraft.home ? (
+                  <label><span>Campo</span><select value={matchDraft.field} onChange={(event) => setMatchDraft((current) => ({ ...current, field: event.target.value }))}><option value="">Selecciona campo</option>{HOME_FIELDS.map((field) => <option key={field}>{field}</option>)}</select></label>
+                ) : (
+                  <label><span>Campo del rival</span><input value={matchDraft.field} onChange={(event) => setMatchDraft((current) => ({ ...current, field: event.target.value }))} placeholder="Se completa desde el rival, pero puedes editarlo" /></label>
+                )}
+              </div>
+              {!selectedCoachData.rivals.length && <p className="coordinator-no-rivals">Este equipo todavía no tiene rivales guardados.</p>}
+              <label className="coordinator-match-notes"><span>Observaciones</span><textarea rows={2} value={matchDraft.notes} onChange={(event) => setMatchDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Opcional" /></label>
+              <footer>
+                <button type="button" className="secondary-button" onClick={() => setShowMatchCreator(false)}>Cancelar</button>
+                <button type="button" className="primary-button" disabled={matchSaving || !selectedCoachData.rivals.length} onClick={() => void saveCoordinatorMatch()}><Save size={17} /> {matchSaving ? "Guardando…" : "Guardar en su agenda"}</button>
+              </footer>
+            </section>
+          )}
           <section className="coordinator-agenda-layout">
             <div className="coordinator-agenda-calendar">
               <header className="coordinator-agenda-toolbar">
@@ -1705,7 +1886,7 @@ function CoordinatorPanel({
                       key={cell.date}
                       className={`${
                         selectedAgendaDate === cell.date ? "selected " : ""
-                      }${dayMatches.length ? "has-matches" : ""}`.trim()}
+                      }${dayMatches.length ? "has-matches " : ""}${dayMatches.some((match) => match.assignedByCoordinator) ? "coordinator-created " : ""}${dayMatches.some((match) => match.assignedByCoordinator && !match.acknowledgedAt) ? "awaiting-confirmation" : ""}`.trim()}
                       aria-label={`${cell.date}. ${dayMatches.length} ${
                         dayMatches.length === 1 ? "partido" : "partidos"
                       }`}
@@ -1783,7 +1964,7 @@ function CoordinatorPanel({
                       : null;
                     return (
                       <article
-                        className={stats ? "completed" : isPast ? "pending" : "scheduled"}
+                        className={`${stats ? "completed" : isPast ? "pending" : "scheduled"}${match.assignedByCoordinator ? " coordinator-created" : ""}`}
                         key={`${match.coach.id}-${match.id}`}
                       >
                         <div className="coordinator-agenda-match-status">
@@ -1809,6 +1990,12 @@ function CoordinatorPanel({
                           <span><Clock size={14} /> {match.startTime || "Hora pendiente"}</span>
                           <span><MapPin size={14} /> {match.field || "Campo pendiente"}</span>
                         </div>
+                        {match.assignedByCoordinator && (
+                          <div className={`coordinator-read-receipt${match.acknowledgedAt ? " seen" : ""}`}>
+                            {match.acknowledgedAt ? <Check size={14} /> : <Clock size={14} />}
+                            {match.acknowledgedAt ? "Visto por el entrenador" : "Pendiente de confirmar"}
+                          </div>
+                        )}
                         {stats && (
                           <details className="coordinator-agenda-statistics">
                             <summary>
@@ -1844,6 +2031,7 @@ function CoordinatorPanel({
               )}
             </aside>
           </section>
+          </>
         )}
         {tab === "resumen" && (
           <>
