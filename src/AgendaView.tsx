@@ -10,12 +10,15 @@ import {
   ChevronRight,
   Clock,
   Download,
+  Dumbbell,
   Eye,
   ListChecks,
+  MapPin,
   PencilRuler,
   Plus,
   Save,
   SlidersHorizontal,
+  Trophy,
   Trash2,
   X,
 } from "lucide-react";
@@ -250,6 +253,12 @@ const emptyMatch = (date: string): MatchAgendaEvent => ({
   rivalName: "",
   field: "",
 });
+
+const trainingExerciseCount = (event: TrainingAgendaEvent) =>
+  event.session?.blocks.reduce(
+    (total, block) => total + blockExercises(block).length,
+    0,
+  ) || 0;
 
 export function AgendaView({
   events,
@@ -504,7 +513,13 @@ export function AgendaView({
                     .slice(0, 3)
                     .map((event) => (
                       <small className={event.type} key={event.id}>
-                        {event.startTime} · {event.type === "training" ? "Entreno" : event.rivalName || "Partido"}
+                        <span className="agenda-cell-event-icon" aria-hidden="true">
+                          {event.type === "training" ? <Dumbbell size={11} /> : <Trophy size={11} />}
+                        </span>
+                        <span className="agenda-cell-event-copy">
+                          <b>{event.type === "training" ? "Entreno" : event.rivalName || "Partido"}</b>
+                          <em>{event.startTime || "Sin hora"}{event.type === "match" ? ` · ${event.home ? "Local" : "Fuera"}` : ""}</em>
+                        </span>
                       </small>
                     ))}
                 </div>
@@ -535,15 +550,22 @@ export function AgendaView({
               {selectedEvents.map((event) => (
                 <article className={event.type} key={event.id}>
                   <button className="agenda-event-main" onClick={() => event.type === "training" ? openTraining(event) : setDraft({ ...event })}>
-                    <Clock size={17} />
-                    <span>
+                    <span className="agenda-event-icon" aria-hidden="true">
+                      {event.type === "training" ? <Dumbbell size={22} /> : <Trophy size={22} />}
+                    </span>
+                    <span className="agenda-event-copy">
+                      <em>{event.type === "training" ? "SESIÓN DE ENTRENAMIENTO" : `${event.matchType} · ${event.home ? "EN CASA" : "A DOMICILIO"}`}</em>
                       <strong>
                         {event.type === "training" ? "Entrenamiento" : event.rivalName || "Partido"}
                       </strong>
-                      <small>
-                        {event.startTime}
-                        {event.type === "training" ? `–${event.endTime}` : ` · ${event.home ? "Local" : "Visitante"}`}
-                      </small>
+                      <span className="agenda-event-meta">
+                        <small><Clock size={13} />{event.startTime || "Sin hora"}{event.type === "training" ? `–${event.endTime}` : ""}</small>
+                        {event.type === "training" ? (
+                          <small><ListChecks size={13} />{trainingExerciseCount(event) ? `${trainingExerciseCount(event)} ejercicios` : "Planificación libre"}</small>
+                        ) : event.field ? (
+                          <small><MapPin size={13} />{event.field}</small>
+                        ) : null}
+                      </span>
                     </span>
                   </button>
                   {event.type === "match" && (

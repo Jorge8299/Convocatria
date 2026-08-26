@@ -597,3 +597,68 @@ input,select,textarea{min-height:48px;font-size:13px;font-weight:600}textarea{li
 .page-heading.has-home-back{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start}.page-home-back{margin-top:2px}.page-heading-copy{min-width:0}.admin-accounts-section{padding:20px;border:1px solid var(--ui-border);border-radius:22px;background:var(--ui-surface-glass);box-shadow:var(--ui-shadow-sm)}.admin-accounts-section .section-heading p{margin:7px 0 0;color:var(--ui-muted);font-size:11px}.admin-content>.admin-create-section{order:1}.admin-content>.admin-accounts-section{order:2}.admin-content>.team-overview-card{order:3}.admin-content>.calendar-import-card{order:4}.admin-content>.cloud-migration{order:5}.admin-content>.admin-message{order:0}.account-actions .danger-icon{padding-inline:11px}
 @media(max-width:900px){.content{padding-bottom:56px}.mobile-nav{display:none!important}.page-heading.has-home-back{grid-template-columns:44px minmax(0,1fr) auto;gap:11px}.page-home-back{width:42px;height:42px}.sticky-actions{bottom:18px}}
 @media(max-width:620px){.content{padding-bottom:44px}.page-heading.has-home-back{grid-template-columns:40px minmax(0,1fr) auto;gap:9px}.page-home-back{width:38px;height:38px;border-radius:12px}.page-heading.has-home-back h1{font-size:28px}.page-heading.has-home-back p{grid-column:2/-1}.admin-accounts-section{padding:15px}.account-actions .danger-icon{flex-basis:100%}}
+
+/* Desktop coach screens share the same centered axis as coordination. */
+@media(min-width:901px){
+  .content{width:calc(100% - 244px);max-width:none;margin-left:244px;padding-inline:clamp(36px,4vw,72px)}
+  .content>.page-heading,.content>div{width:min(100%,1440px);margin-inline:auto}
+  .content-inicio>.page-heading,.content-inicio>div{width:min(100%,900px)}
+  .content-equipo>.page-heading,.content-equipo>div,.content-guardados>.page-heading,.content-guardados>div,.content-jugador>.page-heading,.content-jugador>div{width:min(100%,1280px)}
+  .content-estadisticas>.page-heading,.content-estadisticas>div{width:min(100%,1240px)}
+  .content-agenda>.page-heading,.content-agenda>div{width:min(100%,1580px)}
+  .content .home-layout,.content .team-layout,.content .stats-layout,.content .saved-layout,.content .profile-layout,.content .form-layout,.content .board-choice,.content .empty-state,.content .journey-list{margin-inline:auto}
+  .content-agenda .agenda-grid>button,.content-agenda .agenda-empty-cell{min-height:clamp(118px,8.5vw,144px)}
+}
+
+/* A large calendar on normal laptops; the detail panel only sits beside it on wide screens. */
+@media(min-width:1481px){
+  .agenda-layout:not(.training-workspace-open){grid-template-columns:minmax(0,1fr) 420px;gap:24px}
+  .agenda-layout:not(.training-workspace-open)>.agenda-day-panel{position:sticky;top:24px;max-height:calc(100vh - 48px);overflow:auto}
+  .agenda-layout:not(.training-workspace-open)>.agenda-day-panel .agenda-event-list article{grid-template-columns:1fr}
+  .agenda-layout:not(.training-workspace-open)>.agenda-day-panel .agenda-event-side{justify-content:flex-start;margin:0;padding-top:11px;border-top:1px solid var(--ui-border)}
+}
+@media(min-width:901px) and (max-width:1480px){
+  .agenda-layout:not(.training-workspace-open){grid-template-columns:minmax(0,1fr)}
+  .agenda-layout:not(.training-workspace-open)>.agenda-day-panel{position:static}
+  .agenda-layout:not(.training-workspace-open) .agenda-event-list{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+}
+
+/* Calendar event pills: readable at a glance instead of plain coloured text. */
+.agenda-grid small{display:grid;grid-template-columns:26px minmax(0,1fr);align-items:center;gap:7px;min-height:38px;padding:6px 7px;white-space:normal}
+.agenda-grid small:before{content:none}
+.agenda-cell-event-icon{width:26px;height:26px;border:1px solid currentColor;border-radius:8px;display:grid;place-items:center;background:#ffffffa8;opacity:.9}
+.agenda-cell-event-copy{min-width:0;display:grid;gap:2px}
+.agenda-cell-event-copy b,.agenda-cell-event-copy em{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agenda-cell-event-copy b{font-size:9px;line-height:1.15}
+.agenda-cell-event-copy em{font-size:7px;font-style:normal;font-weight:750;opacity:.72}
+
+/* Selected-day events become proper training and match cards. */
+.agenda-event-list article{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;min-height:116px;padding:16px 16px 16px 18px;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+.agenda-event-list article:hover{transform:translateY(-2px);box-shadow:0 16px 34px #102a4618}
+.agenda-event-main{width:100%;min-width:0;padding:0;display:grid;grid-template-columns:54px minmax(0,1fr);align-items:center;gap:14px}
+.agenda-event-icon{width:54px;height:54px;border:1px solid #b8d4f4;border-radius:17px;display:grid;place-items:center;background:linear-gradient(145deg,#f7fbff,#dfedff);color:#0754a7;box-shadow:inset 0 1px 0 #fff,0 8px 20px #164b8615}
+.agenda-event-list article.training .agenda-event-icon{border-color:#a9dbc7;background:linear-gradient(145deg,#f4fdf9,#d9f4e8);color:#087452}
+.agenda-event-copy{min-width:0;display:grid;gap:4px;text-align:left}
+.agenda-event-copy>em{color:#3371b8;font-size:8px;font-style:normal;font-weight:950;letter-spacing:.11em;text-transform:uppercase}
+.agenda-event-list article.training .agenda-event-copy>em{color:#087452}
+.agenda-event-copy>strong{color:var(--ui-ink);font-size:17px;line-height:1.2}
+.agenda-event-meta{margin-top:3px;display:flex;align-items:center;flex-wrap:wrap;gap:7px 14px}
+.agenda-event-meta small{min-width:0;margin:0;display:flex;align-items:center;gap:5px;color:var(--ui-muted);font-size:9px;font-weight:800}
+.agenda-event-meta small:last-child{max-width:280px}
+.agenda-event-meta svg{flex:0 0 auto;color:currentColor}
+.agenda-event-side{justify-content:flex-end;flex-wrap:wrap}
+.agenda-status{box-shadow:inset 0 1px 0 #fff}
+.agenda-stat-button{min-height:38px;border:1px solid #b9d3f4;border-radius:11px;transition:transform .18s ease,background .18s ease}
+.agenda-stat-button:hover{background:#dcecff;transform:translateY(-1px)}
+
+@media(prefers-color-scheme:dark){
+  .agenda-cell-event-icon{background:#ffffff12}
+  .agenda-event-icon{border-color:#315985;background:linear-gradient(145deg,#183b62,#102c49);color:#b9dbff;box-shadow:none}
+  .agenda-event-list article.training .agenda-event-icon{border-color:#27614f;background:linear-gradient(145deg,#123c31,#0d2d25);color:#9ae3c7}
+  .agenda-event-copy>em{color:#8ec3ff}.agenda-event-list article.training .agenda-event-copy>em{color:#86dab9}
+}
+
+@media(max-width:620px){
+  .agenda-grid small{grid-template-columns:1fr;min-height:24px;padding:4px;text-align:center}.agenda-cell-event-icon{display:none}.agenda-cell-event-copy{gap:1px}.agenda-cell-event-copy b{font-size:7px}.agenda-cell-event-copy em{font-size:6px}
+  .agenda-event-list article{grid-template-columns:1fr;min-height:0}.agenda-event-main{grid-template-columns:46px minmax(0,1fr);gap:11px}.agenda-event-icon{width:46px;height:46px;border-radius:14px}.agenda-event-copy>strong{font-size:15px}.agenda-event-meta{gap:6px 10px}.agenda-event-side{justify-content:flex-start}
+}

@@ -167,7 +167,7 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
   return <div className="app-shell">
     <aside className="desktop-sidebar"><Brand account={account} onHome={() => goToView('inicio')} /><nav className="side-nav">{navItems.map((n) => { const Icon = n.icon; return <button key={n.id} className={view === n.id ? 'active' : ''} onClick={() => goToView(n.id)}><Icon size={19} /><span>{n.label}</span></button> })}</nav><div className="storage-note"><span>{account.teamLabel}</span><strong>{account.name}</strong><small>Sesión privada del entrenador.</small><button className="sidebar-logout" onClick={onLogout}><LogOut size={14} /> Cambiar usuario</button></div></aside>
     <header className="mobile-header"><Brand account={account} onHome={goHome} /><button className="mobile-logout" onClick={onLogout} aria-label="Cambiar usuario"><LogOut size={18} /></button></header>
-    <main className={`content ${view === 'pizarra' && boardMode ? 'content-wide' : ''}`}>
+    <main className={`content content-${view}${view === 'pizarra' && boardMode ? ' content-wide' : ''}`}>
       <header className={`page-heading${view !== 'inicio' ? ' has-home-back' : ''}`}>
         {view !== 'inicio' && <button className="icon-button page-home-back" onClick={goHome} aria-label="Volver a la página de inicio"><ArrowLeft size={20} /></button>}
         <div className="page-heading-copy"><span className="eyebrow">{titles[view][0]} · {account.teamLabel}</span><h1>{titles[view][1]}</h1><p>{titles[view][2]}</p></div>
