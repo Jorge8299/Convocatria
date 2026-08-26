@@ -620,11 +620,17 @@ function AdminPanel({
       );
     }
   };
-  const removeAccount = async (id: string) => {
+  const removeAccount = async (item: ClubAccount) => {
+    const label = item.role === "entrenador" ? `el equipo ${item.teamLabel} y todos sus datos` : `el acceso de ${item.name}`;
+    if (!window.confirm(`¿Eliminar definitivamente ${label}? Esta acción no se puede deshacer.`)) return;
     try {
-      const result = await clubApi.deleteAccount(id);
+      const result = await clubApi.deleteAccount(item.id);
       onAccounts(result.accounts);
-      setMessage("Usuario eliminado.");
+      if (overviewCoachId === item.id) {
+        setOverviewCoachId("");
+        setOverviewRivals([]);
+      }
+      setMessage(item.role === "entrenador" ? "Equipo eliminado correctamente." : "Acceso eliminado correctamente.");
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "No se pudo eliminar.",
@@ -683,14 +689,14 @@ function AdminPanel({
         subtitle="U.D. Oliva"
         onLogout={onLogout}
       />
-      <main className="role-content">
-        <section className="form-card">
+      <main className="role-content admin-content">
+        <section className="form-card admin-create-section">
           <div className="form-card-header">
             <div>
               <span>
                 <Plus size={16} />
               </span>
-              <h2>Nuevo acceso</h2>
+              <h2>Añadir equipo o acceso</h2>
             </div>
           </div>
           <div className="form-card-body admin-create-grid">
@@ -778,7 +784,7 @@ function AdminPanel({
               className="primary-button"
               onClick={() => void createAccount()}
             >
-              <Plus size={17} /> Crear usuario
+              <Plus size={17} /> {draft.role === "entrenador" ? "Crear equipo" : "Crear coordinador"}
             </button>
           </div>
         </section>
@@ -1131,13 +1137,14 @@ function AdminPanel({
             <Check size={16} /> {message}
           </div>
         )}
-        <section>
+        <section className="admin-accounts-section">
           <div className="section-heading">
-            <span className="eyebrow">USUARIOS</span>
+            <span className="eyebrow">GESTIÓN DEL CLUB</span>
             <h2>
               {accounts.filter((item) => item.role !== "superadmin").length}{" "}
-              accesos
+              equipos y accesos
             </h2>
+            <p>Edita el entrenador, la categoría y el nombre del equipo, o elimínalo por completo.</p>
           </div>
           <div className="account-list">
             {accounts
@@ -1282,9 +1289,9 @@ function AdminPanel({
                     <button
                       className="danger-icon"
                       aria-label={`Eliminar ${item.name}`}
-                      onClick={() => void removeAccount(item.id)}
+                      onClick={() => void removeAccount(item)}
                     >
-                      <Trash2 size={16} />
+                      <Trash2 size={16} /> Eliminar
                     </button>
                       </div>
                     </>

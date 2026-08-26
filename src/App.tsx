@@ -126,6 +126,7 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
   const updateHome = (esCasa: boolean) => setForm((f) => ({ ...f, esCasa, citaciones: f.citaciones.map((c, i) => i ? c : { ...c, hora: citationTime(f.hora, esCasa) }) }));
   const goToView = (nextView: View) => { if (nextView !== view) { setPreviousView(view); setView(nextView) } };
   const goBack = () => { const destination = previousView; setPreviousView(view); setView(destination) };
+  const goHome = () => { setPreviousView(view); setView('inicio') };
   const startNew = () => { setForm(makeInitialForm()); goToView('convocatoria') };
   const openBoard = (mode: BoardMode) => { setAgendaBoardMatch(null); setBoardMode(mode); goToView('pizarra') };
   const openAgendaBoard = (event: MatchAgendaEvent) => { setAgendaBoardMatch(event); setBoardMode('partido'); goToView('pizarra') };
@@ -140,6 +141,17 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
     addEventListener('message', returnToAgenda);
     return () => removeEventListener('message', returnToAgenda);
   }, [agendaBoardMatch]);
+  useEffect(() => {
+    const resetScroll = () => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      document.querySelector<HTMLElement>('.content')?.scrollTo(0, 0);
+    };
+    resetScroll();
+    const frame = requestAnimationFrame(resetScroll);
+    return () => cancelAnimationFrame(frame);
+  }, [view, boardMode]);
   const copyMessage = async () => { await navigator.clipboard.writeText(message); setCopySuccess(true); setTimeout(() => setCopySuccess(false), 1800) };
   const saveJourney = () => { setJourneys((list) => [{ id: uid(), createdAt: new Date().toISOString(), data: cloneData(form), message }, ...list]); setSavedTab('convocatorias'); goToView('guardados') };
   const titles: Record<View, [string, string, string]> = {
@@ -154,9 +166,13 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
   };
   return <div className="app-shell">
     <aside className="desktop-sidebar"><Brand account={account} onHome={() => goToView('inicio')} /><nav className="side-nav">{navItems.map((n) => { const Icon = n.icon; return <button key={n.id} className={view === n.id ? 'active' : ''} onClick={() => goToView(n.id)}><Icon size={19} /><span>{n.label}</span></button> })}</nav><div className="storage-note"><span>{account.teamLabel}</span><strong>{account.name}</strong><small>Sesión privada del entrenador.</small><button className="sidebar-logout" onClick={onLogout}><LogOut size={14} /> Cambiar usuario</button></div></aside>
-    <header className="mobile-header"><Brand account={account} onHome={() => goToView('inicio')} /><button className="mobile-logout" onClick={onLogout} aria-label="Cambiar usuario"><LogOut size={18} /></button></header>
+    <header className="mobile-header"><Brand account={account} onHome={goHome} /><button className="mobile-logout" onClick={onLogout} aria-label="Cambiar usuario"><LogOut size={18} /></button></header>
     <main className={`content ${view === 'pizarra' && boardMode ? 'content-wide' : ''}`}>
-      <header className="page-heading"><div><span className="eyebrow">{titles[view][0]} · {account.teamLabel}</span><h1>{titles[view][1]}</h1><p>{titles[view][2]}</p></div><div className="heading-actions">{(['pizarra', 'estadisticas', 'jugador'] as View[]).includes(view) && <button className="icon-button" onClick={goBack} aria-label="Volver a la pantalla anterior"><ArrowLeft size={20} /></button>}{view === 'convocatoria' && <button className="icon-button" onClick={() => setShowRivals(true)} aria-label="Editar rivales"><Settings2 size={20} /></button>}</div></header>
+      <header className={`page-heading${view !== 'inicio' ? ' has-home-back' : ''}`}>
+        {view !== 'inicio' && <button className="icon-button page-home-back" onClick={goHome} aria-label="Volver a la página de inicio"><ArrowLeft size={20} /></button>}
+        <div className="page-heading-copy"><span className="eyebrow">{titles[view][0]} · {account.teamLabel}</span><h1>{titles[view][1]}</h1><p>{titles[view][2]}</p></div>
+        {view === 'convocatoria' && <div className="heading-actions"><button className="icon-button" onClick={() => setShowRivals(true)} aria-label="Editar rivales"><Settings2 size={20} /></button></div>}
+      </header>
       <AnimatePresence mode="wait"><motion.div key={`${view}-${boardMode || ''}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: .18 }}>
         {view === 'inicio' && <HomeView phrase={phrase} onAgenda={() => goToView('agenda')} onTeam={() => goToView('equipo')} onNew={startNew} onSaved={() => goToView('guardados')} />}
         {view === 'agenda' && <AgendaView events={agendaEvents} rivals={rivales} matches={stats} footballStage={account.footballStage} categoryLabel={`${account.footballStage ? `${account.footballStage.charAt(0).toUpperCase()}${account.footballStage.slice(1)}` : 'Categoría pendiente'}${account.trainingYear ? ` · ${account.trainingYear} año` : ''}`} defaultPlayerCount={team.players.filter((player) => player.active).length} onChange={setAgendaEvents} onOpenBoard={openAgendaBoard} onOpenStats={(event) => { const completed = stats.some((match) => match.date === event.date && match.rival === event.rivalName && match.home === event.home); if (completed) { setSavedTab('estadisticas'); goToView('guardados') } else { setSelectedAgendaMatch(event); goToView('estadisticas') } }} />}
@@ -168,7 +184,6 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
         {view === 'jugador' && selectedPlayerId && <PlayerProfile player={team.players.find((p) => p.id === selectedPlayerId)} stats={stats} onBack={goBack} />}
       </motion.div></AnimatePresence>
     </main>
-    <nav className="mobile-nav">{navItems.map((n) => { const Icon = n.icon; return <button key={n.id} className={view === n.id ? 'active' : ''} onClick={() => goToView(n.id)}><Icon size={20} /><span>{n.label}</span></button> })}</nav>
     <RivalsModal open={showRivals} rivals={rivales} setRivals={setRivales} onClose={() => setShowRivals(false)} />
   </div>;
 }
