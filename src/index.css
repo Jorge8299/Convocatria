@@ -666,7 +666,8 @@ input,select,textarea{min-height:48px;font-size:13px;font-weight:600}textarea{li
 /* Coordinator agenda — desktop scale and richer match previews */
 @media(min-width:901px){
   .role-content.coordinator-content{width:min(1580px,calc(100% - 72px));max-width:none}
-  .coordinator-content>.hero-card,.coordinator-content>.coordinator-context,.coordinator-content>.coordinator-tabs,.coordinator-content>.coordinator-view-heading,.coordinator-content>.club-metrics,.coordinator-content>.coordinator-panel,.coordinator-content>.coordinator-matches{width:min(100%,1180px);margin-inline:auto}
+  .coordinator-shell .role-header{padding-inline:max(36px,calc((100vw - 1580px)/2))}
+  .coordinator-content>.hero-card,.coordinator-content>.coordinator-context,.coordinator-content>.coordinator-tabs,.coordinator-content>.coordinator-view-heading,.coordinator-content>.club-metrics,.coordinator-content>.coordinator-panel,.coordinator-content>.coordinator-matches{width:100%;margin-inline:0}
   .coordinator-content>.coordinator-agenda-layout{width:100%}
   .coordinator-agenda-grid>button,.coordinator-agenda-empty-cell{min-height:clamp(118px,8.5vw,144px)}
   .coordinator-agenda-grid>button{padding:10px}

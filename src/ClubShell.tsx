@@ -1539,7 +1539,7 @@ function CoordinatorPanel({
   };
 
   return (
-    <div className="role-shell">
+    <div className="role-shell coordinator-shell">
       <RoleHeader
         title={`Hola, ${coordinatorName}`}
         subtitle="Coordinación deportiva"
