@@ -66,7 +66,7 @@ function syncLinkedPlayers(team: TeamData, accountId: string, accounts: ClubAcco
 
 export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: { account: ClubAccount; accounts: ClubAccount[]; stores: StoreRow[]; onDataChange: (area:StoreArea,data:unknown) => Promise<unknown>; onLogout: () => void }) {
   const [view, setView] = useState<View>('inicio');
-  const [previousView, setPreviousView] = useState<View>('inicio');
+  const [viewHistory, setViewHistory] = useState<View[]>([]);
   const [boardMode, setBoardMode] = useState<BoardMode | null>(null);
   const [boardExpanded, setBoardExpanded] = useState(false);
   const [savedTab, setSavedTab] = useState<SavedTab>('equipo');
@@ -129,9 +129,19 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
   };
   const updateTime = (hora: string) => setForm((f) => ({ ...f, hora, citaciones: f.citaciones.map((c, i) => i ? c : { ...c, hora: citationTime(hora, f.esCasa) }) }));
   const updateHome = (esCasa: boolean) => setForm((f) => ({ ...f, esCasa, citaciones: f.citaciones.map((c, i) => i ? c : { ...c, hora: citationTime(f.hora, esCasa) }) }));
-  const goToView = (nextView: View) => { if (nextView !== view) { setPreviousView(view); setView(nextView) } };
-  const goBack = () => { const destination = previousView; setPreviousView(view); setView(destination) };
-  const goHome = () => { setPreviousView(view); setView('inicio') };
+  const goToView = (nextView: View) => {
+    if (nextView === view) return;
+    setViewHistory((history) => [...history, view]);
+    setView(nextView);
+  };
+  const goBack = () => {
+    setView(viewHistory.at(-1) || 'inicio');
+    setViewHistory((history) => history.slice(0, -1));
+  };
+  const goHome = () => {
+    setViewHistory([]);
+    setView('inicio');
+  };
   const openAgendaCallup = (event: MatchAgendaEvent) => {
     const initial = makeInitialForm();
     const isLeague = event.matchType === 'liga';
@@ -168,7 +178,7 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
       setBoardExpanded(false);
       setBoardMode(null);
       setAgendaBoardMatch(null);
-      goToView('agenda');
+      goBack();
     };
     addEventListener('message', returnToAgenda);
     return () => removeEventListener('message', returnToAgenda);
@@ -197,11 +207,11 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
     jugador: ['PERFIL DEL JUGADOR', 'Estadísticas individuales', 'Evolución y partidos registrados.'],
   };
   return <div className="app-shell">
-    <aside className="desktop-sidebar"><Brand account={account} onHome={() => goToView('inicio')} /><nav className="side-nav">{navItems.map((n) => { const Icon = n.icon; return <button key={n.id} className={view === n.id ? 'active' : ''} onClick={() => goToView(n.id)}><Icon size={19} /><span>{n.label}</span></button> })}</nav><div className="storage-note"><span>{account.teamLabel}</span><strong>{account.name}</strong><small>Sesión privada del entrenador.</small><button className="sidebar-logout" onClick={onLogout}><LogOut size={14} /> Cambiar usuario</button></div></aside>
+    <aside className="desktop-sidebar"><Brand account={account} onHome={goHome} /><nav className="side-nav">{navItems.map((n) => { const Icon = n.icon; return <button key={n.id} className={view === n.id ? 'active' : ''} onClick={() => goToView(n.id)}><Icon size={19} /><span>{n.label}</span></button> })}</nav><div className="storage-note"><span>{account.teamLabel}</span><strong>{account.name}</strong><small>Sesión privada del entrenador.</small><button className="sidebar-logout" onClick={onLogout}><LogOut size={14} /> Cambiar usuario</button></div></aside>
     <header className="mobile-header"><Brand account={account} onHome={goHome} /><button className="mobile-logout" onClick={onLogout} aria-label="Cambiar usuario"><LogOut size={18} /></button></header>
     <main className={`content content-${view}${view === 'pizarra' && boardMode ? ' content-wide' : ''}`}>
       <header className={`page-heading${view !== 'inicio' ? ' has-home-back' : ''}`}>
-        {view !== 'inicio' && <button className="icon-button page-home-back" onClick={goHome} aria-label="Volver a la página de inicio"><ArrowLeft size={20} /></button>}
+        {view !== 'inicio' && <button className="icon-button page-home-back" onClick={goBack} aria-label="Volver a la pantalla anterior"><ArrowLeft size={20} /></button>}
         <div className="page-heading-copy"><span className="eyebrow">{titles[view][0]} · {account.teamLabel}</span><h1>{titles[view][1]}</h1><p>{titles[view][2]}</p></div>
         {view === 'convocatoria' && <div className="heading-actions"><button className="icon-button" onClick={() => setShowRivals(true)} aria-label="Editar rivales"><Settings2 size={20} /></button></div>}
       </header>
@@ -210,7 +220,7 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
         {view === 'agenda' && <AgendaView events={agendaEvents} rivals={rivales} matches={stats} footballStage={account.footballStage} categoryLabel={`${account.footballStage ? FOOTBALL_STAGE_LABEL[account.footballStage] : 'Categoría pendiente'}${account.trainingYear ? ` · ${TRAINING_YEAR_LABEL[account.trainingYear]}` : ''}`} defaultPlayerCount={team.players.filter((player) => player.active).length} onChange={setAgendaEvents} onOpenCallup={openAgendaCallup} onOpenBoard={openAgendaBoard} onOpenStats={(event) => { const completed = stats.some((match) => match.date === event.date && match.rival === event.rivalName && match.home === event.home); if (completed) { setSavedTab('estadisticas'); goToView('guardados') } else { setSelectedAgendaMatch(event); goToView('estadisticas') } }} />}
         {view === 'equipo' && <TeamView team={team} setTeam={setTeam} account={account} accounts={accounts} stores={stores} onPlayer={(id) => { setSelectedPlayerId(id); goToView('jugador') }} />}
         {view === 'convocatoria' && <ConvocatoriaView form={form} setForm={setForm} rivales={rivales} rivalName={rivalName} fieldName={fieldName} message={message} copySuccess={copySuccess} onCopy={copyMessage} onWhatsApp={() => open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank')} onSave={saveJourney} onMatchTime={updateTime} onHomeAway={updateHome} />}
-        {view === 'pizarra' && <BoardView mode={boardMode} expanded={boardExpanded} accountId={account.id} boards={boards} team={team} matchContext={agendaBoardMatch} onChoose={setBoardMode} onBack={() => { setBoardExpanded(false); if (agendaBoardMatch) { setAgendaBoardMatch(null); setBoardMode(null); goToView('agenda') } else setBoardMode(null) }} />}
+        {view === 'pizarra' && <BoardView mode={boardMode} expanded={boardExpanded} accountId={account.id} boards={boards} team={team} matchContext={agendaBoardMatch} onChoose={setBoardMode} onBack={() => { setBoardExpanded(false); if (agendaBoardMatch) { setAgendaBoardMatch(null); setBoardMode(null); goBack() } else setBoardMode(null) }} />}
         {view === 'estadisticas' && <StatsView team={team} rivales={rivales} initialMatch={selectedAgendaMatch} onSave={(match) => { setStats((list) => [match, ...list]); setSelectedAgendaMatch(null); setSavedTab('estadisticas'); goToView('guardados') }} />}
         {view === 'guardados' && <SavedView tab={savedTab} setTab={setSavedTab} team={team} rivales={rivales} journeys={journeys} stats={stats} boards={boards} onTeam={() => goToView('equipo')} onOpenBoard={() => openBoard('libre')} onLoadJourney={(j) => { setForm(cloneData(j.data)); goToView('convocatoria') }} onDeleteJourney={(id) => setJourneys((list) => list.filter((j) => j.id !== id))} onDeleteStat={(id) => setStats((list) => list.filter((m) => m.id !== id))} onUpdateStat={(match) => setStats((list) => list.map((item) => item.id === match.id ? match : item))} onOpenPlayer={(id) => { setSelectedPlayerId(id); goToView('jugador') }} />}
         {view === 'jugador' && selectedPlayerId && <PlayerProfile player={team.players.find((p) => p.id === selectedPlayerId)} stats={stats} onBack={goBack} />}
