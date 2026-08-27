@@ -604,7 +604,7 @@ export function AgendaView({
                         {matchIsCompleted(event) ? "Finalizado" : "Programado"}
                       </span>
                       <button type="button" className="agenda-callup-button" onClick={() => onOpenCallup(event)}>
-                        <ClipboardList size={15} /> Convocatoria
+                        <ClipboardList size={15} /> Citación
                       </button>
                       <button className="agenda-stat-button" onClick={() => onOpenStats(event)}>
                         <BarChart3 size={15} /> Estadísticas
@@ -769,7 +769,7 @@ export function AgendaView({
               </div>
             )}
             <div className="agenda-linked-actions">
-              <button type="button" onClick={() => onOpenCallup(draft)}><ClipboardList size={17} /> Ir a convocatoria</button>
+              <button type="button" onClick={() => onOpenCallup(draft)}><ClipboardList size={17} /> Citación</button>
               <button onClick={() => onOpenStats(draft)}><BarChart3 size={17} /> Estadísticas</button>
               <button onClick={() => onOpenBoard(draft)}><PencilRuler size={17} /> Abrir alineación</button>
             </div>
@@ -802,7 +802,7 @@ export function AgendaView({
               </label>
             </div>
             <div className="agenda-linked-actions">
-              <button type="button" onClick={() => onOpenCallup(draft)}><ClipboardList size={17} /> Ir a convocatoria</button>
+              <button type="button" onClick={() => onOpenCallup(draft)}><ClipboardList size={17} /> Citación</button>
               <button onClick={() => onOpenBoard(draft)}><PencilRuler size={17} /> Abrir alineación</button>
               <button onClick={() => onOpenStats(draft)}><BarChart3 size={17} /> Estadísticas</button>
             </div>
