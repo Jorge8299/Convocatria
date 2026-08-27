@@ -54,6 +54,30 @@ const trainingYearLabel: Record<TrainingYear, string> = {
   segundo: "Segundo año",
   mixto: "Primer y segundo año",
 };
+const footballStageLabel: Record<FootballStage, string> = {
+  prebenjamin: "Prebenjamín",
+  benjamin: "Benjamín",
+  alevin: "Alevín",
+};
+const footballStageAgeOrder: Record<FootballStage, number> = {
+  prebenjamin: 0,
+  benjamin: 1,
+  alevin: 2,
+};
+const trainingYearAgeOrder: Record<TrainingYear, number> = {
+  primero: 0,
+  mixto: 1,
+  segundo: 2,
+};
+const compareCoachesByAge = (first: ClubAccount, second: ClubAccount) =>
+  (first.footballStage ? footballStageAgeOrder[first.footballStage] : 99) -
+    (second.footballStage ? footballStageAgeOrder[second.footballStage] : 99) ||
+  (first.trainingYear ? trainingYearAgeOrder[first.trainingYear] : 99) -
+    (second.trainingYear ? trainingYearAgeOrder[second.trainingYear] : 99) ||
+  first.teamLabel.localeCompare(second.teamLabel, "es", {
+    numeric: true,
+    sensitivity: "base",
+  });
 
 function LocalDemoBanner() {
   if (!IS_LOCAL_DEMO) return null;
@@ -1395,8 +1419,12 @@ function CoordinatorPanel({
   onRefresh: () => Promise<void>;
   onLogout: () => void;
 }) {
-  const coaches = accounts.filter(
-    (item) => item.role === "entrenador" && item.active,
+  const coaches = useMemo(
+    () =>
+      accounts
+        .filter((item) => item.role === "entrenador" && item.active)
+        .sort(compareCoachesByAge),
+    [accounts],
   );
   const [coachFilter, setCoachFilter] = useState("all");
   const [tab, setTab] = useState<
@@ -1422,6 +1450,7 @@ function CoordinatorPanel({
   );
   const [matchSaving, setMatchSaving] = useState(false);
   const [matchMessage, setMatchMessage] = useState("");
+  const [nextTeamReady, setNextTeamReady] = useState(false);
   const [sortBy, setSortBy] = useState<
     "rating" | "goals" | "assists" | "matches"
   >("rating");
@@ -1439,7 +1468,7 @@ function CoordinatorPanel({
         rivals: getStored<StoredRival[]>(stores, coach.id, "rivals", []),
         agenda: getStored<AgendaEvent[]>(stores, coach.id, "agenda", []),
       })),
-    [accounts, stores],
+    [coaches, stores],
   );
   const originalTeamLabels = useMemo(
     () =>
@@ -1598,6 +1627,11 @@ function CoordinatorPanel({
   const coordinatorName = account.name.trim().split(/\s+/)[0];
   const selectedCoach = coaches.find((coach) => coach.id === coachFilter);
   const selectedCoachData = data.find((item) => item.coach.id === coachFilter);
+  const selectedCoachIndex = selectedCoach
+    ? coaches.findIndex((coach) => coach.id === selectedCoach.id)
+    : -1;
+  const nextCoach =
+    selectedCoachIndex >= 0 ? coaches[selectedCoachIndex + 1] : undefined;
   const firstName = (name: string) => name.trim().split(/\s+/)[0];
   const viewTitle =
     tab === "agenda"
@@ -1618,6 +1652,7 @@ function CoordinatorPanel({
   const chooseTeam = (id: string) => {
     setCoachFilter(id);
     setShowTeamPicker(false);
+    setNextTeamReady(false);
     if (pendingMatchCreation && id !== "all") {
       setMatchDraft(emptyCoordinatorMatch(selectedAgendaDate));
       setShowMatchCreator(true);
@@ -1631,6 +1666,7 @@ function CoordinatorPanel({
   const openMatchCreator = () => {
     setTab("agenda");
     setMatchMessage("");
+    setNextTeamReady(false);
     if (!selectedCoach) {
       setPendingMatchCreation(true);
       setShowTeamPicker(true);
@@ -1649,6 +1685,18 @@ function CoordinatorPanel({
       field: current.home ? current.field : rival?.campo || "",
     }));
   };
+  const goToNextTeam = () => {
+    if (!nextCoach) return;
+    const nextDate = matchDraft.date || selectedAgendaDate;
+    setCoachFilter(nextCoach.id);
+    setShowTeamPicker(false);
+    setPendingMatchCreation(false);
+    setMatchDraft(emptyCoordinatorMatch(nextDate));
+    setShowMatchCreator(true);
+    setMatchMessage("");
+    setNextTeamReady(false);
+    setTab("agenda");
+  };
   const saveCoordinatorMatch = async () => {
     if (!selectedCoach || !matchDraft.date || !matchDraft.startTime || !matchDraft.rivalId || !matchDraft.field) {
       setMatchMessage("Completa fecha, hora, rival y campo.");
@@ -1663,6 +1711,7 @@ function CoordinatorPanel({
       setSelectedAgendaDate(matchDraft.date);
       setShowMatchCreator(false);
       setMatchMessage(`Partido añadido a la agenda de ${selectedCoach.teamLabel}.`);
+      setNextTeamReady(true);
     } catch (error) {
       setMatchMessage(error instanceof Error ? error.message : "No se pudo añadir el partido.");
     } finally {
@@ -1701,6 +1750,15 @@ function CoordinatorPanel({
             </small>
           </div>
           <div className="context-actions">
+            {nextTeamReady && nextCoach && (
+              <button
+                type="button"
+                className="next-team-button"
+                onClick={goToNextTeam}
+              >
+                Siguiente <ChevronRight size={18} />
+              </button>
+            )}
             <button
               className="change-team-button"
               onClick={() => setShowTeamPicker((current) => !current)}
@@ -1736,7 +1794,12 @@ function CoordinatorPanel({
                 >
                   <span>
                     <strong>{coach.teamLabel}</strong>
-                    <small>{firstName(coach.name)} · Entrenador</small>
+                    <small>
+                      {coach.footballStage
+                        ? `${footballStageLabel[coach.footballStage]}${coach.trainingYear ? ` · ${trainingYearLabel[coach.trainingYear]}` : ""}`
+                        : "Edad pendiente"}
+                      {` · ${firstName(coach.name)}`}
+                    </small>
                   </span>
                   <ChevronRight size={18} />
                 </button>

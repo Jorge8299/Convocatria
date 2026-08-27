@@ -9,6 +9,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
   Clock,
   Download,
   Dumbbell,
@@ -284,6 +285,7 @@ export function AgendaView({
   onChange,
   onOpenBoard,
   onOpenStats,
+  onOpenCallup,
   onAcknowledge,
   categoryLabel,
   footballStage,
@@ -295,6 +297,7 @@ export function AgendaView({
   onChange: (events: AgendaEvent[]) => void;
   onOpenBoard: (event: MatchAgendaEvent) => void;
   onOpenStats: (event: MatchAgendaEvent) => void;
+  onOpenCallup: (event: MatchAgendaEvent) => void;
   onAcknowledge: (eventId: string) => Promise<string>;
   categoryLabel: string;
   footballStage: FootballStage | null;
@@ -663,6 +666,9 @@ export function AgendaView({
                       <span className={matchIsCompleted(event) ? "agenda-status done" : "agenda-status"}>
                         {matchIsCompleted(event) ? "Finalizado" : "Programado"}
                       </span>
+                      <button type="button" className="agenda-callup-button" onClick={() => onOpenCallup(event)}>
+                        <ClipboardList size={15} /> Convocatoria
+                      </button>
                       <button className="agenda-stat-button" onClick={() => onOpenStats(event)}>
                         <BarChart3 size={15} /> Estadísticas
                       </button>
@@ -827,6 +833,7 @@ export function AgendaView({
               <div className="assigned-match-confirmed"><Check size={16} /> Confirmado como visto</div>
             )}
             <div className="agenda-linked-actions">
+              <button type="button" onClick={() => onOpenCallup(draft)}><ClipboardList size={17} /> Ir a convocatoria</button>
               <button onClick={() => onOpenBoard(draft)}><PencilRuler size={17} /> Abrir alineación</button>
               <button onClick={() => onOpenStats(draft)}><BarChart3 size={17} /> Estadísticas</button>
             </div>
@@ -852,6 +859,7 @@ export function AgendaView({
             )}
             <label><span>Observaciones</span><textarea rows={2} value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="Opcional" /></label>
             <div className="agenda-linked-actions">
+              <button type="button" onClick={() => onOpenCallup(draft)}><ClipboardList size={17} /> Ir a convocatoria</button>
               <button onClick={() => onOpenBoard(draft)}><PencilRuler size={17} /> Abrir alineación</button>
               <button onClick={() => onOpenStats(draft)}><BarChart3 size={17} /> Estadísticas</button>
             </div>

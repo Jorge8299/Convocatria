@@ -133,6 +133,33 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
   const goBack = () => { const destination = previousView; setPreviousView(view); setView(destination) };
   const goHome = () => { setPreviousView(view); setView('inicio') };
   const startNew = () => { setForm(makeInitialForm()); goToView('convocatoria') };
+  const openAgendaCallup = (event: MatchAgendaEvent) => {
+    const initial = makeInitialForm();
+    const isLeague = event.matchType === 'liga';
+    setForm({
+      ...initial,
+      tipoPartido: event.matchType,
+      rivalId: isLeague ? event.rivalId : '',
+      rivalManual: isLeague ? '' : event.rivalName,
+      esCasa: event.home,
+      fecha: event.date,
+      hora: event.startTime,
+      campoPropio: isLeague && event.home ? event.field : '',
+      campoRival: isLeague && !event.home ? event.field : '',
+      campoManual: isLeague ? '' : event.field,
+      citaciones: initial.citaciones.map((citation, index) =>
+        index === 0
+          ? { ...citation, hora: citationTime(event.startTime, event.home) }
+          : citation,
+      ),
+      partidosTorneo:
+        event.matchType === 'torneo'
+          ? [{ id: uid(), rival: event.rivalName, hora: event.startTime }]
+          : initial.partidosTorneo,
+      observaciones: event.notes,
+    });
+    goToView('convocatoria');
+  };
   const openBoard = (mode: BoardMode) => { setAgendaBoardMatch(null); setBoardMode(mode); goToView('pizarra') };
   const openAgendaBoard = (event: MatchAgendaEvent) => { setAgendaBoardMatch(event); setBoardMode('partido'); goToView('pizarra') };
   useEffect(() => {
@@ -180,7 +207,7 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
       </header>
       <AnimatePresence mode="wait"><motion.div key={`${view}-${boardMode || ''}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: .18 }}>
         {view === 'inicio' && <HomeView phrase={phrase} onAgenda={() => goToView('agenda')} onTeam={() => goToView('equipo')} onNew={startNew} onSaved={() => goToView('guardados')} />}
-        {view === 'agenda' && <AgendaView events={agendaEvents} rivals={rivales} matches={stats} footballStage={account.footballStage} categoryLabel={`${account.footballStage ? `${account.footballStage.charAt(0).toUpperCase()}${account.footballStage.slice(1)}` : 'Categoría pendiente'}${account.trainingYear ? ` · ${account.trainingYear} año` : ''}`} defaultPlayerCount={team.players.filter((player) => player.active).length} onChange={setAgendaEvents} onAcknowledge={acknowledgeCoordinatorMatch} onOpenBoard={openAgendaBoard} onOpenStats={(event) => { const completed = stats.some((match) => match.date === event.date && match.rival === event.rivalName && match.home === event.home); if (completed) { setSavedTab('estadisticas'); goToView('guardados') } else { setSelectedAgendaMatch(event); goToView('estadisticas') } }} />}
+        {view === 'agenda' && <AgendaView events={agendaEvents} rivals={rivales} matches={stats} footballStage={account.footballStage} categoryLabel={`${account.footballStage ? `${account.footballStage.charAt(0).toUpperCase()}${account.footballStage.slice(1)}` : 'Categoría pendiente'}${account.trainingYear ? ` · ${account.trainingYear} año` : ''}`} defaultPlayerCount={team.players.filter((player) => player.active).length} onChange={setAgendaEvents} onAcknowledge={acknowledgeCoordinatorMatch} onOpenCallup={openAgendaCallup} onOpenBoard={openAgendaBoard} onOpenStats={(event) => { const completed = stats.some((match) => match.date === event.date && match.rival === event.rivalName && match.home === event.home); if (completed) { setSavedTab('estadisticas'); goToView('guardados') } else { setSelectedAgendaMatch(event); goToView('estadisticas') } }} />}
         {view === 'equipo' && <TeamView team={team} setTeam={setTeam} account={account} accounts={accounts} stores={stores} onPlayer={(id) => { setSelectedPlayerId(id); goToView('jugador') }} />}
         {view === 'convocatoria' && <ConvocatoriaView form={form} setForm={setForm} rivales={rivales} rivalName={rivalName} fieldName={fieldName} message={message} copySuccess={copySuccess} onCopy={copyMessage} onWhatsApp={() => open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank')} onSave={saveJourney} onMatchTime={updateTime} onHomeAway={updateHome} />}
         {view === 'pizarra' && <BoardView mode={boardMode} expanded={boardExpanded} accountId={account.id} boards={boards} team={team} matchContext={agendaBoardMatch} onChoose={setBoardMode} onBack={() => { setBoardExpanded(false); if (agendaBoardMatch) { setAgendaBoardMatch(null); setBoardMode(null); goToView('agenda') } else setBoardMode(null) }} />}
