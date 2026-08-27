@@ -11,9 +11,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     if(await isRateLimited(attemptKey)){res.status(429).json({error:'Demasiados intentos. Espera 15 minutos.'});return}
     const rows = accountId
       ? await sql`SELECT * FROM club_accounts WHERE id=${accountId} AND active=TRUE LIMIT 1`
-      : await sql`SELECT * FROM club_accounts WHERE role='superadmin' AND active=TRUE LIMIT 1`;
-    const account = rows[0] ? mapAccount(rows[0]) : null;
-    if (!account || account.pinHash !== hashPin(pin!)) { await recordFailedLogin(attemptKey); res.status(401).json({ error: 'El PIN no es correcto.' }); return }
+      : await sql`SELECT * FROM club_accounts WHERE role IN ('admin','superadmin') AND active=TRUE`;
+    const account = rows.map((row) => mapAccount(row)).find((item) => item.pinHash === hashPin(pin!)) || null;
+    if (!account) { await recordFailedLogin(attemptKey); res.status(401).json({ error: 'El PIN no es correcto.' }); return }
     await clearFailedLogins(attemptKey);
     await createSession(account.id, res);
     res.status(200).json({ account: publicAccount(account) });

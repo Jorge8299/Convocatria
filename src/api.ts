@@ -19,6 +19,7 @@ export interface StoreRow {
 export interface BootstrapPayload {
   accounts: ClubAccount[];
   session: ClubAccount | null;
+  impersonator?: ClubAccount | null;
   stores?: StoreRow[];
 }
 export interface ImportedRival {
@@ -31,15 +32,27 @@ export const IS_LOCAL_DEMO = import.meta.env.DEV;
 const LOCAL_ACCOUNTS_KEY = "convo_local_demo_accounts_v1";
 const LOCAL_STORES_KEY = "convo_local_demo_stores_v1";
 const LOCAL_SESSION_KEY = "convo_local_demo_session_v1";
-const SUPERADMIN_PIN = "1946";
+const LOCAL_IMPERSONATOR_KEY = "convo_local_demo_impersonator_v1";
+const SUPERADMIN_PIN = "8299";
 type LocalAccount = ClubAccount & { pin: string };
 
 const localSeedAccounts = (): LocalAccount[] => [
   {
     id: "superadmin",
     name: "Administrador local",
-    role: "superadmin",
+    role: "admin",
     teamLabel: "Administración",
+    footballStage: null,
+    trainingYear: null,
+    active: true,
+    createdAt: new Date().toISOString(),
+    pin: "1946",
+  },
+  {
+    id: "platform-superadmin",
+    name: "Superadmin",
+    role: "superadmin",
+    teamLabel: "Control de la aplicación",
     footballStage: null,
     trainingYear: null,
     active: true,
@@ -63,11 +76,24 @@ function readLocalAccounts(): LocalAccount[] {
   const saved = localStorage.getItem(LOCAL_ACCOUNTS_KEY);
   if (saved) {
     const accounts = JSON.parse(saved) as LocalAccount[];
-    const superadmin = accounts.find((account) => account.role === "superadmin");
-    if (superadmin && superadmin.pin !== SUPERADMIN_PIN) {
-      superadmin.pin = SUPERADMIN_PIN;
-      localStorage.setItem(LOCAL_ACCOUNTS_KEY, JSON.stringify(accounts));
+    let changed = false;
+    const existingAdmin = accounts.find((account) => account.id === "superadmin");
+    if (existingAdmin && existingAdmin.role !== "admin") {
+      existingAdmin.role = "admin";
+      changed = true;
     }
+    let superadmin = accounts.find((account) => account.id === "platform-superadmin");
+    if (!superadmin) {
+      superadmin = localSeedAccounts().find((account) => account.id === "platform-superadmin")!;
+      accounts.push(superadmin);
+      changed = true;
+    }
+    if (superadmin.pin !== SUPERADMIN_PIN || superadmin.role !== "superadmin") {
+      superadmin.pin = SUPERADMIN_PIN;
+      superadmin.role = "superadmin";
+      changed = true;
+    }
+    if (changed) localStorage.setItem(LOCAL_ACCOUNTS_KEY, JSON.stringify(accounts));
     return accounts;
   }
   const seeded = localSeedAccounts();
@@ -152,34 +178,59 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
   let stores = readLocalStores();
   const sessionId = sessionStorage.getItem(LOCAL_SESSION_KEY);
   const session = accounts.find((account) => account.id === sessionId) || null;
+  const impersonatorId = sessionStorage.getItem(LOCAL_IMPERSONATOR_KEY);
+  const impersonator = accounts.find(
+    (account) => account.id === impersonatorId && account.role === "superadmin",
+  ) || null;
 
   if (url.pathname === "/api/bootstrap") {
     return {
       accounts: accounts.map(publicLocalAccount),
       session: session ? publicLocalAccount(session) : null,
+      impersonator: impersonator ? publicLocalAccount(impersonator) : null,
       stores,
     } as T;
   }
   if (url.pathname === "/api/login" && method === "POST") {
     const account = body.accountId
       ? accounts.find((item) => item.id === body.accountId)
-      : accounts.find((item) => item.role === "superadmin");
+      : accounts.find(
+          (item) => ["admin", "superadmin"].includes(item.role) && item.pin === body.pin,
+        );
     if (!account || account.pin !== body.pin)
       throw new Error("El PIN no es correcto.");
     sessionStorage.setItem(LOCAL_SESSION_KEY, account.id);
+    sessionStorage.removeItem(LOCAL_IMPERSONATOR_KEY);
     return { account: publicLocalAccount(account) } as T;
   }
   if (url.pathname === "/api/logout" && method === "POST") {
     sessionStorage.removeItem(LOCAL_SESSION_KEY);
+    sessionStorage.removeItem(LOCAL_IMPERSONATOR_KEY);
     return { ok: true } as T;
+  }
+  if (url.pathname === "/api/impersonation" && method === "POST") {
+    if (session?.role !== "superadmin") throw new Error("Acceso restringido.");
+    const target = accounts.find(
+      (account) => account.id === body.accountId && account.role !== "superadmin" && account.active,
+    );
+    if (!target) throw new Error("El usuario no está disponible.");
+    sessionStorage.setItem(LOCAL_IMPERSONATOR_KEY, session.id);
+    sessionStorage.setItem(LOCAL_SESSION_KEY, target.id);
+    return { account: publicLocalAccount(target), impersonator: publicLocalAccount(session) } as T;
+  }
+  if (url.pathname === "/api/impersonation" && method === "DELETE") {
+    if (!impersonator) throw new Error("No hay una sesión de superadmin activa.");
+    sessionStorage.setItem(LOCAL_SESSION_KEY, impersonator.id);
+    sessionStorage.removeItem(LOCAL_IMPERSONATOR_KEY);
+    return { account: publicLocalAccount(impersonator) } as T;
   }
   if (url.pathname === "/api/accounts" && method === "POST") {
     const now = new Date().toISOString();
     accounts.push({
       id: crypto.randomUUID(),
       name: String(body.name || ""),
-      role: body.role as "entrenador" | "coordinador",
-      teamLabel: String(body.teamLabel || ""),
+      role: body.role as "entrenador" | "coordinador" | "admin",
+      teamLabel: body.role === "admin" ? "Administración" : String(body.teamLabel || ""),
       footballStage: (body.footballStage || null) as ClubAccount["footballStage"],
       trainingYear: (body.trainingYear || null) as ClubAccount["trainingYear"],
       active: true,
@@ -285,9 +336,16 @@ export const clubApi = {
       body: JSON.stringify({ accountId, pin }),
     }),
   logout: () => request<{ ok: boolean }>("/api/logout", { method: "POST" }),
+  impersonate: (accountId: string) =>
+    request<{ account: ClubAccount; impersonator: ClubAccount }>("/api/impersonation", {
+      method: "POST",
+      body: JSON.stringify({ accountId }),
+    }),
+  stopImpersonating: () =>
+    request<{ account: ClubAccount }>("/api/impersonation", { method: "DELETE" }),
   createAccount: (input: {
     name: string;
-    role: "entrenador" | "coordinador";
+    role: "entrenador" | "coordinador" | "admin";
     teamLabel: string;
     footballStage: FootballStage | null;
     trainingYear: TrainingYear | null;
@@ -300,7 +358,7 @@ export const clubApi = {
   updateAccount: (input: {
     id: string;
     name?: string;
-    role?: "entrenador" | "coordinador";
+    role?: "entrenador" | "coordinador" | "admin";
     teamLabel?: string;
     footballStage?: FootballStage | null;
     trainingYear?: TrainingYear | null;

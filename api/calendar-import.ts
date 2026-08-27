@@ -114,10 +114,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {
     if (req.method !== "POST") return methodNotAllowed(res);
     const session = await getSession(req);
-    if (!session || session.role !== "superadmin") {
+    if (!session || !["admin", "superadmin"].includes(session.role)) {
       res
         .status(403)
-        .json({ error: "Solo el superadmin puede importar calendarios." });
+        .json({ error: "Solo administración puede importar calendarios." });
       return;
     }
     const body = jsonBody<{

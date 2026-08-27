@@ -1,4 +1,4 @@
-export type ClubRole = 'entrenador' | 'coordinador' | 'superadmin';
+export type ClubRole = 'entrenador' | 'coordinador' | 'admin' | 'superadmin';
 export type FootballStage = 'prebenjamin' | 'benjamin' | 'alevin';
 export type TrainingYear = 'primero' | 'segundo' | 'mixto';
 

@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { neon } from '@neondatabase/serverless';
 
-export type ClubRole = 'entrenador' | 'coordinador' | 'superadmin';
+export type ClubRole = 'entrenador' | 'coordinador' | 'admin' | 'superadmin';
 export type FootballStage = 'prebenjamin' | 'benjamin' | 'alevin';
 export type TrainingYear = 'primero' | 'segundo' | 'mixto';
 export interface AccountRow { id: string; name: string; role: ClubRole; teamLabel: string; footballStage: FootballStage | null; trainingYear: TrainingYear | null; pinHash: string; active: boolean; createdAt: string }
@@ -22,7 +22,7 @@ export async function ensureSchema() {
   await sql`CREATE TABLE IF NOT EXISTS club_accounts (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('entrenador','coordinador','superadmin')),
+    role TEXT NOT NULL CHECK (role IN ('entrenador','coordinador','admin','superadmin')),
     team_label TEXT NOT NULL DEFAULT '',
     football_stage TEXT,
     training_year TEXT,
@@ -32,6 +32,19 @@ export async function ensureSchema() {
   )`;
   await sql`ALTER TABLE club_accounts ADD COLUMN IF NOT EXISTS football_stage TEXT`;
   await sql`ALTER TABLE club_accounts ADD COLUMN IF NOT EXISTS training_year TEXT`;
+  await sql`DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname='club_accounts_role_check'
+          AND pg_get_constraintdef(oid) NOT LIKE '%''admin''%'
+      ) THEN
+        ALTER TABLE club_accounts DROP CONSTRAINT club_accounts_role_check;
+        ALTER TABLE club_accounts ADD CONSTRAINT club_accounts_role_check
+          CHECK (role IN ('entrenador','coordinador','admin','superadmin'));
+      END IF;
+    END
+  $$`;
   await sql`CREATE TABLE IF NOT EXISTS club_stores (
     account_id TEXT NOT NULL REFERENCES club_accounts(id) ON DELETE CASCADE,
     area TEXT NOT NULL CHECK (area IN ('team','stats','journeys','rivals','boards','agenda')),
@@ -59,16 +72,21 @@ export async function ensureSchema() {
   await sql`CREATE TABLE IF NOT EXISTS club_sessions (
     token_hash TEXT PRIMARY KEY,
     account_id TEXT NOT NULL REFERENCES club_accounts(id) ON DELETE CASCADE,
+    impersonator_account_id TEXT REFERENCES club_accounts(id) ON DELETE SET NULL,
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
+  await sql`ALTER TABLE club_sessions ADD COLUMN IF NOT EXISTS impersonator_account_id TEXT REFERENCES club_accounts(id) ON DELETE SET NULL`;
   await sql`CREATE TABLE IF NOT EXISTS club_login_attempts (
     attempt_key TEXT NOT NULL,
     attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
   await sql`INSERT INTO club_accounts (id,name,role,team_label,pin_hash,active)
-    VALUES ('superadmin','Superadmin','superadmin','Administración','c647f0ac',TRUE)
-    ON CONFLICT (id) DO UPDATE SET pin_hash=EXCLUDED.pin_hash,active=TRUE`;
+    VALUES ('superadmin','Administrador','admin','Administración','c647f0ac',TRUE)
+    ON CONFLICT (id) DO UPDATE SET role='admin'`;
+  await sql`INSERT INTO club_accounts (id,name,role,team_label,pin_hash,active)
+    VALUES ('platform-superadmin','Superadmin','superadmin','Control de la aplicación','f14e4628',TRUE)
+    ON CONFLICT (id) DO UPDATE SET role='superadmin',pin_hash=EXCLUDED.pin_hash,active=TRUE`;
   await sql`DELETE FROM club_sessions WHERE expires_at < NOW()`;
   await sql`DELETE FROM club_login_attempts WHERE attempted_at < NOW()-INTERVAL '1 hour'`;
 }
@@ -93,10 +111,21 @@ export async function getSession(req: ApiRequest): Promise<AccountRow | null> {
   return rows[0] ? mapAccount(rows[0]) : null;
 }
 
-export async function createSession(accountId: string, res: ApiResponse) {
+export async function getSessionImpersonator(req: ApiRequest): Promise<AccountRow | null> {
+  await ensureSchema();
+  const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+  if (!token) return null;
+  const sql = sqlClient();
+  const rows = await sql`SELECT a.*
+    FROM club_sessions s JOIN club_accounts a ON a.id=s.impersonator_account_id
+    WHERE s.token_hash=${tokenHash(token)} AND s.expires_at>NOW() AND a.active=TRUE LIMIT 1`;
+  return rows[0] ? mapAccount(rows[0]) : null;
+}
+
+export async function createSession(accountId: string, res: ApiResponse, impersonatorAccountId?: string) {
   const token = randomBytes(32).toString('base64url');
   const sql = sqlClient();
-  await sql`INSERT INTO club_sessions (token_hash,account_id,expires_at) VALUES (${tokenHash(token)},${accountId},NOW()+INTERVAL '30 days')`;
+  await sql`INSERT INTO club_sessions (token_hash,account_id,impersonator_account_id,expires_at) VALUES (${tokenHash(token)},${accountId},${impersonatorAccountId || null},NOW()+INTERVAL '30 days')`;
   res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=${SESSION_DAYS * 86400}`);
 }
 

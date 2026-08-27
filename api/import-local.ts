@@ -9,12 +9,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     await ensureSchema();
     const body = jsonBody<{pin:string;accounts:Array<{id:string;name:string;role:string;teamLabel:string;footballStage?:string|null;trainingYear?:string|null;pinHash:string;active:boolean;createdAt:string}>;stores:Array<{accountId:string;area:string;data:unknown}>}>(req);
     const sql = getSql();
-    const counts=await sql`SELECT COUNT(*)::int AS count FROM club_accounts`;
-    if(Number(counts[0]?.count || 0)>1){res.status(409).json({error:'La base central ya contiene usuarios. La importación inicial está cerrada.'});return}
-    const admins = await sql`SELECT * FROM club_accounts WHERE role='superadmin' LIMIT 1`;
-    if (!admins[0] || mapAccount(admins[0]).pinHash !== hashPin(body.pin || '')) { res.status(401).json({error:'PIN de superadmin incorrecto.'}); return }
+    const counts=await sql`SELECT COUNT(*)::int AS count FROM club_accounts WHERE role NOT IN ('admin','superadmin')`;
+    if(Number(counts[0]?.count || 0)>0){res.status(409).json({error:'La base central ya contiene usuarios. La importación inicial está cerrada.'});return}
+    const admins = await sql`SELECT * FROM club_accounts WHERE role IN ('admin','superadmin')`;
+    if (!admins.some((row) => mapAccount(row).pinHash === hashPin(body.pin || ''))) { res.status(401).json({error:'PIN de administración incorrecto.'}); return }
     for (const account of body.accounts || []) {
-      if (!['entrenador','coordinador','superadmin'].includes(account.role)) continue;
+      if (!['entrenador','coordinador','admin'].includes(account.role)) continue;
       await sql`INSERT INTO club_accounts (id,name,role,team_label,football_stage,training_year,pin_hash,active,created_at)
         VALUES (${account.id},${account.name},${account.role},${account.teamLabel || ''},${account.footballStage || null},${account.trainingYear || null},${account.pinHash},${account.active},${account.createdAt})
         ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name,role=EXCLUDED.role,team_label=EXCLUDED.team_label,football_stage=EXCLUDED.football_stage,training_year=EXCLUDED.training_year,pin_hash=EXCLUDED.pin_hash,active=EXCLUDED.active`;

@@ -11,6 +11,7 @@ import {
   FileUp,
   Home,
   KeyRound,
+  LogIn,
   LogOut,
   MapPin,
   Pencil,
@@ -47,6 +48,7 @@ const LAST_ACCOUNT_KEY = "convo_club_last_account_v1";
 const roleLabel: Record<ClubRole, string> = {
   entrenador: "Entrenador",
   coordinador: "Coordinador",
+  admin: "Administrador",
   superadmin: "Superadmin",
 };
 const trainingYearLabel: Record<TrainingYear, string> = {
@@ -140,9 +142,6 @@ const coordinatorIsoDate = (year: number, month: number, day: number) =>
 const normalizedMatchName = (value: string) =>
   value.trim().toLocaleLowerCase("es").replace(/\s+/g, " ");
 const HOME_FIELDS = ["El Morer", "Campo C", "Polideportivo"];
-const QUICK_HOURS = Array.from({ length: 24 }, (_, hour) =>
-  String(hour).padStart(2, "0"),
-);
 const QUICK_MINUTES = ["00", "15", "30", "45"];
 
 const emptyCoordinatorMatch = (date: string): CoordinatorMatchInput => ({
@@ -166,41 +165,34 @@ function QuickTimeInput({
   const [hour = "18", minute = "00"] = value.split(":");
   return (
     <div className="quick-time-input">
-      <input
-        className="quick-time-native"
-        aria-label="Hora del partido"
-        type="time"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
-      <div className="quick-time-desktop">
-        <label>
-          <span>Hora</span>
-          <select
-            aria-label="Hora"
-            value={hour}
-            onChange={(event) => onChange(`${event.target.value}:${minute}`)}
-          >
-            {QUICK_HOURS.map((option) => <option key={option}>{option}</option>)}
-          </select>
-        </label>
-        <span className="quick-time-separator">:</span>
-        <fieldset>
-          <legend>Minutos</legend>
-          <div>
-            {QUICK_MINUTES.map((option) => (
-              <button
-                type="button"
-                className={minute === option ? "active" : ""}
-                key={option}
-                onClick={() => onChange(`${hour}:${option}`)}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-        </fieldset>
+      <div className="quick-time-editor">
+        <Clock size={17} aria-hidden="true" />
+        <span>Hora exacta</span>
+        <input
+          aria-label="Hora exacta del partido"
+          type="time"
+          step="60"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
       </div>
+      <fieldset className="quick-time-presets">
+        <legend>Minutos rápidos</legend>
+        <div>
+          {QUICK_MINUTES.map((option) => (
+            <button
+              type="button"
+              className={minute === option ? "active" : ""}
+              key={option}
+              aria-label={`Poner los minutos en ${option}`}
+              onClick={() => onChange(`${hour}:${option}`)}
+            >
+              :{option}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+      <small>Puedes escribir cualquier hora, por ejemplo 18:05.</small>
     </div>
   );
 }
@@ -265,6 +257,7 @@ export default function ClubShell() {
     return (
       <AdminPanel
         account={session}
+        platformMode
         accounts={accounts}
         stores={bootstrap.stores || []}
         onRefresh={refresh}
@@ -273,27 +266,97 @@ export default function ClubShell() {
             current ? { ...current, accounts: next } : current,
           )
         }
+        onImpersonate={async (accountId) => {
+          await clubApi.impersonate(accountId);
+          await refresh();
+        }}
         onLogout={logout}
       />
+    );
+  const impersonationBanner = bootstrap.impersonator ? (
+    <ImpersonationBanner
+      account={session}
+      onReturn={async () => {
+        await clubApi.stopImpersonating();
+        await refresh();
+      }}
+    />
+  ) : null;
+  if (session.role === "admin")
+    return (
+      <>
+        {impersonationBanner}
+        <AdminPanel
+          account={session}
+          accounts={accounts}
+          stores={bootstrap.stores || []}
+          onRefresh={refresh}
+          onAccounts={(next) =>
+            setBootstrap((current) =>
+              current ? { ...current, accounts: next } : current,
+            )
+          }
+          onLogout={logout}
+        />
+      </>
     );
   if (session.role === "coordinador")
     return (
-      <CoordinatorPanel
+      <>
+        {impersonationBanner}
+        <CoordinatorPanel
+          account={session}
+          accounts={accounts}
+          stores={bootstrap.stores || []}
+          onRefresh={refresh}
+          onLogout={logout}
+        />
+      </>
+    );
+  return (
+    <>
+      {impersonationBanner}
+      <CoachApp
         account={session}
         accounts={accounts}
         stores={bootstrap.stores || []}
-        onRefresh={refresh}
+        onDataChange={(area, data) => clubApi.saveData(area, data)}
         onLogout={logout}
       />
-    );
+    </>
+  );
+}
+
+function ImpersonationBanner({
+  account,
+  onReturn,
+}: {
+  account: ClubAccount;
+  onReturn: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const returnToSuperadmin = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await onReturn();
+    } catch (returnError) {
+      setError(returnError instanceof Error ? returnError.message : "No se pudo volver al superadmin.");
+      setBusy(false);
+    }
+  };
   return (
-    <CoachApp
-      account={session}
-      accounts={accounts}
-      stores={bootstrap.stores || []}
-      onDataChange={(area, data) => clubApi.saveData(area, data)}
-      onLogout={logout}
-    />
+    <aside className="impersonation-banner" aria-label="Modo de revisión del superadmin">
+      <ShieldCheck size={18} />
+      <span>
+        Modo superadmin · Estás revisando la cuenta de <strong>{account.name}</strong>
+      </span>
+      {error && <small role="alert">{error}</small>}
+      <button type="button" disabled={busy} onClick={() => void returnToSuperadmin()}>
+        <ChevronLeft size={16} /> {busy ? "Volviendo…" : "Volver al superadmin"}
+      </button>
+    </aside>
   );
 }
 
@@ -305,7 +368,7 @@ function LoginScreen({
   onLogin: (id: string, pin: string) => Promise<string | void>;
 }) {
   const visibleAccounts = accounts.filter(
-    (account) => account.role !== "superadmin",
+    (account) => !["admin", "superadmin"].includes(account.role),
   );
   const legacySnapshot = useMemo(() => buildLegacySnapshot(), []);
   const [selectedId, setSelectedId] = useState(() => {
@@ -429,6 +492,7 @@ function LoginScreen({
           <KeyRound size={18} /> Entrar
         </button>
         <small>Acceso privado para entrenadores y coordinación.</small>
+        <small>Administrador y superadmin: deja el usuario sin seleccionar.</small>
         {!IS_LOCAL_DEMO &&
           visibleAccounts.length === 0 &&
           legacySnapshot.accounts.length > 1 &&
@@ -470,18 +534,22 @@ function LoginScreen({
 }
 
 function AdminPanel({
-  account: _account,
+  account,
+  platformMode = false,
   accounts,
   stores,
   onRefresh,
   onAccounts,
+  onImpersonate,
   onLogout,
 }: {
   account: ClubAccount;
+  platformMode?: boolean;
   accounts: ClubAccount[];
   stores: StoreRow[];
   onRefresh: () => Promise<void>;
   onAccounts: (accounts: ClubAccount[]) => void;
+  onImpersonate?: (accountId: string) => Promise<void>;
   onLogout: () => void;
 }) {
   const [draft, setDraft] = useState({
@@ -496,7 +564,7 @@ function AdminPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState({
     name: "",
-    role: "entrenador" as "entrenador" | "coordinador",
+    role: "entrenador" as "entrenador" | "coordinador" | "admin",
     teamLabel: "",
     footballStage: "" as FootballStage | "",
     trainingYear: "" as TrainingYear | "",
@@ -504,6 +572,9 @@ function AdminPanel({
   const [message, setMessage] = useState("");
   const [migrationPin, setMigrationPin] = useState("");
   const legacySnapshot = useMemo(() => buildLegacySnapshot(), []);
+  const managedAccounts = accounts.filter(
+    (item) => item.role !== "superadmin" && (platformMode || item.role !== "admin"),
+  );
   const coaches = accounts.filter(
     (item) => item.role === "entrenador" && item.active,
   );
@@ -627,8 +698,8 @@ function AdminPanel({
     try {
       const result = await clubApi.createAccount({
         name: draft.name.trim(),
-        role: draft.role as "entrenador" | "coordinador",
-        teamLabel: draft.teamLabel.trim(),
+        role: draft.role as "entrenador" | "coordinador" | "admin",
+        teamLabel: draft.role === "admin" ? "Administración" : draft.teamLabel.trim(),
         footballStage:
           draft.role === "entrenador" ? draft.footballStage || null : null,
         trainingYear:
@@ -670,7 +741,7 @@ function AdminPanel({
     setEditingId(item.id);
     setEditDraft({
       name: item.name,
-      role: item.role as "entrenador" | "coordinador",
+      role: item.role as "entrenador" | "coordinador" | "admin",
       teamLabel: item.role === "entrenador" ? item.teamLabel : "",
       footballStage:
         item.role === "entrenador" ? item.footballStage || "" : "",
@@ -696,7 +767,7 @@ function AdminPanel({
         id: editingId,
         name: editDraft.name.trim(),
         role: editDraft.role,
-        teamLabel: editDraft.teamLabel.trim(),
+        teamLabel: editDraft.role === "admin" ? "Administración" : editDraft.teamLabel.trim(),
         footballStage:
           editDraft.role === "entrenador"
             ? editDraft.footballStage || null
@@ -745,6 +816,18 @@ function AdminPanel({
       );
     }
   };
+  const impersonateAccount = async (item: ClubAccount) => {
+    if (!onImpersonate || !item.active) {
+      if (!item.active) setMessage("Activa primero este acceso para poder revisarlo.");
+      return;
+    }
+    try {
+      setMessage(`Abriendo la cuenta de ${item.name}…`);
+      await onImpersonate(item.id);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo abrir la cuenta.");
+    }
+  };
   const migrateLegacy = async () => {
     if (!/^\d{4}$/.test(migrationPin)) {
       setMessage(
@@ -780,11 +863,18 @@ function AdminPanel({
     <div className="role-shell">
       <LocalDemoBanner />
       <RoleHeader
-        title="Administración"
-        subtitle="U.D. Oliva"
+        title={platformMode ? "Superadministración" : "Administración"}
+        subtitle={platformMode ? "Control total de la aplicación" : "U.D. Oliva"}
         onLogout={onLogout}
       />
       <main className="role-content admin-content">
+        {platformMode && (
+          <section className="superadmin-intro">
+            <span><ShieldCheck size={20} /> NIVEL SUPERADMIN</span>
+            <h2>Control y revisión de todas las cuentas</h2>
+            <p>Entra como administrador, coordinador o entrenador para comprobar exactamente lo que ve cada perfil. El acceso del administrador del club permanece separado.</p>
+          </section>
+        )}
         <section className="form-card admin-create-section">
           <div className="form-card-header">
             <div>
@@ -816,6 +906,7 @@ function AdminPanel({
             >
               <option value="entrenador">Entrenador</option>
               <option value="coordinador">Coordinador</option>
+              {platformMode && <option value="admin">Administrador</option>}
             </select>
             {draft.role === "entrenador" && (
               <>
@@ -879,7 +970,7 @@ function AdminPanel({
               className="primary-button"
               onClick={() => void createAccount()}
             >
-              <Plus size={17} /> {draft.role === "entrenador" ? "Crear equipo" : "Crear coordinador"}
+              <Plus size={17} /> {draft.role === "entrenador" ? "Crear equipo" : draft.role === "admin" ? "Crear administrador" : "Crear coordinador"}
             </button>
           </div>
         </section>
@@ -1199,7 +1290,7 @@ function AdminPanel({
           )}
         </section>
         {!IS_LOCAL_DEMO &&
-          accounts.filter((item) => item.role !== "superadmin").length === 0 &&
+          accounts.filter((item) => !["admin", "superadmin"].includes(item.role)).length === 0 &&
           legacySnapshot.accounts.length > 1 && (
             <section className="cloud-migration">
               <CloudUpload size={24} />
@@ -1236,15 +1327,13 @@ function AdminPanel({
           <div className="section-heading">
             <span className="eyebrow">GESTIÓN DEL CLUB</span>
             <h2>
-              {accounts.filter((item) => item.role !== "superadmin").length}{" "}
+              {managedAccounts.length}{" "}
               equipos y accesos
             </h2>
             <p>Edita el entrenador, la categoría y el nombre del equipo, o elimínalo por completo.</p>
           </div>
           <div className="account-list">
-            {accounts
-              .filter((item) => item.role !== "superadmin")
-              .map((item) => (
+            {managedAccounts.map((item) => (
                 <article
                   key={item.id}
                   className={!item.active ? "inactive" : ""}
@@ -1252,6 +1341,8 @@ function AdminPanel({
                   <span className={`role-avatar ${item.role}`}>
                     {item.role === "entrenador" ? (
                       <Users size={20} />
+                    ) : item.role === "admin" ? (
+                      <ShieldCheck size={20} />
                     ) : (
                       <BarChart3 size={20} />
                     )}
@@ -1277,12 +1368,14 @@ function AdminPanel({
                             ...current,
                             role: event.target.value as
                               | "entrenador"
-                              | "coordinador",
+                              | "coordinador"
+                              | "admin",
                           }))
                         }
                       >
                         <option value="entrenador">Entrenador</option>
                         <option value="coordinador">Coordinador</option>
+                        {platformMode && <option value="admin">Administrador</option>}
                       </select>
                       {editDraft.role === "entrenador" && (
                         <>
@@ -1357,6 +1450,15 @@ function AdminPanel({
                         </small>
                       </div>
                       <div className="account-actions">
+                    {platformMode && onImpersonate && (
+                      <button
+                        className="impersonate-account"
+                        disabled={!item.active}
+                        onClick={() => void impersonateAccount(item)}
+                      >
+                        <LogIn size={16} /> Entrar como
+                      </button>
+                    )}
                     <button onClick={() => startEditing(item)}>
                       <Pencil size={16} /> Editar
                     </button>
@@ -1381,20 +1483,21 @@ function AdminPanel({
                     <button onClick={() => void toggleAccount(item)}>
                       {item.active ? "Desactivar" : "Activar"}
                     </button>
-                    <button
-                      className="danger-icon"
-                      aria-label={`Eliminar ${item.name}`}
-                      onClick={() => void removeAccount(item)}
-                    >
-                      <Trash2 size={16} /> Eliminar
-                    </button>
+                    {item.role !== "admin" && (
+                      <button
+                        className="danger-icon"
+                        aria-label={`Eliminar ${item.name}`}
+                        onClick={() => void removeAccount(item)}
+                      >
+                        <Trash2 size={16} /> Eliminar
+                      </button>
+                    )}
                       </div>
                     </>
                   )}
                 </article>
               ))}
-            {accounts.filter((item) => item.role !== "superadmin").length ===
-              0 && (
+            {managedAccounts.length === 0 && (
               <div className="inline-empty">
                 Todavía no has creado entrenadores ni coordinadores.
               </div>
@@ -1450,7 +1553,6 @@ function CoordinatorPanel({
   );
   const [matchSaving, setMatchSaving] = useState(false);
   const [matchMessage, setMatchMessage] = useState("");
-  const [nextTeamReady, setNextTeamReady] = useState(false);
   const [sortBy, setSortBy] = useState<
     "rating" | "goals" | "assists" | "matches"
   >("rating");
@@ -1631,7 +1733,9 @@ function CoordinatorPanel({
     ? coaches.findIndex((coach) => coach.id === selectedCoach.id)
     : -1;
   const nextCoach =
-    selectedCoachIndex >= 0 ? coaches[selectedCoachIndex + 1] : undefined;
+    selectedCoachIndex >= 0 && coaches.length > 1
+      ? coaches[(selectedCoachIndex + 1) % coaches.length]
+      : undefined;
   const firstName = (name: string) => name.trim().split(/\s+/)[0];
   const viewTitle =
     tab === "agenda"
@@ -1652,7 +1756,6 @@ function CoordinatorPanel({
   const chooseTeam = (id: string) => {
     setCoachFilter(id);
     setShowTeamPicker(false);
-    setNextTeamReady(false);
     if (pendingMatchCreation && id !== "all") {
       setMatchDraft(emptyCoordinatorMatch(selectedAgendaDate));
       setShowMatchCreator(true);
@@ -1666,7 +1769,6 @@ function CoordinatorPanel({
   const openMatchCreator = () => {
     setTab("agenda");
     setMatchMessage("");
-    setNextTeamReady(false);
     if (!selectedCoach) {
       setPendingMatchCreation(true);
       setShowTeamPicker(true);
@@ -1694,7 +1796,6 @@ function CoordinatorPanel({
     setMatchDraft(emptyCoordinatorMatch(nextDate));
     setShowMatchCreator(true);
     setMatchMessage("");
-    setNextTeamReady(false);
     setTab("agenda");
   };
   const saveCoordinatorMatch = async () => {
@@ -1711,7 +1812,6 @@ function CoordinatorPanel({
       setSelectedAgendaDate(matchDraft.date);
       setShowMatchCreator(false);
       setMatchMessage(`Partido añadido a la agenda de ${selectedCoach.teamLabel}.`);
-      setNextTeamReady(true);
     } catch (error) {
       setMatchMessage(error instanceof Error ? error.message : "No se pudo añadir el partido.");
     } finally {
@@ -1750,7 +1850,7 @@ function CoordinatorPanel({
             </small>
           </div>
           <div className="context-actions">
-            {nextTeamReady && nextCoach && (
+            {nextCoach && (
               <button
                 type="button"
                 className="next-team-button"
@@ -1859,7 +1959,7 @@ function CoordinatorPanel({
               <div className="coordinator-match-grid">
                 <label><span>Fecha</span><input type="date" value={matchDraft.date} onChange={(event) => setMatchDraft((current) => ({ ...current, date: event.target.value }))} /></label>
                 <label><span>Rival</span><select value={matchDraft.rivalId} onChange={(event) => updateCoordinatorRival(event.target.value)}><option value="">Selecciona rival</option>{selectedCoachData.rivals.map((rival) => <option key={rival.id} value={rival.id}>{rival.nombre}</option>)}</select></label>
-                <label className="coordinator-time-field"><span>Hora del partido</span><QuickTimeInput value={matchDraft.startTime} onChange={(startTime) => setMatchDraft((current) => ({ ...current, startTime }))} /></label>
+                <div className="coordinator-time-field"><span>Hora del partido</span><QuickTimeInput value={matchDraft.startTime} onChange={(startTime) => setMatchDraft((current) => ({ ...current, startTime }))} /></div>
                 {matchDraft.home ? (
                   <label><span>Campo</span><select value={matchDraft.field} onChange={(event) => setMatchDraft((current) => ({ ...current, field: event.target.value }))}><option value="">Selecciona campo</option>{HOME_FIELDS.map((field) => <option key={field}>{field}</option>)}</select></label>
                 ) : (
