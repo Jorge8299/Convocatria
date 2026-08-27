@@ -731,3 +731,11 @@ input,select,textarea{min-height:48px;font-size:13px;font-weight:600}textarea{li
 /* Direct actions for matches assigned by coordination */
 .assigned-match-detail .agenda-linked-actions{grid-template-columns:repeat(3,minmax(0,1fr))}
 @media(max-width:620px){.assigned-match-detail .agenda-linked-actions{grid-template-columns:1fr}}
+
+/* Compact, directly editable match time */
+.coordinator-time-field{grid-column:auto}
+.quick-time-input{width:max-content;max-width:100%;padding:9px 10px;grid-template-columns:auto auto;align-items:end;gap:7px 10px}
+.quick-time-clock{display:flex;align-items:flex-end;gap:5px}.quick-time-clock>svg{align-self:center;margin-right:2px;color:var(--ui-primary)}.quick-time-clock>b{padding-bottom:8px;color:var(--ui-ink);font-size:17px}.quick-time-clock label{display:grid;gap:3px}.quick-time-clock label>span{color:var(--ui-muted);font-size:7px;font-weight:900;text-transform:uppercase}.quick-time-clock input{width:48px!important;height:38px;padding:6px!important;text-align:center;border-color:#9fc3ea!important;background:var(--ui-surface)!important;color:var(--ui-primary);font-size:15px!important;font-weight:900}
+.quick-time-adjustments{display:flex;gap:5px}.quick-time-adjustments button{height:38px;padding:6px 10px;border:1px solid var(--ui-border);border-radius:10px;background:var(--ui-surface);color:var(--ui-primary);font-size:9px;font-weight:900}.quick-time-adjustments button:hover{border-color:var(--ui-primary);background:var(--ui-electric-soft)}
+.quick-time-input>small{grid-column:1/-1}
+@media(max-width:460px){.quick-time-input{width:100%;grid-template-columns:1fr}.quick-time-clock{justify-content:center}.quick-time-adjustments{justify-content:center}.quick-time-adjustments button{flex:1}.quick-time-input>small{grid-column:auto;text-align:center}}

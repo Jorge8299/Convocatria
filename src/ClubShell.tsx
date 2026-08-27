@@ -144,7 +144,6 @@ const coordinatorIsoDate = (year: number, month: number, day: number) =>
 const normalizedMatchName = (value: string) =>
   value.trim().toLocaleLowerCase("es").replace(/\s+/g, " ");
 const HOME_FIELDS = ["El Morer", "Campo C", "Polideportivo"];
-const QUICK_MINUTES = ["00", "15", "30", "45"];
 
 const emptyCoordinatorMatch = (date: string): CoordinatorMatchInput => ({
   date,
@@ -166,36 +165,65 @@ function QuickTimeInput({
   onChange: (value: string) => void;
 }) {
   const [hour = "18", minute = "00"] = value.split(":");
+  const [hourDraft, setHourDraft] = useState(hour);
+  const [minuteDraft, setMinuteDraft] = useState(minute);
+  useEffect(() => {
+    setHourDraft(hour);
+    setMinuteDraft(minute);
+  }, [hour, minute]);
+  const commitTime = () => {
+    const nextHour = Math.min(23, Math.max(0, Number(hourDraft) || 0));
+    const nextMinute = Math.min(59, Math.max(0, Number(minuteDraft) || 0));
+    const normalizedHour = String(nextHour).padStart(2, "0");
+    const normalizedMinute = String(nextMinute).padStart(2, "0");
+    setHourDraft(normalizedHour);
+    setMinuteDraft(normalizedMinute);
+    onChange(`${normalizedHour}:${normalizedMinute}`);
+  };
+  const adjustMinutes = (amount: number) => {
+    const currentHour = Math.min(23, Math.max(0, Number(hourDraft) || 0));
+    const currentMinute = Math.min(59, Math.max(0, Number(minuteDraft) || 0));
+    const currentMinutes = currentHour * 60 + currentMinute;
+    const adjusted = (currentMinutes + amount + 1440) % 1440;
+    onChange(
+      `${String(Math.floor(adjusted / 60)).padStart(2, "0")}:${String(adjusted % 60).padStart(2, "0")}`,
+    );
+  };
   return (
     <div className="quick-time-input">
-      <div className="quick-time-editor">
+      <div className="quick-time-clock">
         <Clock size={17} aria-hidden="true" />
-        <span>Hora exacta</span>
-        <input
-          aria-label="Hora exacta del partido"
-          type="time"
-          step="60"
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-        />
+        <label>
+          <span>Hora</span>
+          <input
+            aria-label="Hora del partido"
+            inputMode="numeric"
+            maxLength={2}
+            value={hourDraft}
+            onChange={(event) => setHourDraft(event.target.value.replace(/\D/g, "").slice(0, 2))}
+            onBlur={commitTime}
+            onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+          />
+        </label>
+        <b aria-hidden="true">:</b>
+        <label>
+          <span>Minutos</span>
+          <input
+            aria-label="Minutos del partido"
+            inputMode="numeric"
+            maxLength={2}
+            value={minuteDraft}
+            onChange={(event) => setMinuteDraft(event.target.value.replace(/\D/g, "").slice(0, 2))}
+            onBlur={commitTime}
+            onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+          />
+        </label>
       </div>
-      <fieldset className="quick-time-presets">
-        <legend>Minutos rápidos</legend>
-        <div>
-          {QUICK_MINUTES.map((option) => (
-            <button
-              type="button"
-              className={minute === option ? "active" : ""}
-              key={option}
-              aria-label={`Poner los minutos en ${option}`}
-              onClick={() => onChange(`${hour}:${option}`)}
-            >
-              :{option}
-            </button>
-          ))}
-        </div>
-      </fieldset>
-      <small>Puedes escribir cualquier hora, por ejemplo 18:05.</small>
+      <div className="quick-time-adjustments">
+        <button type="button" onClick={() => adjustMinutes(-15)}>−15 min</button>
+        <button type="button" onClick={() => adjustMinutes(15)}>+15 min</button>
+      </div>
+      <small>Pulsa la hora o los minutos para escribirlos manualmente.</small>
     </div>
   );
 }
