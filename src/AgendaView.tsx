@@ -651,7 +651,7 @@ export function AgendaView({
                         <span className="coordinator-origin"><ShieldCheck size={12} /> Coordinación</span>
                       )}
                       {event.type === "match" && event.playInWhite && (
-                        <span className="white-kit-badge">JUGAMOS DE BLANCO</span>
+                        <span className="white-kit-badge">OBSERVACIONES · JUGAMOS DE BLANCO</span>
                       )}
                       <strong>
                         {event.type === "training" ? "Entrenamiento" : event.rivalName || "Partido"}
@@ -829,8 +829,13 @@ export function AgendaView({
               <div><span>Condición</span><strong>{draft.home ? "En casa" : "A domicilio"}</strong></div>
               <div><span>Campo</span><strong>{draft.field}</strong></div>
             </div>
-            {draft.playInWhite && <div className="white-kit-notice">⚠️ IMPORTANTE · JUGAMOS DE BLANCO</div>}
-            {draft.notes && <p className="assigned-match-notes">{draft.notes}</p>}
+            {(draft.playInWhite || draft.notes) && (
+              <div className="assigned-match-observations">
+                <strong>Observaciones</strong>
+                {draft.playInWhite && <div className="white-kit-notice">JUGAMOS DE BLANCO</div>}
+                {draft.notes && <p className="assigned-match-notes">{draft.notes}</p>}
+              </div>
+            )}
             {!draft.acknowledgedAt ? (
               <button className="assigned-match-acknowledge" disabled={acknowledgingId === draft.id} onClick={() => void acknowledgeMatch(draft)}>
                 <Check size={17} /> {acknowledgingId === draft.id ? "Confirmando…" : "Confirmar que lo he visto"}
@@ -863,12 +868,14 @@ export function AgendaView({
             ) : (
               <label><span>Campo del rival</span><input value={draft.field} onChange={(event) => setDraft({ ...draft, field: event.target.value })} placeholder="Se completa desde el rival" /></label>
             )}
-            <label className={`white-kit-toggle${draft.playInWhite ? " active" : ""}`}>
-              <input type="checkbox" checked={draft.playInWhite === true} onChange={(event) => setDraft({ ...draft, playInWhite: event.target.checked })} />
-              <span aria-hidden="true" />
-              <strong>IMPORTANTE · JUGAMOS DE BLANCO</strong>
-            </label>
-            <label><span>Observaciones</span><textarea rows={2} value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="Opcional" /></label>
+            <div className="match-observations-group">
+              <label><span>Observaciones</span><textarea rows={2} value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="Escribe cualquier indicación para el equipo" /></label>
+              <label className={`white-kit-toggle${draft.playInWhite ? " active" : ""}`}>
+                <input type="checkbox" checked={draft.playInWhite === true} onChange={(event) => setDraft({ ...draft, playInWhite: event.target.checked })} />
+                <span aria-hidden="true" />
+                <strong>Añadir en observaciones: JUGAMOS DE BLANCO</strong>
+              </label>
+            </div>
             <div className="agenda-linked-actions">
               <button type="button" onClick={() => onOpenCallup(draft)}><ClipboardList size={17} /> Ir a convocatoria</button>
               <button onClick={() => onOpenBoard(draft)}><PencilRuler size={17} /> Abrir alineación</button>

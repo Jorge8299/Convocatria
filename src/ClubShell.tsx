@@ -1972,12 +1972,14 @@ function CoordinatorPanel({
                 )}
               </div>
               {!selectedCoachData.rivals.length && <p className="coordinator-no-rivals">Este equipo todavía no tiene rivales guardados.</p>}
-              <label className={`white-kit-toggle${matchDraft.playInWhite ? " active" : ""}`}>
-                <input type="checkbox" checked={matchDraft.playInWhite} onChange={(event) => setMatchDraft((current) => ({ ...current, playInWhite: event.target.checked }))} />
-                <span aria-hidden="true" />
-                <strong>IMPORTANTE · JUGAMOS DE BLANCO</strong>
-              </label>
-              <label className="coordinator-match-notes"><span>Observaciones</span><textarea rows={2} value={matchDraft.notes} onChange={(event) => setMatchDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Opcional" /></label>
+              <div className="match-observations-group">
+                <label className="coordinator-match-notes"><span>Observaciones</span><textarea rows={2} value={matchDraft.notes} onChange={(event) => setMatchDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Escribe cualquier indicación para el entrenador" /></label>
+                <label className={`white-kit-toggle${matchDraft.playInWhite ? " active" : ""}`}>
+                  <input type="checkbox" checked={matchDraft.playInWhite} onChange={(event) => setMatchDraft((current) => ({ ...current, playInWhite: event.target.checked }))} />
+                  <span aria-hidden="true" />
+                  <strong>Añadir en observaciones: JUGAMOS DE BLANCO</strong>
+                </label>
+              </div>
               <footer>
                 <button type="button" className="secondary-button" onClick={() => setShowMatchCreator(false)}>Cancelar</button>
                 <button type="button" className="primary-button" disabled={matchSaving || !selectedCoachData.rivals.length} onClick={() => void saveCoordinatorMatch()}><Save size={17} /> {matchSaving ? "Guardando…" : "Guardar en su agenda"}</button>
@@ -2295,9 +2297,9 @@ function CoordinatorPanel({
                       );
                     })}
                   </div>
-                  {match.notes && (
+                  {(match.notes || match.playInWhite) && (
                     <p>
-                      <strong>Observaciones generales:</strong> {match.notes}
+                      <strong>Observaciones generales:</strong>{match.playInWhite ? " JUGAMOS DE BLANCO." : ""}{match.notes ? ` ${match.notes}` : ""}
                     </p>
                   )}
                 </article>
