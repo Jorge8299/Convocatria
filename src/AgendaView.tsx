@@ -293,29 +293,11 @@ export function AgendaView({
 }) {
   const today = new Date();
   const todayIso = isoDate(today.getFullYear(), today.getMonth(), today.getDate());
-  const initialCoordinatorMatch = events
-    .filter(
-      (event): event is MatchAgendaEvent =>
-        event.type === "match" &&
-        event.assignedByCoordinator === true &&
-        event.date >= todayIso,
-    )
-    .sort(
-      (a, b) =>
-        a.date.localeCompare(b.date) ||
-        a.startTime.localeCompare(b.startTime),
-    )[0];
   const [cursor, setCursor] = useState(
-    () => initialCoordinatorMatch
-      ? new Date(`${initialCoordinatorMatch.date}T12:00:00`)
-      : new Date(today.getFullYear(), today.getMonth(), 1),
+    () => new Date(today.getFullYear(), today.getMonth(), 1),
   );
-  const [selectedDate, setSelectedDate] = useState(() =>
-    initialCoordinatorMatch?.date || todayIso,
-  );
-  const [draft, setDraft] = useState<AgendaEvent | null>(() =>
-    initialCoordinatorMatch ? { ...initialCoordinatorMatch } : null,
-  );
+  const [selectedDate, setSelectedDate] = useState(todayIso);
+  const [draft, setDraft] = useState<AgendaEvent | null>(null);
   const [trainingView, setTrainingView] = useState<"summary" | "planner">("planner");
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [exercisePreview, setExercisePreview] = useState<{
@@ -579,7 +561,7 @@ export function AgendaView({
             <span className="eyebrow">DÍA SELECCIONADO</span>
             <h2>{new Intl.DateTimeFormat("es-ES", { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${selectedDate}T12:00:00`))}</h2>
           </div>
-          {draft && (
+          {draft && !(draft.type === "match" && draft.assignedByCoordinator) && (
             <button aria-label="Cerrar formulario" onClick={() => setDraft(null)}>
               <X size={18} />
             </button>
