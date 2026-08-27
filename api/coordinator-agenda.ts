@@ -10,6 +10,7 @@ interface MatchInput {
   date?: string;
   startTime?: string;
   notes?: string;
+  playInWhite?: boolean;
   matchType?: string;
   home?: boolean;
   rivalId?: string;
@@ -47,6 +48,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         date: match.date,
         startTime: match.startTime,
         notes: String(match.notes || '').trim().slice(0, 500),
+        playInWhite: match.playInWhite === true,
         matchType: match.matchType,
         home: match.home,
         rivalId: match.rivalId,

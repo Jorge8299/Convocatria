@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { neon } from '@neondatabase/serverless';
 
 export type ClubRole = 'entrenador' | 'coordinador' | 'admin' | 'superadmin';
-export type FootballStage = 'prebenjamin' | 'benjamin' | 'alevin';
+export type FootballStage = 'querubin' | 'prebenjamin' | 'benjamin' | 'alevin';
 export type TrainingYear = 'primero' | 'segundo' | 'mixto';
 export interface AccountRow { id: string; name: string; role: ClubRole; teamLabel: string; footballStage: FootballStage | null; trainingYear: TrainingYear | null; pinHash: string; active: boolean; createdAt: string }
 export interface PublicAccount { id: string; name: string; role: ClubRole; teamLabel: string; footballStage: FootballStage | null; trainingYear: TrainingYear | null; active: boolean; createdAt: string }

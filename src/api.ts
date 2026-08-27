@@ -5,6 +5,7 @@ export interface CoordinatorMatchInput {
   date: string;
   startTime: string;
   notes: string;
+  playInWhite: boolean;
   matchType: "liga" | "amistoso" | "torneo";
   home: boolean;
   rivalId: string;

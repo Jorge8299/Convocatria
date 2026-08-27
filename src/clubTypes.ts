@@ -1,5 +1,5 @@
 export type ClubRole = 'entrenador' | 'coordinador' | 'admin' | 'superadmin';
-export type FootballStage = 'prebenjamin' | 'benjamin' | 'alevin';
+export type FootballStage = 'querubin' | 'prebenjamin' | 'benjamin' | 'alevin';
 export type TrainingYear = 'primero' | 'segundo' | 'mixto';
 
 export interface ClubAccount {

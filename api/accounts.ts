@@ -1,6 +1,6 @@
 import { ApiRequest, ApiResponse, ClubRole, fail, FootballStage, getSession, getSql, hashPin, jsonBody, mapAccount, methodNotAllowed, publicAccount, TrainingYear } from './_lib/server.js';
 
-const footballStages: FootballStage[] = ['prebenjamin', 'benjamin', 'alevin'];
+const footballStages: FootballStage[] = ['querubin', 'prebenjamin', 'benjamin', 'alevin'];
 const trainingYears: TrainingYear[] = ['primero', 'segundo', 'mixto'];
 type ManagedRole = 'entrenador' | 'coordinador' | 'admin';
 

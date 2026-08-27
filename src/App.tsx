@@ -5,7 +5,7 @@ import {
   Copy, Home, MapPin, Maximize2, PencilRuler, Plane, Plus,
   Save, Send, Settings2, Trash2, Users, X, Archive, UserPlus, Star, Share2, ArrowLeft, LogOut, Search,
 } from 'lucide-react';
-import { ClubAccount } from './clubTypes';
+import type { ClubAccount, FootballStage, TrainingYear } from './clubTypes';
 import { clubApi, getStored, StoreArea, StoreRow } from './api';
 import { randomFootballPhrase } from './motivational';
 import { AgendaEvent, AgendaView, MatchAgendaEvent } from './AgendaView';
@@ -21,7 +21,7 @@ interface Convocatoria {
   equipoPropio: string; tipoPartido: MatchType; rivalId: string; rivalManual: string;
   esCasa: boolean; fecha: string; hora: string; campoPropio: string; campoRival: string;
   campoManual: string; citaciones: Citacion[]; partidosTorneo: TournamentMatch[];
-  observaciones: string; addCierre: boolean; addCorazon: boolean;
+  observaciones: string; playInWhite: boolean; addCierre: boolean; addCorazon: boolean;
 }
 interface SavedJourney { id: string; createdAt: string; data: Convocatoria; message: string }
 interface Player { id: string; name: string; number: string; role: 'jugador' | 'portero'; group: 'plantilla' | 'b'; active: boolean; ownerCoachId?: string; sourceCoachName?: string; sourceTeamLabel?: string }
@@ -37,11 +37,13 @@ const cloneData = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 const TEAM_NAME = 'U.D. OLIVA';
 const CREST_PATH = '/escudo-ud-oliva.jpg';
 const DEFAULT_TEAM: TeamData = { name: TEAM_NAME, season: '2026/27', players: [] };
+const FOOTBALL_STAGE_LABEL: Record<FootballStage, string> = { querubin: 'Querubín', prebenjamin: 'Prebenjamín', benjamin: 'Benjamín', alevin: 'Alevín' };
+const TRAINING_YEAR_LABEL: Record<TrainingYear, string> = { primero: 'Primer año', segundo: 'Segundo año', mixto: 'Primer y segundo año' };
 const makeInitialForm = (): Convocatoria => ({
   equipoPropio: 'U.D. OLIVA', tipoPartido: 'liga', rivalId: '', rivalManual: '', esCasa: true,
   fecha: '', hora: '', campoPropio: '', campoRival: '', campoManual: '',
   citaciones: [{ id: uid(), hora: '', lugar: '', lugarPersonalizado: '' }],
-  partidosTorneo: [{ id: uid(), rival: '', hora: '' }], observaciones: '', addCierre: true, addCorazon: true,
+  partidosTorneo: [{ id: uid(), rival: '', hora: '' }], observaciones: '', playInWhite: false, addCierre: true, addCorazon: true,
 });
 const formatDate = (value: string) => value
   ? new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00`))
@@ -118,6 +120,7 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
     }
     text += '\n'; form.citaciones.forEach((c, i) => { const place = c.lugar === 'Otro' ? c.lugarPersonalizado : c.lugar; text += `📍 *Citación ${i + 1}:* ${c.hora || '...'} en ${place || '...'}\n` });
     text += '\nTodos los niños deben venir con ropa de bonito y deportivas.\nSe ruega máxima puntualidad.\nSi alguien no puede venir, que avise por privado.\n';
+    if (form.playInWhite) text += '\n⚠️ *IMPORTANTE: JUGAMOS DE BLANCO*\n';
     if (form.observaciones) text += `\n📝 *Observaciones:* ${form.observaciones}\n`;
     if (form.addCierre || form.addCorazon) text += `\n${form.addCierre ? '¡Vamos equipo!' : ''}${form.addCorazon ? ' 💙' : ''}`;
     return text;
@@ -157,6 +160,7 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
           ? [{ id: uid(), rival: event.rivalName, hora: event.startTime }]
           : initial.partidosTorneo,
       observaciones: event.notes,
+      playInWhite: event.playInWhite === true,
     });
     goToView('convocatoria');
   };
@@ -207,7 +211,7 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
       </header>
       <AnimatePresence mode="wait"><motion.div key={`${view}-${boardMode || ''}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: .18 }}>
         {view === 'inicio' && <HomeView phrase={phrase} onAgenda={() => goToView('agenda')} onTeam={() => goToView('equipo')} onNew={startNew} onSaved={() => goToView('guardados')} />}
-        {view === 'agenda' && <AgendaView events={agendaEvents} rivals={rivales} matches={stats} footballStage={account.footballStage} categoryLabel={`${account.footballStage ? `${account.footballStage.charAt(0).toUpperCase()}${account.footballStage.slice(1)}` : 'Categoría pendiente'}${account.trainingYear ? ` · ${account.trainingYear} año` : ''}`} defaultPlayerCount={team.players.filter((player) => player.active).length} onChange={setAgendaEvents} onAcknowledge={acknowledgeCoordinatorMatch} onOpenCallup={openAgendaCallup} onOpenBoard={openAgendaBoard} onOpenStats={(event) => { const completed = stats.some((match) => match.date === event.date && match.rival === event.rivalName && match.home === event.home); if (completed) { setSavedTab('estadisticas'); goToView('guardados') } else { setSelectedAgendaMatch(event); goToView('estadisticas') } }} />}
+        {view === 'agenda' && <AgendaView events={agendaEvents} rivals={rivales} matches={stats} footballStage={account.footballStage} categoryLabel={`${account.footballStage ? FOOTBALL_STAGE_LABEL[account.footballStage] : 'Categoría pendiente'}${account.trainingYear ? ` · ${TRAINING_YEAR_LABEL[account.trainingYear]}` : ''}`} defaultPlayerCount={team.players.filter((player) => player.active).length} onChange={setAgendaEvents} onAcknowledge={acknowledgeCoordinatorMatch} onOpenCallup={openAgendaCallup} onOpenBoard={openAgendaBoard} onOpenStats={(event) => { const completed = stats.some((match) => match.date === event.date && match.rival === event.rivalName && match.home === event.home); if (completed) { setSavedTab('estadisticas'); goToView('guardados') } else { setSelectedAgendaMatch(event); goToView('estadisticas') } }} />}
         {view === 'equipo' && <TeamView team={team} setTeam={setTeam} account={account} accounts={accounts} stores={stores} onPlayer={(id) => { setSelectedPlayerId(id); goToView('jugador') }} />}
         {view === 'convocatoria' && <ConvocatoriaView form={form} setForm={setForm} rivales={rivales} rivalName={rivalName} fieldName={fieldName} message={message} copySuccess={copySuccess} onCopy={copyMessage} onWhatsApp={() => open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank')} onSave={saveJourney} onMatchTime={updateTime} onHomeAway={updateHome} />}
         {view === 'pizarra' && <BoardView mode={boardMode} expanded={boardExpanded} accountId={account.id} boards={boards} team={team} matchContext={agendaBoardMatch} onChoose={setBoardMode} onBack={() => { setBoardExpanded(false); if (agendaBoardMatch) { setAgendaBoardMatch(null); setBoardMode(null); goToView('agenda') } else setBoardMode(null) }} />}
@@ -370,7 +374,7 @@ function ConvocatoriaView({ form, setForm, rivales, rivalName, fieldName, messag
     </FormCard>
     {form.tipoPartido === 'torneo' && <FormCard title="Partidos del torneo" step="2" action={<button className="text-button" onClick={() => setForm((f) => ({ ...f, partidosTorneo: [...f.partidosTorneo, { id: uid(), rival: '', hora: '' }] }))}><Plus size={16} /> Añadir</button>}>{form.partidosTorneo.map((m) => <div className="inline-row" key={m.id}><input type="time" value={m.hora} onChange={(e) => setForm((f) => ({ ...f, partidosTorneo: f.partidosTorneo.map((x) => x.id === m.id ? { ...x, hora: e.target.value } : x) }))} /><input value={m.rival} placeholder="Rival" onChange={(e) => setForm((f) => ({ ...f, partidosTorneo: f.partidosTorneo.map((x) => x.id === m.id ? { ...x, rival: e.target.value } : x) }))} /></div>)}</FormCard>}
     <FormCard title="Citación" step={form.tipoPartido === 'torneo' ? '3' : '2'} action={<button className="text-button" onClick={() => setForm((f) => ({ ...f, citaciones: [...f.citaciones, { id: uid(), hora: '', lugar: '', lugarPersonalizado: '' }] }))}><Plus size={16} /> Añadir</button>}>{form.citaciones.map((c, i) => <div className="citation" key={c.id}><div className="citation-number">{i + 1}</div><div className="field-grid"><Field label="Hora"><input type="time" value={c.hora} onChange={(e) => updateCitation(c.id, 'hora', e.target.value)} /></Field><Field label="Lugar"><div className="select-wrap"><select value={c.lugar} onChange={(e) => updateCitation(c.id, 'lugar', e.target.value)}><option value="">Selecciona</option>{LUGARES_CITACION.map((x) => <option key={x}>{x}</option>)}<option value="Otro">Otro lugar</option></select><ChevronDown size={17} /></div></Field></div>{c.lugar === 'Otro' && <input value={c.lugarPersonalizado} onChange={(e) => updateCitation(c.id, 'lugarPersonalizado', e.target.value)} placeholder="Escribe el lugar" />}{form.citaciones.length > 1 && <button className="remove-button" onClick={() => setForm((f) => ({ ...f, citaciones: f.citaciones.filter((x) => x.id !== c.id) }))}><X size={16} /></button>}</div>)}</FormCard>
-    <FormCard title="Detalles finales" step={form.tipoPartido === 'torneo' ? '4' : '3'}><Field label="Observaciones"><textarea rows={3} value={form.observaciones} onChange={(e) => setForm((f) => ({ ...f, observaciones: e.target.value }))} placeholder="Equipación, documentación, indicaciones…" /></Field><div className="switch-row"><label><input type="checkbox" checked={form.addCierre} onChange={(e) => setForm((f) => ({ ...f, addCierre: e.target.checked }))} /><span />Añadir “¡Vamos equipo!”</label><label><input type="checkbox" checked={form.addCorazon} onChange={(e) => setForm((f) => ({ ...f, addCorazon: e.target.checked }))} /><span />Añadir corazón azul</label></div></FormCard>
+    <FormCard title="Detalles finales" step={form.tipoPartido === 'torneo' ? '4' : '3'}><label className={`white-kit-toggle${form.playInWhite ? ' active' : ''}`}><input type="checkbox" checked={form.playInWhite === true} onChange={(e) => setForm((f) => ({ ...f, playInWhite: e.target.checked }))} /><span aria-hidden="true" /><strong>IMPORTANTE · JUGAMOS DE BLANCO</strong></label><Field label="Observaciones"><textarea rows={3} value={form.observaciones} onChange={(e) => setForm((f) => ({ ...f, observaciones: e.target.value }))} placeholder="Equipación, documentación, indicaciones…" /></Field><div className="switch-row"><label><input type="checkbox" checked={form.addCierre} onChange={(e) => setForm((f) => ({ ...f, addCierre: e.target.checked }))} /><span />Añadir “¡Vamos equipo!”</label><label><input type="checkbox" checked={form.addCorazon} onChange={(e) => setForm((f) => ({ ...f, addCorazon: e.target.checked }))} /><span />Añadir corazón azul</label></div></FormCard>
   </div><aside className="preview-column"><div className="match-summary"><div className="match-summary-top"><span>{form.tipoPartido.toUpperCase()}</span><small>{formatDate(form.fecha)}</small></div><div className="teams"><strong>{form.tipoPartido === 'torneo' ? form.rivalManual || 'Torneo por definir' : local}</strong>{form.tipoPartido !== 'torneo' && <><span>VS</span><strong>{visitor}</strong></>}</div><div className="match-meta"><span><Clock size={15} />{form.hora || '--:--'}</span><span><MapPin size={15} />{fieldName || 'Campo pendiente'}</span></div></div><div className="message-card"><div className="message-card-header"><span>Mensaje para el equipo</span><button onClick={onCopy}>{copySuccess ? <><Check size={16} /> Copiado</> : <><Copy size={16} /> Copiar</>}</button></div><pre>{message}</pre></div><div className="preview-actions"><button className="secondary-button" onClick={onSave}><Save size={18} /> Guardar jornada</button><button className="whatsapp-button" onClick={onWhatsApp}><Send size={18} /> Abrir WhatsApp</button></div></aside></div>;
 }
 function FormCard({ title, step, action, children }: { title: string; step: string; action?: React.ReactNode; children: React.ReactNode }) { return <section className="form-card"><div className="form-card-header"><div><span>{step}</span><h2>{title}</h2></div>{action}</div><div className="form-card-body">{children}</div></section> }

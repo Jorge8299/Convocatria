@@ -86,6 +86,7 @@ export interface MatchAgendaEvent extends AgendaEventBase {
   rivalId: string;
   rivalName: string;
   field: string;
+  playInWhite?: boolean;
   assignedByCoordinator?: boolean;
   assignedByName?: string;
   assignedAt?: string;
@@ -270,6 +271,7 @@ const emptyMatch = (date: string): MatchAgendaEvent => ({
   rivalId: "",
   rivalName: "",
   field: "",
+  playInWhite: false,
 });
 
 const trainingExerciseCount = (event: TrainingAgendaEvent) =>
@@ -452,7 +454,7 @@ export function AgendaView({
     (!trainingSession.gameMoment || (OBJECTIVES[trainingSession.gameMoment] || []).includes(exercise.objective)) &&
     (!trainingSession.objective || exercise.objective === trainingSession.objective) &&
     (!trainingSession.taskType || exercise.taskType === trainingSession.taskType) &&
-    (!footballStage || exercise.stages.includes(footballStage)) &&
+    (!footballStage || exercise.stages.includes(footballStage === "querubin" ? "prebenjamin" : footballStage)) &&
     exercise.materials.every((material) => trainingSession.materials.includes(material)),
   ).sort((first, second) => exercisePlayerDistance(first, trainingSession.playerCount) - exercisePlayerDistance(second, trainingSession.playerCount)) : [];
   const plannedExercise = (exercise: Exercise): PlannedExercise => ({
@@ -648,6 +650,9 @@ export function AgendaView({
                       {event.type === "match" && event.assignedByCoordinator && (
                         <span className="coordinator-origin"><ShieldCheck size={12} /> Coordinación</span>
                       )}
+                      {event.type === "match" && event.playInWhite && (
+                        <span className="white-kit-badge">JUGAMOS DE BLANCO</span>
+                      )}
                       <strong>
                         {event.type === "training" ? "Entrenamiento" : event.rivalName || "Partido"}
                       </strong>
@@ -824,6 +829,7 @@ export function AgendaView({
               <div><span>Condición</span><strong>{draft.home ? "En casa" : "A domicilio"}</strong></div>
               <div><span>Campo</span><strong>{draft.field}</strong></div>
             </div>
+            {draft.playInWhite && <div className="white-kit-notice">⚠️ IMPORTANTE · JUGAMOS DE BLANCO</div>}
             {draft.notes && <p className="assigned-match-notes">{draft.notes}</p>}
             {!draft.acknowledgedAt ? (
               <button className="assigned-match-acknowledge" disabled={acknowledgingId === draft.id} onClick={() => void acknowledgeMatch(draft)}>
@@ -857,6 +863,11 @@ export function AgendaView({
             ) : (
               <label><span>Campo del rival</span><input value={draft.field} onChange={(event) => setDraft({ ...draft, field: event.target.value })} placeholder="Se completa desde el rival" /></label>
             )}
+            <label className={`white-kit-toggle${draft.playInWhite ? " active" : ""}`}>
+              <input type="checkbox" checked={draft.playInWhite === true} onChange={(event) => setDraft({ ...draft, playInWhite: event.target.checked })} />
+              <span aria-hidden="true" />
+              <strong>IMPORTANTE · JUGAMOS DE BLANCO</strong>
+            </label>
             <label><span>Observaciones</span><textarea rows={2} value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="Opcional" /></label>
             <div className="agenda-linked-actions">
               <button type="button" onClick={() => onOpenCallup(draft)}><ClipboardList size={17} /> Ir a convocatoria</button>

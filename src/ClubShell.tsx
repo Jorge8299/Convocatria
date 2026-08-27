@@ -57,14 +57,16 @@ const trainingYearLabel: Record<TrainingYear, string> = {
   mixto: "Primer y segundo año",
 };
 const footballStageLabel: Record<FootballStage, string> = {
+  querubin: "Querubín",
   prebenjamin: "Prebenjamín",
   benjamin: "Benjamín",
   alevin: "Alevín",
 };
 const footballStageAgeOrder: Record<FootballStage, number> = {
-  prebenjamin: 0,
-  benjamin: 1,
-  alevin: 2,
+  querubin: 0,
+  prebenjamin: 1,
+  benjamin: 2,
+  alevin: 3,
 };
 const trainingYearAgeOrder: Record<TrainingYear, number> = {
   primero: 0,
@@ -148,6 +150,7 @@ const emptyCoordinatorMatch = (date: string): CoordinatorMatchInput => ({
   date,
   startTime: "18:00",
   notes: "",
+  playInWhite: false,
   matchType: "liga",
   home: true,
   rivalId: "",
@@ -932,6 +935,7 @@ function AdminPanel({
                   }
                 >
                   <option value="">Etapa formativa</option>
+                  <option value="querubin">Querubín</option>
                   <option value="prebenjamin">Prebenjamín</option>
                   <option value="benjamin">Benjamín</option>
                   <option value="alevin">Alevín</option>
@@ -1403,6 +1407,7 @@ function AdminPanel({
                             }
                           >
                             <option value="">Etapa formativa</option>
+                            <option value="querubin">Querubín</option>
                             <option value="prebenjamin">Prebenjamín</option>
                             <option value="benjamin">Benjamín</option>
                             <option value="alevin">Alevín</option>
@@ -1967,6 +1972,11 @@ function CoordinatorPanel({
                 )}
               </div>
               {!selectedCoachData.rivals.length && <p className="coordinator-no-rivals">Este equipo todavía no tiene rivales guardados.</p>}
+              <label className={`white-kit-toggle${matchDraft.playInWhite ? " active" : ""}`}>
+                <input type="checkbox" checked={matchDraft.playInWhite} onChange={(event) => setMatchDraft((current) => ({ ...current, playInWhite: event.target.checked }))} />
+                <span aria-hidden="true" />
+                <strong>IMPORTANTE · JUGAMOS DE BLANCO</strong>
+              </label>
               <label className="coordinator-match-notes"><span>Observaciones</span><textarea rows={2} value={matchDraft.notes} onChange={(event) => setMatchDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Opcional" /></label>
               <footer>
                 <button type="button" className="secondary-button" onClick={() => setShowMatchCreator(false)}>Cancelar</button>
