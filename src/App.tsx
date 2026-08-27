@@ -84,11 +84,6 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
   const [stats, setStats] = useState<MatchStat[]>(() => getStored(stores, account.id, 'stats', []));
   const [boards, setBoards] = useState<BoardState>(() => getStored(stores, account.id, 'boards', {lineups:[]}));
   const [agendaEvents, setAgendaEvents] = useState<AgendaEvent[]>(() => getStored(stores, account.id, 'agenda', []));
-  const acknowledgeCoordinatorMatch = async (eventId: string) => {
-    const result = await clubApi.acknowledgeCoordinatorMatch(eventId);
-    setAgendaEvents((current) => current.map((event) => event.id === eventId && event.type === 'match' ? { ...event, acknowledgedAt: result.acknowledgedAt } : event));
-    return result.acknowledgedAt;
-  };
   const saveTimer = React.useRef<Record<string,ReturnType<typeof setTimeout>>>({});
   const queueSave = (area:StoreArea,data:unknown) => { clearTimeout(saveTimer.current[area]); saveTimer.current[area]=setTimeout(()=>void onDataChange(area,data),450) };
   useEffect(() => queueSave('rivals',rivales), [rivales]);
@@ -214,7 +209,7 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
       </header>
       <AnimatePresence mode="wait"><motion.div key={`${view}-${boardMode || ''}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: .18 }}>
         {view === 'inicio' && <HomeView phrase={phrase} onAgenda={() => goToView('agenda')} onTeam={() => goToView('equipo')} onNew={startNew} onSaved={() => goToView('guardados')} />}
-        {view === 'agenda' && <AgendaView events={agendaEvents} rivals={rivales} matches={stats} footballStage={account.footballStage} categoryLabel={`${account.footballStage ? FOOTBALL_STAGE_LABEL[account.footballStage] : 'Categoría pendiente'}${account.trainingYear ? ` · ${TRAINING_YEAR_LABEL[account.trainingYear]}` : ''}`} defaultPlayerCount={team.players.filter((player) => player.active).length} onChange={setAgendaEvents} onAcknowledge={acknowledgeCoordinatorMatch} onOpenCallup={openAgendaCallup} onOpenBoard={openAgendaBoard} onOpenStats={(event) => { const completed = stats.some((match) => match.date === event.date && match.rival === event.rivalName && match.home === event.home); if (completed) { setSavedTab('estadisticas'); goToView('guardados') } else { setSelectedAgendaMatch(event); goToView('estadisticas') } }} />}
+        {view === 'agenda' && <AgendaView events={agendaEvents} rivals={rivales} matches={stats} footballStage={account.footballStage} categoryLabel={`${account.footballStage ? FOOTBALL_STAGE_LABEL[account.footballStage] : 'Categoría pendiente'}${account.trainingYear ? ` · ${TRAINING_YEAR_LABEL[account.trainingYear]}` : ''}`} defaultPlayerCount={team.players.filter((player) => player.active).length} onChange={setAgendaEvents} onOpenCallup={openAgendaCallup} onOpenBoard={openAgendaBoard} onOpenStats={(event) => { const completed = stats.some((match) => match.date === event.date && match.rival === event.rivalName && match.home === event.home); if (completed) { setSavedTab('estadisticas'); goToView('guardados') } else { setSelectedAgendaMatch(event); goToView('estadisticas') } }} />}
         {view === 'equipo' && <TeamView team={team} setTeam={setTeam} account={account} accounts={accounts} stores={stores} onPlayer={(id) => { setSelectedPlayerId(id); goToView('jugador') }} />}
         {view === 'convocatoria' && <ConvocatoriaView form={form} setForm={setForm} rivales={rivales} rivalName={rivalName} fieldName={fieldName} message={message} copySuccess={copySuccess} onCopy={copyMessage} onWhatsApp={() => open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank')} onSave={saveJourney} onMatchTime={updateTime} onHomeAway={updateHome} />}
         {view === 'pizarra' && <BoardView mode={boardMode} expanded={boardExpanded} accountId={account.id} boards={boards} team={team} matchContext={agendaBoardMatch} onChoose={setBoardMode} onBack={() => { setBoardExpanded(false); if (agendaBoardMatch) { setAgendaBoardMatch(null); setBoardMode(null); goToView('agenda') } else setBoardMode(null) }} />}

@@ -4,7 +4,6 @@ import { TrainingBoard, type TrainingBoardAction, type TrainingBoardPiece } from
 import { downloadTrainingPdf } from "./trainingPdf";
 import {
   BarChart3,
-  BellRing,
   BookOpen,
   Check,
   ChevronLeft,
@@ -20,7 +19,6 @@ import {
   Plus,
   Save,
   ShieldCheck,
-  Sparkles,
   SlidersHorizontal,
   Trophy,
   Trash2,
@@ -106,16 +104,6 @@ interface MatchSummary {
 }
 
 const HOME_FIELDS = ["El Morer", "Campo C", "Polideportivo"];
-const countdownLabel = (date: string) => {
-  const today = new Date();
-  const todayAtNoon = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12);
-  const target = new Date(`${date}T12:00:00`);
-  const days = Math.round((target.getTime() - todayAtNoon.getTime()) / 86400000);
-  if (days === 0) return "Hoy";
-  if (days === 1) return "Mañana";
-  if (days > 1) return `En ${days} días`;
-  return "Partido pasado";
-};
 const weekDays = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const monthFormatter = new Intl.DateTimeFormat("es-ES", {
   month: "long",
@@ -288,7 +276,6 @@ export function AgendaView({
   onOpenBoard,
   onOpenStats,
   onOpenCallup,
-  onAcknowledge,
   categoryLabel,
   footballStage,
   defaultPlayerCount,
@@ -300,22 +287,37 @@ export function AgendaView({
   onOpenBoard: (event: MatchAgendaEvent) => void;
   onOpenStats: (event: MatchAgendaEvent) => void;
   onOpenCallup: (event: MatchAgendaEvent) => void;
-  onAcknowledge: (eventId: string) => Promise<string>;
   categoryLabel: string;
   footballStage: FootballStage | null;
   defaultPlayerCount: number;
 }) {
   const today = new Date();
+  const todayIso = isoDate(today.getFullYear(), today.getMonth(), today.getDate());
+  const initialCoordinatorMatch = events
+    .filter(
+      (event): event is MatchAgendaEvent =>
+        event.type === "match" &&
+        event.assignedByCoordinator === true &&
+        event.date >= todayIso,
+    )
+    .sort(
+      (a, b) =>
+        a.date.localeCompare(b.date) ||
+        a.startTime.localeCompare(b.startTime),
+    )[0];
   const [cursor, setCursor] = useState(
-    () => new Date(today.getFullYear(), today.getMonth(), 1),
+    () => initialCoordinatorMatch
+      ? new Date(`${initialCoordinatorMatch.date}T12:00:00`)
+      : new Date(today.getFullYear(), today.getMonth(), 1),
   );
   const [selectedDate, setSelectedDate] = useState(() =>
-    isoDate(today.getFullYear(), today.getMonth(), today.getDate()),
+    initialCoordinatorMatch?.date || todayIso,
   );
-  const [draft, setDraft] = useState<AgendaEvent | null>(null);
+  const [draft, setDraft] = useState<AgendaEvent | null>(() =>
+    initialCoordinatorMatch ? { ...initialCoordinatorMatch } : null,
+  );
   const [trainingView, setTrainingView] = useState<"summary" | "planner">("planner");
   const [downloadingPdf, setDownloadingPdf] = useState(false);
-  const [acknowledgingId, setAcknowledgingId] = useState<string | null>(null);
   const [exercisePreview, setExercisePreview] = useState<{
     exercise: PlannedExercise;
     blockId?: TrainingBlock["id"];
@@ -355,37 +357,6 @@ export function AgendaView({
     return grouped;
   }, [events]);
   const selectedEvents = eventsByDate.get(selectedDate) || [];
-  const unreadCoordinatorMatches = events
-    .filter(
-      (event): event is MatchAgendaEvent =>
-        event.type === "match" &&
-        event.assignedByCoordinator === true &&
-        !event.acknowledgedAt,
-    )
-    .sort(
-      (a, b) =>
-        a.date.localeCompare(b.date) ||
-        a.startTime.localeCompare(b.startTime),
-    );
-  const nextCoordinatorMatch = unreadCoordinatorMatches[0];
-  const focusCoordinatorMatch = (event: MatchAgendaEvent) => {
-    const date = new Date(`${event.date}T12:00:00`);
-    setCursor(new Date(date.getFullYear(), date.getMonth(), 1));
-    setSelectedDate(event.date);
-    setDraft({ ...event });
-  };
-  const acknowledgeMatch = async (event: MatchAgendaEvent) => {
-    setAcknowledgingId(event.id);
-    try {
-      const acknowledgedAt = await onAcknowledge(event.id);
-      setDraft((current) =>
-        current?.id === event.id ? { ...current, acknowledgedAt } : current,
-      );
-    } finally {
-      setAcknowledgingId(null);
-    }
-  };
-
   const saveDraft = () => {
     if (!draft) return;
     if (draft.type === "match" && (!draft.rivalName.trim() || !draft.startTime))
@@ -528,27 +499,6 @@ export function AgendaView({
 
   return (
     <div className={`agenda-layout${draft?.type === "training" ? " training-workspace-open" : ""}`}>
-      {nextCoordinatorMatch && (
-        <section className="coordinator-match-alert" role="status">
-          <span className="coordinator-match-alert-icon"><BellRing size={24} /></span>
-          <div>
-            <span><Sparkles size={13} /> NUEVO DESDE COORDINACIÓN</span>
-            <strong>{nextCoordinatorMatch.rivalName}</strong>
-            <small>
-              {new Intl.DateTimeFormat("es-ES", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-              }).format(new Date(`${nextCoordinatorMatch.date}T12:00:00`))}
-              {` · ${nextCoordinatorMatch.startTime} · ${nextCoordinatorMatch.field}`}
-            </small>
-            <b className="coordinator-match-countdown">{countdownLabel(nextCoordinatorMatch.date)}</b>
-          </div>
-          <button type="button" onClick={() => focusCoordinatorMatch(nextCoordinatorMatch)}>
-            Ver partido
-          </button>
-        </section>
-      )}
       <section className="agenda-calendar">
         <div className="agenda-toolbar">
           <button
@@ -588,11 +538,14 @@ export function AgendaView({
                 className={[
                   cell.date === selectedDate ? "selected" : "",
                   (eventsByDate.get(cell.date) || []).some((event) => event.type === "match" && event.assignedByCoordinator) ? "coordinator-assigned-day" : "",
-                  (eventsByDate.get(cell.date) || []).some((event) => event.type === "match" && event.assignedByCoordinator && !event.acknowledgedAt) ? "unread" : "",
                 ].filter(Boolean).join(" ")}
                 onClick={() => {
+                  const assignedMatch = (eventsByDate.get(cell.date) || []).find(
+                    (event): event is MatchAgendaEvent =>
+                      event.type === "match" && event.assignedByCoordinator === true,
+                  );
                   setSelectedDate(cell.date);
-                  setDraft(null);
+                  setDraft(assignedMatch ? { ...assignedMatch } : null);
                   setExercisePreview(null);
                 }}
               >
@@ -612,9 +565,6 @@ export function AgendaView({
                       </small>
                     ))}
                 </div>
-                {(eventsByDate.get(cell.date) || []).some((event) => event.type === "match" && event.assignedByCoordinator && !event.acknowledgedAt) && (
-                  <b className="agenda-new-badge">NUEVO</b>
-                )}
               </button>
             ) : (
               <span className="agenda-empty-cell" key={`empty-${index}`} />
@@ -640,7 +590,7 @@ export function AgendaView({
           <>
             <div className="agenda-event-list">
               {selectedEvents.map((event) => (
-                <article className={`${event.type}${event.type === "match" && event.assignedByCoordinator ? ` coordinator-assigned${event.acknowledgedAt ? " acknowledged" : " unread"}` : ""}`} key={event.id}>
+                <article className={`${event.type}${event.type === "match" && event.assignedByCoordinator ? " coordinator-assigned" : ""}`} key={event.id}>
                   <button className="agenda-event-main" onClick={() => event.type === "training" ? openTraining(event) : setDraft({ ...event })}>
                     <span className="agenda-event-icon" aria-hidden="true">
                       {event.type === "training" ? <Dumbbell size={22} /> : <Trophy size={22} />}
@@ -836,17 +786,10 @@ export function AgendaView({
                 {draft.notes && <p className="assigned-match-notes">{draft.notes}</p>}
               </div>
             )}
-            {!draft.acknowledgedAt ? (
-              <button className="assigned-match-acknowledge" disabled={acknowledgingId === draft.id} onClick={() => void acknowledgeMatch(draft)}>
-                <Check size={17} /> {acknowledgingId === draft.id ? "Confirmando…" : "Confirmar que lo he visto"}
-              </button>
-            ) : (
-              <div className="assigned-match-confirmed"><Check size={16} /> Confirmado como visto</div>
-            )}
             <div className="agenda-linked-actions">
               <button type="button" onClick={() => onOpenCallup(draft)}><ClipboardList size={17} /> Ir a convocatoria</button>
-              <button onClick={() => onOpenBoard(draft)}><PencilRuler size={17} /> Abrir alineación</button>
               <button onClick={() => onOpenStats(draft)}><BarChart3 size={17} /> Estadísticas</button>
+              <button onClick={() => onOpenBoard(draft)}><PencilRuler size={17} /> Abrir alineación</button>
             </div>
           </div>
         )}

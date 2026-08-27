@@ -1931,14 +1931,14 @@ function CoordinatorPanel({
         </div>
         {tab === "agenda" && (
           <>
-          <section className="coordinator-match-command">
+          {!showMatchCreator && !(showTeamPicker && pendingMatchCreation) && <section className="coordinator-match-command">
             <div>
               <span><ShieldCheck size={15} /> ORGANIZACIÓN DE PARTIDOS</span>
               <strong>{selectedCoach ? `Agenda de ${selectedCoach.teamLabel}` : "Añade un partido a un equipo"}</strong>
-              <small>{selectedCoach ? "El entrenador recibirá un aviso y podrá confirmar que lo ha visto." : "Usaremos la lista de equipos para elegir el destinatario."}</small>
+              <small>{selectedCoach ? "El partido aparecerá directamente en la agenda del entrenador." : "Usaremos la lista de equipos para elegir el destinatario."}</small>
             </div>
             <button type="button" onClick={openMatchCreator}><Plus size={17} /> Añadir partido</button>
-          </section>
+          </section>}
           {matchMessage && <div className="coordinator-match-message" role="status">{matchMessage}</div>}
           {showMatchCreator && selectedCoach && selectedCoachData && (
             <section className="coordinator-match-form">
@@ -2061,7 +2061,7 @@ function CoordinatorPanel({
                       key={cell.date}
                       className={`${
                         selectedAgendaDate === cell.date ? "selected " : ""
-                      }${dayMatches.length ? "has-matches " : ""}${dayMatches.some((match) => match.assignedByCoordinator) ? "coordinator-created " : ""}${dayMatches.some((match) => match.assignedByCoordinator && !match.acknowledgedAt) ? "awaiting-confirmation" : ""}`.trim()}
+                      }${dayMatches.length ? "has-matches " : ""}${dayMatches.some((match) => match.assignedByCoordinator) ? "coordinator-created" : ""}`.trim()}
                       aria-label={`${cell.date}. ${dayMatches.length} ${
                         dayMatches.length === 1 ? "partido" : "partidos"
                       }`}
@@ -2165,12 +2165,6 @@ function CoordinatorPanel({
                           <span><Clock size={14} /> {match.startTime || "Hora pendiente"}</span>
                           <span><MapPin size={14} /> {match.field || "Campo pendiente"}</span>
                         </div>
-                        {match.assignedByCoordinator && (
-                          <div className={`coordinator-read-receipt${match.acknowledgedAt ? " seen" : ""}`}>
-                            {match.acknowledgedAt ? <Check size={14} /> : <Clock size={14} />}
-                            {match.acknowledgedAt ? "Visto por el entrenador" : "Pendiente de confirmar"}
-                          </div>
-                        )}
                         {stats && (
                           <details className="coordinator-agenda-statistics">
                             <summary>

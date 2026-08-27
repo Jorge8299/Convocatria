@@ -28,7 +28,9 @@ button.orange{background:#a15c00}
 .section-title{font-size:12px;font-weight:900;margin-bottom:5px}
 .roster{display:flex;gap:7px;overflow-x:auto;padding:4px 2px 7px;min-height:60px;scrollbar-width:thin;overscroll-behavior-x:contain;scroll-snap-type:x proximity}
 .roster::-webkit-scrollbar{height:4px}
+.guest-row{display:grid;grid-template-columns:minmax(0,1fr) 82px auto;gap:6px;margin:8px 0 4px;padding-top:8px;border-top:1px solid #e5ebf2}.guest-row button{white-space:nowrap}
 .bench-player{flex:0 0 auto;width:70px;background:#f4f7fb;border:1px solid #dce4ee;border-radius:12px;padding:5px 4px;text-align:center;position:relative;scroll-snap-align:start}.bench-player.absent{filter:grayscale(1);opacity:.55;background:#d9dde3;border-color:#aab1ba}.bench-status{width:100%;margin-top:4px;padding:4px 3px;border-radius:7px;font-size:7px}.bench-status.available{background:#dff5e8;color:#087a3b}.bench-status.absent{background:#fde5e3;color:#a52319}
+.remove-guest{position:absolute;left:3px;top:2px;z-index:6;width:18px;height:18px;padding:0;border-radius:50%;background:#b42318;font-size:12px;line-height:18px}
 .bench-kid{width:28px;height:28px;margin:0 auto 4px;border-radius:50%;display:grid;place-items:center;background:#2474e5;color:white;font-size:11px;font-weight:900;box-shadow:0 4px 10px #2474e53d}
 .head{position:absolute;width:10px;height:10px;border-radius:50%;background:#f0c7a5;left:8px;top:0;border:1px solid rgba(0,0,0,.12)}
 .hair{position:absolute;width:10px;height:5px;border-radius:8px 8px 3px 3px;background:#5b402d;left:8px;top:0}
@@ -116,6 +118,9 @@ body:not(.field-mode) #pitch,body:not(.field-mode) .formations{display:none}
 body:not(.field-mode) #benchAll,body:not(.field-mode) #benchToggle{display:none}
 body:not(.field-mode) .toolbar{margin:8px 0;display:block}
 body:not(.field-mode) #fullscreenBtn{display:block;width:100%;padding:13px 16px;font-size:14px;background:#087a3b;box-shadow:0 3px 10px rgba(8,122,59,.22)}
+body:not(.field-mode) .roster{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));overflow:visible;min-height:0;align-items:start}
+body:not(.field-mode) .bench-player{width:100%;min-height:92px;padding:7px 5px}
+@media(max-width:460px){.guest-row{grid-template-columns:minmax(0,1fr) 72px}.guest-row button{grid-column:1/-1}}
 </style>
 </head>
 <body>
@@ -188,6 +193,11 @@ body:not(.field-mode) #fullscreenBtn{display:block;width:100%;padding:13px 16px;
         <div class="status" id="attendanceSummary" style="margin:0"></div>
       </div>
       <div id="roster" class="roster"></div>
+      <div class="guest-row">
+        <input id="guestName" placeholder="Nombre del jugador B" aria-label="Nombre del jugador B">
+        <input id="guestNumber" placeholder="Dorsal" aria-label="Dorsal del jugador B" inputmode="numeric">
+        <button class="green" id="addGuest" type="button">+ Jugador B</button>
+      </div>
     </div>
 
     <div class="toolbar">
@@ -384,12 +394,17 @@ function addPlayer(){
   save();renderAll();
 }
 function putOnField(id){
-  if(field().length>=8){alert('Ya hay 8 titulares.');return}
   const p=allPlayerById(id);if(!p)return;
   if(getPlayerStatus(p.id)==='absent')return;
+  if(p.onField)return;
+
+  const currentField=field().filter(player=>player.id!==p.id);
+  const replacedGoalkeeper=p.role==='gk'?currentField.find(player=>player.role==='gk'):null;
+  const resultingCount=currentField.length-(replacedGoalkeeper?1:0)+1;
+  if(resultingCount>8){alert('Ya hay 8 titulares.');return}
 
   if(p.role==='gk'){
-    const currentGK=field().find(x=>x.role==='gk');
+    const currentGK=replacedGoalkeeper;
     if(currentGK){currentGK.onField=false;}
     p.onField=true;p.x=50;p.y=91;
   }else{
@@ -619,9 +634,13 @@ function renderBench(){
       c.className='bench-player'+(status==='absent'?' absent':'');
       c.innerHTML=`<div class="dorsal">${isGuest(p)?'B':esc(p.number)}</div>${kidMarkup(true)}
         <div class="bench-name">${p.role==='gk'?'🧤 ':''}${esc(p.name)}</div>
+        ${isGuest(p)&&!fieldMode?'<button class="remove-guest" type="button" aria-label="Quitar jugador B">×</button>':''}
         ${fieldMode?'':`<button class="bench-status ${status}" type="button">${status==='absent'?'AUSENTE':'DISPONIBLE'}</button>`}`;
       if(fieldMode) c.addEventListener('click',()=>putOnField(p.id));
-      else c.querySelector('.bench-status').addEventListener('click',()=>setPlayerStatus(p.id,status==='absent'?'available':'absent'));
+      else{
+        c.querySelector('.bench-status').addEventListener('click',()=>setPlayerStatus(p.id,status==='absent'?'available':'absent'));
+        c.querySelector('.remove-guest')?.addEventListener('click',()=>removeGuest(p.id));
+      }
       r.appendChild(c);
     });
   }
@@ -691,9 +710,10 @@ document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{
   document.getElementById('tab-'+b.dataset.tab).classList.remove('hidden');
 });
 document.getElementById('addPlayer').onclick=addPlayer;
+document.getElementById('addGuest').onclick=addGuest;
 document.getElementById('saveLineup').onclick=saveLineup;
 document.querySelectorAll('[data-form]').forEach(b=>b.onclick=()=>applyFormation(b.dataset.form));
-document.getElementById('benchAll').onclick=()=>{state.players.forEach(p=>p.onField=false);save();renderAll()};
+document.getElementById('benchAll').onclick=()=>{allJourneyPlayers().forEach(p=>p.onField=false);save();renderAll()};
 const fullscreenBtn=document.getElementById('fullscreenBtn');
 const benchToggle=document.getElementById('benchToggle');
 const pitchElement=document.getElementById('pitch');
