@@ -739,3 +739,4 @@ input,select,textarea{min-height:48px;font-size:13px;font-weight:600}textarea{li
 .quick-time-adjustments{display:flex;gap:5px}.quick-time-adjustments button{height:38px;padding:6px 10px;border:1px solid var(--ui-border);border-radius:10px;background:var(--ui-surface);color:var(--ui-primary);font-size:9px;font-weight:900}.quick-time-adjustments button:hover{border-color:var(--ui-primary);background:var(--ui-electric-soft)}
 .quick-time-input>small{grid-column:1/-1}
 @media(max-width:460px){.quick-time-input{width:100%;grid-template-columns:1fr}.quick-time-clock{justify-content:center}.quick-time-adjustments{justify-content:center}.quick-time-adjustments button{flex:1}.quick-time-input>small{grid-column:auto;text-align:center}}
+.quick-time-clock select{width:58px!important;height:38px;padding:6px 4px!important;text-align:center;border-color:#9fc3ea!important;background:var(--ui-surface)!important;color:var(--ui-primary);font-size:15px!important;font-weight:900}

@@ -144,10 +144,13 @@ const coordinatorIsoDate = (year: number, month: number, day: number) =>
 const normalizedMatchName = (value: string) =>
   value.trim().toLocaleLowerCase("es").replace(/\s+/g, " ");
 const HOME_FIELDS = ["El Morer", "Campo C", "Polideportivo"];
+const MATCH_HOURS = Array.from({ length: 24 }, (_, index) =>
+  String(index).padStart(2, "0"),
+);
 
 const emptyCoordinatorMatch = (date: string): CoordinatorMatchInput => ({
   date,
-  startTime: "18:00",
+  startTime: "09:00",
   notes: "",
   playInWhite: false,
   matchType: "liga",
@@ -165,23 +168,18 @@ function QuickTimeInput({
   onChange: (value: string) => void;
 }) {
   const [hour = "18", minute = "00"] = value.split(":");
-  const [hourDraft, setHourDraft] = useState(hour);
   const [minuteDraft, setMinuteDraft] = useState(minute);
   useEffect(() => {
-    setHourDraft(hour);
     setMinuteDraft(minute);
-  }, [hour, minute]);
-  const commitTime = () => {
-    const nextHour = Math.min(23, Math.max(0, Number(hourDraft) || 0));
+  }, [minute]);
+  const commitMinutes = () => {
     const nextMinute = Math.min(59, Math.max(0, Number(minuteDraft) || 0));
-    const normalizedHour = String(nextHour).padStart(2, "0");
     const normalizedMinute = String(nextMinute).padStart(2, "0");
-    setHourDraft(normalizedHour);
     setMinuteDraft(normalizedMinute);
-    onChange(`${normalizedHour}:${normalizedMinute}`);
+    onChange(`${MATCH_HOURS.includes(hour) ? hour : "09"}:${normalizedMinute}`);
   };
   const adjustMinutes = (amount: number) => {
-    const currentHour = Math.min(23, Math.max(0, Number(hourDraft) || 0));
+    const currentHour = Math.min(23, Math.max(0, Number(hour) || 0));
     const currentMinute = Math.min(59, Math.max(0, Number(minuteDraft) || 0));
     const currentMinutes = currentHour * 60 + currentMinute;
     const adjusted = (currentMinutes + amount + 1440) % 1440;
@@ -195,15 +193,18 @@ function QuickTimeInput({
         <Clock size={17} aria-hidden="true" />
         <label>
           <span>Hora</span>
-          <input
+          <select
             aria-label="Hora del partido"
-            inputMode="numeric"
-            maxLength={2}
-            value={hourDraft}
-            onChange={(event) => setHourDraft(event.target.value.replace(/\D/g, "").slice(0, 2))}
-            onBlur={commitTime}
-            onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
-          />
+            value={MATCH_HOURS.includes(hour) ? hour : "09"}
+            onChange={(event) => {
+              const normalizedMinute = String(
+                Math.min(59, Math.max(0, Number(minuteDraft) || 0)),
+              ).padStart(2, "0");
+              onChange(`${event.target.value}:${normalizedMinute}`);
+            }}
+          >
+            {MATCH_HOURS.map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
         </label>
         <b aria-hidden="true">:</b>
         <label>
@@ -214,7 +215,7 @@ function QuickTimeInput({
             maxLength={2}
             value={minuteDraft}
             onChange={(event) => setMinuteDraft(event.target.value.replace(/\D/g, "").slice(0, 2))}
-            onBlur={commitTime}
+            onBlur={commitMinutes}
             onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
           />
         </label>
@@ -223,7 +224,7 @@ function QuickTimeInput({
         <button type="button" onClick={() => adjustMinutes(-15)}>−15 min</button>
         <button type="button" onClick={() => adjustMinutes(15)}>+15 min</button>
       </div>
-      <small>Pulsa la hora o los minutos para escribirlos manualmente.</small>
+      <small>Elige la hora y escribe los minutos si necesitas un valor exacto.</small>
     </div>
   );
 }
