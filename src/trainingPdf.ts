@@ -1,5 +1,6 @@
 import type { TrainingBoardAction, TrainingBoardPiece } from "./TrainingBoard";
 import type { PlannedExercise, TrainingBlock, TrainingSession } from "./AgendaView";
+import { getClubCrestDataUrl, getDailyFootballPhrase } from "./pdfBranding";
 
 export interface TrainingPdfInput {
   categoryLabel: string;
@@ -50,6 +51,25 @@ const formatTrainingDate = (date: string) => {
     }).format(new Date(`${date}T12:00:00`));
   } catch {
     return date;
+  }
+};
+
+const addDays = (date: Date, days: number) => {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+};
+
+const formatTrainingWeek = (date: string) => {
+  try {
+    const trainingDate = new Date(`${date}T12:00:00`);
+    const monday = addDays(trainingDate, -((trainingDate.getDay() + 6) % 7));
+    const sunday = addDays(monday, 6);
+    const start = new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "long" }).format(monday);
+    const end = new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "long", year: "numeric" }).format(sunday);
+    return `Semana del ${start} al ${end}`;
+  } catch {
+    return `Semana de ${date}`;
   }
 };
 
@@ -153,21 +173,46 @@ function drawBoard(
 export async function buildTrainingPdf(input: TrainingPdfInput) {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+  const crestDataUrl = await getClubCrestDataUrl();
+  const dailyPhrase = getDailyFootballPhrase(input.date);
   let y = 0;
 
   const drawHeader = (continuation = false) => {
-    doc.setFillColor(...palette.navy); doc.rect(0, 0, PAGE_WIDTH, continuation ? 24 : 39, "F");
-    doc.setFillColor(...palette.blue); doc.rect(0, continuation ? 23 : 38, PAGE_WIDTH, 1, "F");
+    doc.setFillColor(...palette.navy); doc.rect(0, 0, PAGE_WIDTH, continuation ? 24 : 49, "F");
+    doc.setFillColor(...palette.green); doc.rect(0, continuation ? 23 : 48, PAGE_WIDTH, 1.1, "F");
+    doc.setFillColor(...palette.amber); doc.roundedRect(MARGIN, 9, 2, continuation ? 10 : 21, 0.8, 0.8, "F");
     doc.setTextColor(...palette.white); doc.setFont("helvetica", "bold"); doc.setFontSize(continuation ? 15 : 21);
-    doc.text(continuation ? "Plan de entrenamiento - continuacion" : "Plan de entrenamiento", MARGIN, continuation ? 11 : 16);
+    doc.text(continuation ? "Plan de entrenamiento - continuacion" : "Plan de entrenamiento", MARGIN + (continuation ? 0 : 6), continuation ? 11 : 16);
     doc.setFontSize(8); doc.setTextColor(180, 213, 248);
-    doc.text(`CONVO | ${cleanText(input.categoryLabel).toUpperCase()}`, MARGIN, continuation ? 17 : 23);
+    doc.text(`CONVO | ${cleanText(input.categoryLabel).toUpperCase()}`, MARGIN + (continuation ? 0 : 6), continuation ? 17 : 23);
     if (!continuation) {
       doc.setTextColor(221, 235, 250); doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
-      doc.text(cleanText(formatTrainingDate(input.date)), MARGIN, 31);
-      doc.text(`${input.startTime || "--:--"} - ${input.endTime || "--:--"}`, PAGE_WIDTH - MARGIN, 31, { align: "right" });
+      doc.text(cleanText(formatTrainingDate(input.date)), MARGIN + 6, 31);
+      doc.setFontSize(7.5);
+      doc.setTextColor(186, 219, 207);
+      doc.text(cleanText(formatTrainingWeek(input.date)), MARGIN + 6, 38);
+      doc.setFillColor(...palette.white);
+      doc.roundedRect(107, 9, 57, 25, 3, 3, "F");
+      doc.setTextColor(...palette.green);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(5.8);
+      doc.text("FRASE DEL DIA", 111, 14);
+      doc.setTextColor(...palette.ink);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      const phraseLines = doc.splitTextToSize(cleanText(dailyPhrase), 49) as string[];
+      doc.text(phraseLines.slice(0, 3), 111, 19);
+      if (crestDataUrl) {
+        doc.setFillColor(...palette.white);
+        doc.roundedRect(174, 8.5, 22, 22, 3, 3, "F");
+        doc.addImage(crestDataUrl, "JPEG", 176, 10.5, 18, 18);
+      }
+      doc.setTextColor(...palette.white);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text(`${input.startTime || "--:--"} - ${input.endTime || "--:--"}`, PAGE_WIDTH - MARGIN, 41, { align: "right" });
     }
-    y = continuation ? 31 : 47;
+    y = continuation ? 31 : 57;
   };
 
   const ensureSpace = (height: number) => { if (y + height > BOTTOM_LIMIT) { doc.addPage(); drawHeader(true); } };

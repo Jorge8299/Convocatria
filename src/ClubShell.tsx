@@ -45,6 +45,7 @@ import {
 } from "./api";
 import { randomFootballPhrase } from "./motivational";
 import { CoordinatorTrainingPlanner } from "./CoordinatorTrainingPlanner";
+import { drawMagicPdfHeader, getClubCrestDataUrl, getDailyFootballPhrase, pdfBrand } from "./pdfBranding";
 
 const LAST_ACCOUNT_KEY = "convo_club_last_account_v1";
 const roleLabel: Record<ClubRole, string> = {
@@ -1916,11 +1917,11 @@ function CoordinatorPanel({
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4", compress: true });
       const pageWidth = 297;
       const margin = 7;
-      const tableTop = 32;
+      const tableTop = 38;
       const footerY = 203;
-      const headerHeight = 8.5;
+      const headerHeight = 9;
       const rowHeight = Math.max(4.8, Math.min(10.5, (footerY - tableTop - headerHeight - 4) / rows.length));
-      const fontSize = rowHeight < 6 ? 4.4 : rowHeight < 8 ? 5.2 : 6.2;
+      const fontSize = rowHeight < 6 ? 4.6 : rowHeight < 8 ? 5.5 : 6.4;
       const columns = [
         { label: "EQUIPO", width: 42 },
         { label: "VS", width: 49 },
@@ -1958,25 +1959,26 @@ function CoordinatorPanel({
       };
       const monthTitle = coordinatorMonthFormatter.format(agendaCursor).toUpperCase();
 
-      doc.setFillColor(255, 255, 255);
-      doc.rect(0, 0, pageWidth, 210, "F");
-      doc.setTextColor(10, 18, 28);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.text(`HORARIOS ${monthTitle}`, pageWidth / 2, 12, { align: "center" });
-      doc.setFontSize(9);
-      doc.text(selectedCoach?.teamLabel.toUpperCase() || "UD OLIVA", pageWidth / 2, 18, { align: "center" });
+      drawMagicPdfHeader(doc, {
+        title: "Cuadrante de partidos",
+        period: `Mes de ${monthTitle}`,
+        scope: selectedCoach?.teamLabel || "Todo el club",
+        phrase: getDailyFootballPhrase(monthStart),
+        crestDataUrl: await getClubCrestDataUrl(),
+        width: pageWidth,
+        margin,
+      });
 
       let x = margin;
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.35);
+      doc.setDrawColor(...pdfBrand.border);
+      doc.setLineWidth(0.3);
       columns.forEach((column) => {
-        doc.setFillColor(255, 255, 255);
-        doc.rect(x, tableTop, column.width, headerHeight, "S");
-        doc.setTextColor(0, 0, 0);
+        doc.setFillColor(225, 241, 251);
+        doc.rect(x, tableTop, column.width, headerHeight, "FD");
+        doc.setTextColor(...pdfBrand.ink);
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(column.width < 20 ? 5.2 : 8.4);
-        doc.text(column.label, x + column.width / 2, tableTop + 5.7, { align: "center" });
+        doc.setFontSize(column.width < 20 ? 5.7 : 8.2);
+        doc.text(column.label, x + column.width / 2, tableTop + 6.1, { align: "center" });
         x += column.width;
       });
 
@@ -1997,7 +1999,7 @@ function CoordinatorPanel({
         ];
         columns.forEach((column, columnIndex) => {
           const value = values[columnIndex] || "";
-          if (columnIndex === 3 && value) doc.setFillColor(0, 150, 34);
+          if (columnIndex === 3 && value) doc.setFillColor(8, 150, 84);
           else if (columnIndex === 4 && /DOMINGO/.test(value)) doc.setFillColor(255, 137, 55);
           else if (columnIndex === 4 && /SÁBADO|SABADO/.test(value)) doc.setFillColor(255, 240, 0);
           else if (columnIndex === 4 && value) doc.setFillColor(210, 224, 244);
@@ -2006,9 +2008,13 @@ function CoordinatorPanel({
           else if ((columnIndex === 6 || columnIndex === 7) && value) doc.setFillColor(255, 16, 10);
           else if (columnIndex === 1 && value === "DESCANSO") doc.setFillColor(232, 247, 239);
           else if (columnIndex === 1 && value === "PENDIENTE") doc.setFillColor(255, 247, 226);
-          else doc.setFillColor(255, 255, 255);
+          else doc.setFillColor(rowIndex % 2 === 0 ? 255 : 248, rowIndex % 2 === 0 ? 255 : 251, rowIndex % 2 === 0 ? 255 : 254);
           doc.rect(cellX, y, column.width, rowHeight, "FD");
-          doc.setTextColor(columnIndex === 3 || ((columnIndex === 6 || columnIndex === 7) && value) ? 0 : 0, 0, 0);
+          if (columnIndex === 3 && value) doc.setTextColor(255, 255, 255);
+          else if ((columnIndex === 6 || columnIndex === 7) && value) doc.setTextColor(255, 255, 255);
+          else if (columnIndex === 1 && value === "DESCANSO") doc.setTextColor(8, 116, 82);
+          else if (columnIndex === 1 && value === "PENDIENTE") doc.setTextColor(173, 112, 11);
+          else doc.setTextColor(...pdfBrand.ink);
           doc.setFont("helvetica", "bold");
           doc.setFontSize(column.width < 20 ? Math.max(4, fontSize - 0.4) : fontSize);
           doc.text(fitText(value, column.width - 2.4, column.width < 20 ? Math.max(4, fontSize - 0.4) : fontSize), cellX + column.width / 2, y + rowHeight / 2 + fontSize * 0.32, { align: "center" });
@@ -2018,7 +2024,7 @@ function CoordinatorPanel({
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(5.8);
-      doc.setTextColor(70, 70, 70);
+      doc.setTextColor(...pdfBrand.muted);
       doc.text("Cuadrante compacto: una fila por equipo; si un equipo tiene varios partidos en el mes, aparecen juntos en la misma línea.", margin, 207);
       doc.text("Página 1 de 1", pageWidth - margin, 207, { align: "right" });
       doc.save(`cuadrante-partidos-${monthStart}.pdf`);

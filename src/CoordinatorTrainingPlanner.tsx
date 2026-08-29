@@ -5,6 +5,7 @@ import type { StoreRow, CoordinatorTrainingSlotInput, CoordinatorTrainingExcepti
 import { clubApi, getStored } from "./api";
 import type { AgendaEvent, TrainingAgendaEvent } from "./AgendaView";
 import { FieldZoneMap, TRAINING_FIELDS, fieldZoneLabel, type TrainingFieldId } from "./fieldZones";
+import { drawMagicPdfHeader, getClubCrestDataUrl, getDailyFootballPhrase, pdfBrand } from "./pdfBranding";
 
 const DAY_LABELS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 const SHORT_DAY_LABELS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
@@ -186,17 +187,17 @@ export function CoordinatorTrainingPlanner({
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4", compress: true });
       const coachesToExport = selectedCoach ? [selectedCoach] : coaches;
       const tableLeft = PDF_MARGIN;
-      const tableTop = 31;
+      const tableTop = 38;
       const teamColumnWidth = 34;
       const dayColumnWidth = (PDF_WIDTH - PDF_MARGIN * 2 - teamColumnWidth) / 7;
-      const headerHeight = 8;
+      const headerHeight = 8.8;
       const footerY = PDF_HEIGHT - 7;
       const availableRowsHeight = footerY - tableTop - headerHeight - 4;
       const rowHeight = coachesToExport.length
         ? Math.min(12, availableRowsHeight / coachesToExport.length)
         : 12;
-      const fontSize = rowHeight < 6 ? 4.1 : rowHeight < 8 ? 4.8 : 5.5;
-      const headerFontSize = 5.8;
+      const fontSize = rowHeight < 6 ? 4.3 : rowHeight < 8 ? 5 : 5.9;
+      const headerFontSize = 6.4;
 
       const clean = (value: string) => value.replace(/\s+/g, " ").trim();
       const fitText = (value: string, maxWidth: number, size = fontSize) => {
@@ -213,32 +214,30 @@ export function CoordinatorTrainingPlanner({
         return `${text.slice(0, Math.max(1, start)).trim()}...`;
       };
       const weekLabel = `${new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "long" }).format(weekDays[0])} - ${new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "long", year: "numeric" }).format(weekDays[6])}`;
+      const periodLabel = `Semana del ${weekLabel}`;
+      const scopeLabel = selectedCoach ? selectedCoach.teamLabel : "Todos los equipos";
+      drawMagicPdfHeader(doc, {
+        title: "Cuadrante de entrenamientos",
+        period: periodLabel,
+        scope: scopeLabel,
+        phrase: getDailyFootballPhrase(isoDate(weekDays[0])),
+        crestDataUrl: await getClubCrestDataUrl(),
+        width: PDF_WIDTH,
+        margin: PDF_MARGIN,
+      });
 
-      doc.setFillColor(7, 29, 56);
-      doc.rect(0, 0, PDF_WIDTH, 22, "F");
-      doc.setFillColor(29, 105, 181);
-      doc.rect(0, 21.2, PDF_WIDTH, 0.8, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(15);
-      doc.text("Cuadrante de entrenamientos", PDF_MARGIN, 9.8);
-      doc.setFontSize(8);
-      doc.setTextColor(204, 224, 247);
-      doc.text(weekLabel, PDF_MARGIN, 16.2);
-      doc.text(selectedCoach ? selectedCoach.teamLabel : "Todos los equipos", PDF_WIDTH - PDF_MARGIN, 16.2, { align: "right" });
-
-      doc.setDrawColor(196, 209, 224);
-      doc.setFillColor(238, 245, 252);
+      doc.setDrawColor(...pdfBrand.border);
+      doc.setFillColor(225, 241, 251);
       doc.rect(tableLeft, tableTop, teamColumnWidth, headerHeight, "FD");
-      doc.setTextColor(42, 61, 82);
+      doc.setTextColor(...pdfBrand.ink);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(headerFontSize);
-      doc.text("Equipo", tableLeft + 2.5, tableTop + 5.2);
+      doc.text("Equipo", tableLeft + 2.5, tableTop + 5.9);
       weekDays.forEach((day, index) => {
         const x = tableLeft + teamColumnWidth + index * dayColumnWidth;
-        doc.setFillColor(238, 245, 252);
+        doc.setFillColor(225, 241, 251);
         doc.rect(x, tableTop, dayColumnWidth, headerHeight, "FD");
-        doc.text(`${SHORT_DAY_LABELS[day.getDay()]} ${day.getDate()}`, x + dayColumnWidth / 2, tableTop + 5.2, { align: "center" });
+        doc.text(`${SHORT_DAY_LABELS[day.getDay()]} ${day.getDate()}`, x + dayColumnWidth / 2, tableTop + 5.9, { align: "center" });
       });
 
       coachesToExport.forEach((coach, rowIndex) => {
@@ -251,7 +250,7 @@ export function CoordinatorTrainingPlanner({
         doc.setDrawColor(216, 226, 237);
         doc.setFillColor(rowIndex % 2 === 0 ? 255 : 248, rowIndex % 2 === 0 ? 255 : 251, rowIndex % 2 === 0 ? 255 : 254);
         doc.rect(tableLeft, y, teamColumnWidth, rowHeight, "FD");
-        doc.setTextColor(19, 45, 78);
+        doc.setTextColor(...pdfBrand.ink);
         doc.setFont("helvetica", "bold");
         doc.setFontSize(fontSize);
         doc.text(fitText(coach.teamLabel, teamColumnWidth - 5), tableLeft + 2.5, y + rowHeight / 2 + fontSize * 0.32);
@@ -265,7 +264,7 @@ export function CoordinatorTrainingPlanner({
           const hasTraining = dayTrainings.length > 0;
           doc.setFillColor(hasTraining ? 232 : rowIndex % 2 === 0 ? 255 : 248, hasTraining ? 247 : rowIndex % 2 === 0 ? 255 : 251, hasTraining ? 239 : rowIndex % 2 === 0 ? 255 : 254);
           doc.rect(x, y, dayColumnWidth, rowHeight, "FD");
-          doc.setTextColor(hasTraining ? 7 : 128, hasTraining ? 90 : 143, hasTraining ? 63 : 158);
+          doc.setTextColor(hasTraining ? 8 : 116, hasTraining ? 116 : 130, hasTraining ? 82 : 145);
           doc.setFont("helvetica", hasTraining ? "bold" : "normal");
           const content = hasTraining
             ? dayTrainings.map(compactTrainingLabel).join(" / ")
@@ -274,9 +273,9 @@ export function CoordinatorTrainingPlanner({
         });
       });
 
-      doc.setDrawColor(216, 226, 237);
+      doc.setDrawColor(...pdfBrand.border);
       doc.line(PDF_MARGIN, footerY - 3, PDF_WIDTH - PDF_MARGIN, footerY - 3);
-      doc.setTextColor(92, 111, 133);
+      doc.setTextColor(...pdfBrand.muted);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(6.2);
       doc.text("Una fila por equipo. Las actividades del mismo dia se agrupan en la misma celda.", PDF_MARGIN, footerY);
