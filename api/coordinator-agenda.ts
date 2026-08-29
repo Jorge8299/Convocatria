@@ -3,6 +3,11 @@ import { ApiRequest, ApiResponse, fail, getSession, getSql, jsonBody, methodNotA
 
 const MATCH_TYPES = new Set(['liga', 'amistoso', 'torneo']);
 const HOME_FIELDS = new Set(['El Morer', 'Campo C', 'Polideportivo']);
+const TRAINING_FIELDS: Record<string, { name: string; zones: Set<string> }> = {
+  'campo-c': { name: 'Campo C', zones: new Set(['c-1', 'c-2']) },
+  'el-morer': { name: 'El Morer', zones: new Set(['m-1', 'm-2', 'm-3', 'm-4']) },
+  polideportivo: { name: 'Polideportivo', zones: new Set(['p-1', 'p-2', 'p-3', 'p-4']) },
+};
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
@@ -18,6 +23,21 @@ interface MatchInput {
   field?: string;
 }
 
+interface TrainingSlotInput {
+  weekday?: number;
+  startTime?: string;
+  endTime?: string;
+  fieldId?: string;
+  zoneIds?: string[];
+  notes?: string;
+}
+
+interface TrainingInput {
+  fromDate?: string;
+  toDate?: string;
+  slots?: TrainingSlotInput[];
+}
+
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {
     const session = await getSession(req);
@@ -25,8 +45,49 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const sql = getSql();
 
     if (req.method === 'POST') {
-      if (session.role !== 'coordinador') { res.status(403).json({ error: 'Solo coordinación puede asignar partidos.' }); return }
-      const body = jsonBody<{ accountId?: string; match?: MatchInput }>(req);
+      if (session.role !== 'coordinador') { res.status(403).json({ error: 'Solo coordinación puede asignar actividades.' }); return }
+      const body = jsonBody<{ accountId?: string; match?: MatchInput; training?: TrainingInput }>(req);
+      if (!body.accountId) { res.status(400).json({ error: 'Selecciona un equipo.' }); return }
+      const targets = await sql`SELECT id FROM club_accounts WHERE id=${body.accountId} AND role='entrenador' AND active=TRUE LIMIT 1`;
+      if (!targets[0]) { res.status(404).json({ error: 'El entrenador seleccionado no está disponible.' }); return }
+
+      if (body.training) {
+        const training = body.training;
+        const slots = Array.isArray(training.slots) ? training.slots : [];
+        if (!DATE_PATTERN.test(training.fromDate || '') || !DATE_PATTERN.test(training.toDate || '') || training.fromDate! > training.toDate! || !slots.length) {
+          res.status(400).json({ error: 'Indica el periodo y al menos un día habitual.' }); return;
+        }
+        if (slots.some((slot) => !Number.isInteger(slot.weekday) || slot.weekday! < 0 || slot.weekday! > 6 || !TIME_PATTERN.test(slot.startTime || '') || !TIME_PATTERN.test(slot.endTime || '') || slot.startTime! >= slot.endTime! || !slot.fieldId || !TRAINING_FIELDS[slot.fieldId] || !Array.isArray(slot.zoneIds) || !slot.zoneIds.length || slot.zoneIds.some((zone) => !TRAINING_FIELDS[slot.fieldId!].zones.has(zone)))) {
+          res.status(400).json({ error: 'Revisa días, horarios, campo y zonas de entrenamiento.' }); return;
+        }
+        const start = new Date(`${training.fromDate}T12:00:00Z`);
+        const end = new Date(`${training.toDate}T12:00:00Z`);
+        if ((end.getTime() - start.getTime()) / 86400000 > 550) { res.status(400).json({ error: 'El periodo no puede superar 18 meses.' }); return }
+        const seriesId = randomUUID();
+        const assignedAt = new Date().toISOString();
+        const events: Array<Record<string, unknown>> = [];
+        for (const cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+          const date = cursor.toISOString().slice(0, 10);
+          for (const slot of slots.filter((item) => item.weekday === cursor.getUTCDay())) {
+            events.push({
+              id: randomUUID(), type: 'training', date,
+              startTime: slot.startTime, endTime: slot.endTime,
+              notes: String(slot.notes || '').trim().slice(0, 500),
+              fieldId: slot.fieldId, fieldName: TRAINING_FIELDS[slot.fieldId!].name,
+              zoneIds: slot.zoneIds, seriesId, recurrenceLabel: 'Horario habitual',
+              assignedByCoordinator: true, assignedByName: session.name,
+              assignedAt, exceptionStatus: 'scheduled',
+            });
+          }
+        }
+        if (!events.length) { res.status(400).json({ error: 'El periodo no contiene ninguno de los días elegidos.' }); return }
+        await sql`INSERT INTO club_stores (account_id,area,data)
+          VALUES (${body.accountId},'agenda',${JSON.stringify(events)}::jsonb)
+          ON CONFLICT (account_id,area) DO UPDATE
+          SET data=COALESCE(club_stores.data,'[]'::jsonb) || EXCLUDED.data,updated_at=NOW()`;
+        res.status(201).json({ events }); return;
+      }
+
       const match = body.match || {};
       if (!body.accountId || !DATE_PATTERN.test(match.date || '') || !TIME_PATTERN.test(match.startTime || '') ||
           !MATCH_TYPES.has(match.matchType || '') || typeof match.home !== 'boolean' || !match.rivalId || !match.rivalName?.trim() || !match.field?.trim()) {
@@ -34,8 +95,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       }
       if (match.home && !HOME_FIELDS.has(match.field)) { res.status(400).json({ error: 'Selecciona un campo local válido.' }); return }
 
-      const targets = await sql`SELECT id FROM club_accounts WHERE id=${body.accountId} AND role='entrenador' AND active=TRUE LIMIT 1`;
-      if (!targets[0]) { res.status(404).json({ error: 'El entrenador seleccionado no está disponible.' }); return }
       const rivalRows = await sql`SELECT data FROM club_stores WHERE account_id=${body.accountId} AND area='rivals' LIMIT 1`;
       const rivals = Array.isArray(rivalRows[0]?.data) ? rivalRows[0].data as Array<Record<string, unknown>> : [];
       const rival = rivals.find((item) => String(item.id) === match.rivalId);
@@ -67,8 +126,31 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
 
     if (req.method === 'PATCH') {
+      const body = jsonBody<{ action?: string; accountId?: string; eventId?: string; changes?: Record<string, unknown> }>(req);
+      if (session.role === 'coordinador' && body.action === 'updateTrainingOccurrence') {
+        const changes = body.changes || {};
+        const fieldId = String(changes.fieldId || '');
+        const zoneIds = Array.isArray(changes.zoneIds) ? changes.zoneIds.map(String) : [];
+        const exceptionStatus = String(changes.exceptionStatus || 'scheduled');
+        if (!body.accountId || !body.eventId || !TIME_PATTERN.test(String(changes.startTime || '')) || !TIME_PATTERN.test(String(changes.endTime || '')) || String(changes.startTime) >= String(changes.endTime) || !TRAINING_FIELDS[fieldId] || !zoneIds.length || zoneIds.some((zone) => !TRAINING_FIELDS[fieldId].zones.has(zone)) || !['scheduled', 'holiday', 'cancelled'].includes(exceptionStatus)) {
+          res.status(400).json({ error: 'Revisa la excepción del entrenamiento.' }); return;
+        }
+        const updated = {
+          startTime: String(changes.startTime), endTime: String(changes.endTime),
+          fieldId, fieldName: TRAINING_FIELDS[fieldId].name, zoneIds,
+          notes: String(changes.notes || '').trim().slice(0, 500), exceptionStatus,
+          recurrenceLabel: 'Excepción para este día',
+        };
+        const rows = await sql`UPDATE club_stores
+          SET data=(SELECT jsonb_agg(CASE WHEN item->>'id'=${body.eventId} AND item->>'type'='training' THEN item || ${JSON.stringify(updated)}::jsonb ELSE item END) FROM jsonb_array_elements(data) AS item),updated_at=NOW()
+          WHERE account_id=${body.accountId} AND area='agenda'
+            AND EXISTS (SELECT 1 FROM jsonb_array_elements(data) AS item WHERE item->>'id'=${body.eventId} AND item->>'type'='training')
+          RETURNING account_id`;
+        if (!rows[0]) { res.status(404).json({ error: 'No se encontró el entrenamiento.' }); return }
+        res.status(200).json({ ok: true }); return;
+      }
       if (session.role !== 'entrenador') { res.status(403).json({ error: 'Solo el entrenador puede confirmar el aviso.' }); return }
-      const { eventId } = jsonBody<{ eventId?: string }>(req);
+      const { eventId } = body;
       if (!eventId) { res.status(400).json({ error: 'Partido no válido.' }); return }
       const acknowledgedAt = new Date().toISOString();
       const rows = await sql`UPDATE club_stores

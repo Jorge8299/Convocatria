@@ -24,6 +24,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { FieldZoneDialog, fieldZoneLabel } from "./fieldZones";
 
 export type AgendaEvent = TrainingAgendaEvent | MatchAgendaEvent;
 
@@ -38,6 +39,15 @@ export interface TrainingAgendaEvent extends AgendaEventBase {
   type: "training";
   endTime: string;
   session?: TrainingSession;
+  fieldId?: string;
+  fieldName?: string;
+  zoneIds?: string[];
+  seriesId?: string;
+  recurrenceLabel?: string;
+  assignedByCoordinator?: boolean;
+  assignedByName?: string;
+  assignedAt?: string;
+  exceptionStatus?: "scheduled" | "holiday" | "cancelled";
 }
 
 export interface TrainingBlock {
@@ -298,6 +308,7 @@ export function AgendaView({
   );
   const [selectedDate, setSelectedDate] = useState(todayIso);
   const [draft, setDraft] = useState<AgendaEvent | null>(null);
+  const [zonePreview, setZonePreview] = useState<TrainingAgendaEvent | null>(null);
   const [trainingView, setTrainingView] = useState<"summary" | "planner">("planner");
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [exercisePreview, setExercisePreview] = useState<{
@@ -572,14 +583,14 @@ export function AgendaView({
           <>
             <div className="agenda-event-list">
               {selectedEvents.map((event) => (
-                <article className={`${event.type}${event.type === "match" && event.assignedByCoordinator ? " coordinator-assigned" : ""}`} key={event.id}>
+                <article className={`${event.type}${event.assignedByCoordinator ? " coordinator-assigned" : ""}${event.type === "training" && event.exceptionStatus !== "scheduled" && event.exceptionStatus ? " cancelled" : ""}`} key={event.id}>
                   <button className="agenda-event-main" onClick={() => event.type === "training" ? openTraining(event) : setDraft({ ...event })}>
                     <span className="agenda-event-icon" aria-hidden="true">
                       {event.type === "training" ? <Dumbbell size={22} /> : <Trophy size={22} />}
                     </span>
                     <span className="agenda-event-copy">
-                      <em>{event.type === "training" ? "SESIÓN DE ENTRENAMIENTO" : `${event.matchType} · ${event.home ? "EN CASA" : "A DOMICILIO"}`}</em>
-                      {event.type === "match" && event.assignedByCoordinator && (
+                      <em>{event.type === "training" ? event.exceptionStatus === "holiday" ? "FESTIVO · SIN ENTRENAMIENTO" : event.exceptionStatus === "cancelled" ? "ENTRENAMIENTO CANCELADO" : "SESIÓN DE ENTRENAMIENTO" : `${event.matchType} · ${event.home ? "EN CASA" : "A DOMICILIO"}`}</em>
+                      {event.assignedByCoordinator && (
                         <span className="coordinator-origin"><ShieldCheck size={12} /> Coordinación</span>
                       )}
                       {event.type === "match" && event.playInWhite && (
@@ -590,7 +601,9 @@ export function AgendaView({
                       </strong>
                       <span className="agenda-event-meta">
                         <small><Clock size={13} />{event.startTime || "Sin hora"}{event.type === "training" ? `–${event.endTime}` : ""}</small>
-                        {event.type === "training" ? (
+                        {event.type === "training" ? event.fieldName ? (
+                          <small><MapPin size={13} />{event.fieldName} · {fieldZoneLabel(event.fieldId, event.zoneIds)}</small>
+                        ) : (
                           <small><ListChecks size={13} />{trainingExerciseCount(event) ? `${trainingExerciseCount(event)} ejercicios` : "Planificación libre"}</small>
                         ) : event.field ? (
                           <small><MapPin size={13} />{event.field}</small>
@@ -598,7 +611,9 @@ export function AgendaView({
                       </span>
                     </span>
                   </button>
-                  {event.type === "match" && (
+                  {event.type === "training" && event.fieldId && event.zoneIds?.length ? (
+                    <div className="agenda-event-side"><button type="button" className="agenda-zone-button" onClick={() => setZonePreview(event)}><MapPin size={15} /> Ver zona</button></div>
+                  ) : event.type === "match" ? (
                     <div className="agenda-event-side">
                       <span className={matchIsCompleted(event) ? "agenda-status done" : "agenda-status"}>
                         {matchIsCompleted(event) ? "Finalizado" : "Programado"}
@@ -610,7 +625,7 @@ export function AgendaView({
                         <BarChart3 size={15} /> Estadísticas
                       </button>
                     </div>
-                  )}
+                  ) : null}
                 </article>
               ))}
               {!selectedEvents.length && <p className="agenda-no-events">No hay actividades guardadas.</p>}
@@ -626,7 +641,16 @@ export function AgendaView({
           </>
         )}
 
-        {draft?.type === "training" && (
+        {draft?.type === "training" && draft.assignedByCoordinator && (
+          <div className={`agenda-form assigned-training-detail${draft.exceptionStatus !== "scheduled" && draft.exceptionStatus ? " cancelled" : ""}`}>
+            <div className="assigned-training-heading"><span><ShieldCheck size={16} /> ASIGNADO POR COORDINACIÓN</span><strong>{draft.exceptionStatus === "holiday" ? "Festivo · No hay entrenamiento" : draft.exceptionStatus === "cancelled" ? "Entrenamiento cancelado" : "Entrenamiento"}</strong><small>{draft.recurrenceLabel || "Horario habitual"}</small></div>
+            <div className="assigned-match-ticket"><div><span>Hora</span><strong>{draft.startTime}–{draft.endTime}</strong></div><div><span>Campo</span><strong>{draft.fieldName || "Pendiente"}</strong></div><div><span>Zona</span><strong>{fieldZoneLabel(draft.fieldId, draft.zoneIds)}</strong></div><div><span>Fecha</span><strong>{new Intl.DateTimeFormat("es-ES", { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${draft.date}T12:00:00`))}</strong></div></div>
+            {draft.notes && <p className="assigned-match-notes">{draft.notes}</p>}
+            {draft.fieldId && draft.zoneIds?.length ? <button type="button" className="agenda-zone-button large" onClick={() => setZonePreview(draft)}><MapPin size={17} /> Ver zona del campo</button> : null}
+          </div>
+        )}
+
+        {draft?.type === "training" && !draft.assignedByCoordinator && (
           <div className="agenda-form">
             <div className="training-session-heading">
               <div><span className="eyebrow">SESIÓN DE ENTRENAMIENTO</span><h3>{categoryLabel}</h3></div>
@@ -810,6 +834,7 @@ export function AgendaView({
           </div>
         )}
       </aside>
+      {zonePreview?.fieldId && zonePreview.zoneIds ? <FieldZoneDialog fieldId={zonePreview.fieldId} zoneIds={zonePreview.zoneIds} onClose={() => setZonePreview(null)} /> : null}
     </div>
   );
 }

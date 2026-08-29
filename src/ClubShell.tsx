@@ -43,6 +43,7 @@ import {
   StoreRow,
 } from "./api";
 import { randomFootballPhrase } from "./motivational";
+import { CoordinatorTrainingPlanner } from "./CoordinatorTrainingPlanner";
 
 const LAST_ACCOUNT_KEY = "convo_club_last_account_v1";
 const roleLabel: Record<ClubRole, string> = {
@@ -1582,6 +1583,7 @@ function CoordinatorPanel({
   const [showTeamPicker, setShowTeamPicker] = useState(false);
   const [pendingMatchCreation, setPendingMatchCreation] = useState(false);
   const [showMatchCreator, setShowMatchCreator] = useState(false);
+  const [showTrainingCreator, setShowTrainingCreator] = useState(false);
   const [matchDraft, setMatchDraft] = useState<CoordinatorMatchInput>(() =>
     emptyCoordinatorMatch(todayIso),
   );
@@ -1803,6 +1805,7 @@ function CoordinatorPanel({
   const openMatchCreator = () => {
     setTab("agenda");
     setMatchMessage("");
+    setShowTrainingCreator(false);
     if (!selectedCoach) {
       setPendingMatchCreation(true);
       setShowTeamPicker(true);
@@ -1823,6 +1826,11 @@ function CoordinatorPanel({
   };
   const goToNextTeam = () => {
     if (!nextCoach) return;
+    if (tab !== "agenda" || !showMatchCreator) {
+      setCoachFilter(nextCoach.id);
+      setShowTeamPicker(false);
+      return;
+    }
     const nextDate = matchDraft.date || selectedAgendaDate;
     setCoachFilter(nextCoach.id);
     setShowTeamPicker(false);
@@ -1842,10 +1850,12 @@ function CoordinatorPanel({
       await clubApi.assignCoordinatorMatch(selectedCoach.id, matchDraft);
       await onRefresh();
       const date = new Date(`${matchDraft.date}T12:00:00`);
+      const savedDate = matchDraft.date;
       setAgendaCursor(new Date(date.getFullYear(), date.getMonth(), 1));
-      setSelectedAgendaDate(matchDraft.date);
-      setShowMatchCreator(false);
-      setMatchMessage(`Partido añadido a la agenda de ${selectedCoach.teamLabel}.`);
+      setSelectedAgendaDate(savedDate);
+      setMatchDraft(emptyCoordinatorMatch(savedDate));
+      setShowMatchCreator(true);
+      setMatchMessage(`Partido añadido a la agenda de ${selectedCoach.teamLabel}. Puedes pasar al siguiente equipo.`);
     } catch (error) {
       setMatchMessage(error instanceof Error ? error.message : "No se pudo añadir el partido.");
     } finally {
@@ -1960,13 +1970,16 @@ function CoordinatorPanel({
         </div>
         {tab === "agenda" && (
           <>
-          {!showMatchCreator && !(showTeamPicker && pendingMatchCreation) && <section className="coordinator-match-command">
+          {!(showTeamPicker && pendingMatchCreation) && <section className="coordinator-match-command">
             <div>
-              <span><ShieldCheck size={15} /> ORGANIZACIÓN DE PARTIDOS</span>
-              <strong>{selectedCoach ? `Agenda de ${selectedCoach.teamLabel}` : "Añade un partido a un equipo"}</strong>
-              <small>{selectedCoach ? "El partido aparecerá directamente en la agenda del entrenador." : "Usaremos la lista de equipos para elegir el destinatario."}</small>
+              <span><ShieldCheck size={15} /> ORGANIZACIÓN DE LA AGENDA</span>
+              <strong>{selectedCoach ? `Agenda de ${selectedCoach.teamLabel}` : "Añade una actividad a un equipo"}</strong>
+              <small>Partidos y horarios habituales de entrenamiento aparecerán directamente al entrenador.</small>
             </div>
-            <button type="button" onClick={openMatchCreator}><Plus size={17} /> Añadir partido</button>
+            <div className="coordinator-activity-actions">
+              <button type="button" className={showMatchCreator ? "active" : ""} onClick={openMatchCreator}><Plus size={17} /> Añadir partido</button>
+              <button type="button" className={showTrainingCreator ? "active training" : "training"} onClick={() => { setShowMatchCreator(false); setPendingMatchCreation(false); setShowTeamPicker(false); setMatchMessage(""); setShowTrainingCreator(true); }}><Plus size={17} /> Añadir entrenamiento</button>
+            </div>
           </section>}
           {matchMessage && <div className="coordinator-match-message" role="status">{matchMessage}</div>}
           {showMatchCreator && selectedCoach && selectedCoachData && (
@@ -2011,10 +2024,21 @@ function CoordinatorPanel({
               </div>
               <footer>
                 <button type="button" className="secondary-button" onClick={() => setShowMatchCreator(false)}>Cancelar</button>
+                {nextCoach && <button type="button" className="next-team-button" onClick={goToNextTeam}>Siguiente equipo <ChevronRight size={17} /></button>}
                 <button type="button" className="primary-button" disabled={matchSaving || !selectedCoachData.rivals.length} onClick={() => void saveCoordinatorMatch()}><Save size={17} /> {matchSaving ? "Guardando…" : "Guardar en su agenda"}</button>
               </footer>
             </section>
           )}
+          <CoordinatorTrainingPlanner
+            coaches={coaches}
+            stores={stores}
+            selectedCoachId={coachFilter}
+            onSelectCoach={setCoachFilter}
+            onRefresh={onRefresh}
+            formOpen={showTrainingCreator}
+            onFormOpenChange={setShowTrainingCreator}
+            hideCommand
+          />
           <section className="coordinator-agenda-layout">
             <div className="coordinator-agenda-calendar">
               <header className="coordinator-agenda-toolbar">

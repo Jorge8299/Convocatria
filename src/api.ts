@@ -12,6 +12,27 @@ export interface CoordinatorMatchInput {
   rivalName: string;
   field: string;
 }
+export interface CoordinatorTrainingSlotInput {
+  weekday: number;
+  startTime: string;
+  endTime: string;
+  fieldId: "campo-c" | "el-morer" | "polideportivo";
+  zoneIds: string[];
+  notes: string;
+}
+export interface CoordinatorTrainingInput {
+  fromDate: string;
+  toDate: string;
+  slots: CoordinatorTrainingSlotInput[];
+}
+export interface CoordinatorTrainingExceptionInput {
+  startTime: string;
+  endTime: string;
+  fieldId: "campo-c" | "el-morer" | "polideportivo";
+  zoneIds: string[];
+  notes: string;
+  exceptionStatus: "scheduled" | "holiday" | "cancelled";
+}
 export interface StoreRow {
   account_id: string;
   area: StoreArea;
@@ -273,28 +294,56 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
     return { ok: true } as T;
   } else if (url.pathname === "/api/coordinator-agenda" && method === "POST") {
     if (session?.role !== "coordinador")
-      throw new Error("Solo coordinación puede asignar partidos.");
+      throw new Error("Solo coordinación puede asignar actividades.");
     const accountId = String(body.accountId || "");
-    const match = body.match as unknown as CoordinatorMatchInput;
-    const event = {
-      ...match,
-      id: crypto.randomUUID(),
-      type: "match" as const,
-      assignedByCoordinator: true,
-      assignedByName: session.name,
-      assignedAt: new Date().toISOString(),
-      acknowledgedAt: null,
-    };
+    const now = new Date().toISOString();
+    let newEvents: Array<Record<string, unknown>>;
+    if (body.training) {
+      const training = body.training as unknown as CoordinatorTrainingInput;
+      const seriesId = crypto.randomUUID();
+      const slots = Array.isArray(training.slots) ? training.slots : [];
+      newEvents = [];
+      const cursor = new Date(`${training.fromDate}T12:00:00`);
+      const limit = new Date(`${training.toDate}T12:00:00`);
+      while (cursor <= limit && newEvents.length < 550) {
+        const date = cursor.toISOString().slice(0, 10);
+        slots.filter((slot) => slot.weekday === cursor.getDay()).forEach((slot) => {
+          newEvents.push({
+            id: crypto.randomUUID(), type: "training", date,
+            startTime: slot.startTime, endTime: slot.endTime, notes: slot.notes,
+            fieldId: slot.fieldId, fieldName: ({ "campo-c": "Campo C", "el-morer": "El Morer", polideportivo: "Polideportivo" } as Record<string, string>)[slot.fieldId],
+            zoneIds: slot.zoneIds, seriesId, recurrenceLabel: "Horario habitual",
+            assignedByCoordinator: true, assignedByName: session.name,
+            assignedAt: now, exceptionStatus: "scheduled",
+          });
+        });
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    } else {
+      const match = body.match as unknown as CoordinatorMatchInput;
+      newEvents = [{ ...match, id: crypto.randomUUID(), type: "match", assignedByCoordinator: true, assignedByName: session.name, assignedAt: now, acknowledgedAt: null }];
+    }
     const agendaStore = stores.find(
       (store) => store.account_id === accountId && store.area === "agenda",
     );
-    if (agendaStore) agendaStore.data = [...(agendaStore.data as unknown[]), event];
-    else stores.push({ account_id: accountId, area: "agenda", data: [event] });
+    if (agendaStore) agendaStore.data = [...(agendaStore.data as unknown[]), ...newEvents];
+    else stores.push({ account_id: accountId, area: "agenda", data: newEvents });
     localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
-    return { event } as T;
+    return { event: newEvents[0], events: newEvents } as T;
   } else if (url.pathname === "/api/coordinator-agenda" && method === "PATCH") {
-    if (session?.role !== "entrenador")
-      throw new Error("Solo el entrenador puede confirmar el aviso.");
+    if (session?.role === "coordinador" && body.action === "updateTrainingOccurrence") {
+      const accountId = String(body.accountId || "");
+      const agendaStore = stores.find((store) => store.account_id === accountId && store.area === "agenda");
+      const changes = body.changes as unknown as CoordinatorTrainingExceptionInput;
+      agendaStore && (agendaStore.data = (agendaStore.data as Array<Record<string, unknown>>).map((event) =>
+        event.id === body.eventId && event.type === "training"
+          ? { ...event, ...changes, fieldName: ({ "campo-c": "Campo C", "el-morer": "El Morer", polideportivo: "Polideportivo" } as Record<string, string>)[changes.fieldId], recurrenceLabel: "Excepción para este día" }
+          : event,
+      ));
+      localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
+      return { ok: true } as T;
+    }
+    if (session?.role !== "entrenador") throw new Error("No autorizado.");
     const acknowledgedAt = new Date().toISOString();
     const agendaStore = stores.find(
       (store) => store.account_id === session.id && store.area === "agenda",
@@ -388,6 +437,16 @@ export const clubApi = {
         body: JSON.stringify({ accountId, match }),
       },
     ),
+  assignCoordinatorTraining: (accountId: string, training: CoordinatorTrainingInput) =>
+    request<{ events: Array<{ id: string }> }>("/api/coordinator-agenda", {
+      method: "POST",
+      body: JSON.stringify({ accountId, training }),
+    }),
+  updateCoordinatorTrainingOccurrence: (accountId: string, eventId: string, changes: CoordinatorTrainingExceptionInput) =>
+    request<{ ok: true }>("/api/coordinator-agenda", {
+      method: "PATCH",
+      body: JSON.stringify({ action: "updateTrainingOccurrence", accountId, eventId, changes }),
+    }),
   acknowledgeCoordinatorMatch: (eventId: string) =>
     request<{ ok: true; acknowledgedAt: string }>("/api/coordinator-agenda", {
       method: "PATCH",

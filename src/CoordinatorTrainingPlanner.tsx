@@ -1,0 +1,365 @@
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { ChevronLeft, ChevronRight, Clock, Download, Dumbbell, MapPin, Plus, Save, TriangleAlert, X } from "lucide-react";
+import type { ClubAccount } from "./clubTypes";
+import type { StoreRow, CoordinatorTrainingSlotInput, CoordinatorTrainingExceptionInput } from "./api";
+import { clubApi, getStored } from "./api";
+import type { AgendaEvent, TrainingAgendaEvent } from "./AgendaView";
+import { FieldZoneMap, TRAINING_FIELDS, fieldZoneLabel, type TrainingFieldId } from "./fieldZones";
+
+const DAY_LABELS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+const SHORT_DAY_LABELS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+const TEAM_COLORS = ["#1976d2", "#7b4bc4", "#087a59", "#d46a13", "#c13f5a", "#137f94", "#6c7a17", "#a54887"];
+const PDF_MARGIN = 7;
+const PDF_WIDTH = 297;
+const PDF_HEIGHT = 210;
+
+type TimeRange = "all" | "morning" | "afternoon";
+type TrainingWithCoach = TrainingAgendaEvent & { coach: ClubAccount };
+
+function isoDate(date: Date) {
+  const year = date.getFullYear();
+  return `${year}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function startOfWeek(date: Date) {
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  result.setDate(result.getDate() - ((result.getDay() + 6) % 7));
+  return result;
+}
+
+function addDays(date: Date, days: number) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function minutes(time: string) {
+  const [hour, minute] = time.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
+function teamColor(coachId: string) {
+  let value = 0;
+  for (const character of coachId) value = (value * 31 + character.charCodeAt(0)) >>> 0;
+  return TEAM_COLORS[value % TEAM_COLORS.length];
+}
+
+function newSlot(weekday = 2): CoordinatorTrainingSlotInput {
+  return { weekday, startTime: "18:00", endTime: "19:30", fieldId: "el-morer", zoneIds: [], notes: "" };
+}
+
+function compactTrainingLabel(event: TrainingAgendaEvent) {
+  const status =
+    event.exceptionStatus === "holiday" ? "Festivo" :
+    event.exceptionStatus === "cancelled" ? "Cancelado" :
+    "";
+  const time = `${event.startTime || "--:--"}-${event.endTime || "--:--"}`;
+  const place = [event.fieldName, fieldZoneLabel(event.fieldId, event.zoneIds)]
+    .filter(Boolean)
+    .join(" ");
+  return [status || time, place].filter(Boolean).join(" · ");
+}
+
+export function CoordinatorTrainingPlanner({
+  coaches,
+  stores,
+  selectedCoachId,
+  onSelectCoach,
+  onRefresh,
+  formOpen,
+  onFormOpenChange,
+  hideCommand = false,
+}: {
+  coaches: ClubAccount[];
+  stores: StoreRow[];
+  selectedCoachId: string;
+  onSelectCoach: (id: string) => void;
+  onRefresh: () => Promise<void>;
+  formOpen?: boolean;
+  onFormOpenChange?: (open: boolean) => void;
+  hideCommand?: boolean;
+}) {
+  const today = new Date();
+  const [week, setWeek] = useState(() => startOfWeek(today));
+  const [range, setRange] = useState<TimeRange>("afternoon");
+  const [internalFormOpen, setInternalFormOpen] = useState(false);
+  const [formCoachId, setFormCoachId] = useState(selectedCoachId === "all" ? "" : selectedCoachId);
+  const [fromDate, setFromDate] = useState(isoDate(today));
+  const [toDate, setToDate] = useState(() => isoDate(addDays(today, 300)));
+  const [slots, setSlots] = useState<CoordinatorTrainingSlotInput[]>([newSlot(2), newSlot(4)]);
+  const [editing, setEditing] = useState<TrainingWithCoach | null>(null);
+  const [editDraft, setEditDraft] = useState<CoordinatorTrainingExceptionInput | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [message, setMessage] = useState("");
+  const showForm = formOpen ?? internalFormOpen;
+  const setShowForm = (open: boolean) => {
+    if (onFormOpenChange) onFormOpenChange(open);
+    else setInternalFormOpen(open);
+  };
+  useEffect(() => {
+    if (formOpen) setFormCoachId(selectedCoachId === "all" ? "" : selectedCoachId);
+  }, [formOpen, selectedCoachId]);
+
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(week, index)), [week]);
+  const firstHour = range === "afternoon" ? 15 : 8;
+  const lastHour = range === "morning" ? 15 : 23;
+  const hours = Array.from({ length: lastHour - firstHour }, (_, index) => firstHour + index);
+  const selectedCoach = selectedCoachId === "all"
+    ? undefined
+    : coaches.find((coach) => coach.id === selectedCoachId);
+  const allTrainings = useMemo(() => coaches.flatMap((coach) =>
+    getStored<AgendaEvent[]>(stores, coach.id, "agenda", [])
+      .filter((event): event is TrainingAgendaEvent => event.type === "training" && event.assignedByCoordinator === true)
+      .map((event) => ({ ...event, coach }))), [coaches, stores]);
+  const visibleTrainings = allTrainings.filter((event) =>
+    (selectedCoachId === "all" || event.coach.id === selectedCoachId) &&
+    event.date >= isoDate(weekDays[0]) && event.date <= isoDate(weekDays[6]) &&
+    minutes(event.endTime) > firstHour * 60 && minutes(event.startTime) < lastHour * 60);
+
+  const hasConflict = (event: TrainingWithCoach) => allTrainings.some((other) =>
+    other.id !== event.id && other.coach.id !== event.coach.id && other.date === event.date &&
+    other.fieldId === event.fieldId && other.exceptionStatus !== "cancelled" && other.exceptionStatus !== "holiday" &&
+    minutes(other.startTime) < minutes(event.endTime) && minutes(event.startTime) < minutes(other.endTime) &&
+    (event.zoneIds || []).some((zone) => (other.zoneIds || []).includes(zone)));
+
+  const updateSlot = (index: number, changes: Partial<CoordinatorTrainingSlotInput>) => {
+    setSlots((current) => current.map((slot, slotIndex) => slotIndex === index ? { ...slot, ...changes } : slot));
+  };
+
+  const saveSeries = async () => {
+    const accountId = formCoachId || (selectedCoachId !== "all" ? selectedCoachId : "");
+    if (!accountId || !fromDate || !toDate || fromDate > toDate || slots.some((slot) => !slot.zoneIds.length || slot.startTime >= slot.endTime)) {
+      setMessage("Selecciona equipo, periodo, horarios y al menos una zona para cada día.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await clubApi.assignCoordinatorTraining(accountId, { fromDate, toDate, slots });
+      await onRefresh();
+      onSelectCoach(accountId);
+      setShowForm(false);
+      setMessage("Horario habitual guardado en la agenda del entrenador.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo guardar el horario.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openException = (event: TrainingWithCoach) => {
+    setEditing(event);
+    setEditDraft({
+      startTime: event.startTime,
+      endTime: event.endTime,
+      fieldId: (event.fieldId || "el-morer") as TrainingFieldId,
+      zoneIds: event.zoneIds || [],
+      notes: event.notes || "",
+      exceptionStatus: event.exceptionStatus || "scheduled",
+    });
+  };
+
+  const saveException = async () => {
+    if (!editing || !editDraft || editDraft.startTime >= editDraft.endTime || !editDraft.zoneIds.length) return;
+    setBusy(true);
+    try {
+      await clubApi.updateCoordinatorTrainingOccurrence(editing.coach.id, editing.id, editDraft);
+      await onRefresh();
+      setEditing(null);
+      setEditDraft(null);
+      setMessage("Excepción guardada únicamente para ese día.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo guardar la excepción.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const exportQuadrantPdf = async () => {
+    setExporting(true);
+    try {
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4", compress: true });
+      const coachesToExport = selectedCoach ? [selectedCoach] : coaches;
+      const tableLeft = PDF_MARGIN;
+      const tableTop = 31;
+      const teamColumnWidth = 34;
+      const dayColumnWidth = (PDF_WIDTH - PDF_MARGIN * 2 - teamColumnWidth) / 7;
+      const headerHeight = 8;
+      const footerY = PDF_HEIGHT - 7;
+      const availableRowsHeight = footerY - tableTop - headerHeight - 4;
+      const rowHeight = coachesToExport.length
+        ? Math.min(12, availableRowsHeight / coachesToExport.length)
+        : 12;
+      const fontSize = rowHeight < 6 ? 4.1 : rowHeight < 8 ? 4.8 : 5.5;
+      const headerFontSize = 5.8;
+
+      const clean = (value: string) => value.replace(/\s+/g, " ").trim();
+      const fitText = (value: string, maxWidth: number, size = fontSize) => {
+        const text = clean(value);
+        doc.setFontSize(size);
+        if (doc.getTextWidth(text) <= maxWidth) return text;
+        let start = 0;
+        let end = text.length;
+        while (start < end) {
+          const middle = Math.ceil((start + end) / 2);
+          if (doc.getTextWidth(`${text.slice(0, middle)}...`) <= maxWidth) start = middle;
+          else end = middle - 1;
+        }
+        return `${text.slice(0, Math.max(1, start)).trim()}...`;
+      };
+      const weekLabel = `${new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "long" }).format(weekDays[0])} - ${new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "long", year: "numeric" }).format(weekDays[6])}`;
+
+      doc.setFillColor(7, 29, 56);
+      doc.rect(0, 0, PDF_WIDTH, 22, "F");
+      doc.setFillColor(29, 105, 181);
+      doc.rect(0, 21.2, PDF_WIDTH, 0.8, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(15);
+      doc.text("Cuadrante de entrenamientos", PDF_MARGIN, 9.8);
+      doc.setFontSize(8);
+      doc.setTextColor(204, 224, 247);
+      doc.text(weekLabel, PDF_MARGIN, 16.2);
+      doc.text(selectedCoach ? selectedCoach.teamLabel : "Todos los equipos", PDF_WIDTH - PDF_MARGIN, 16.2, { align: "right" });
+
+      doc.setDrawColor(196, 209, 224);
+      doc.setFillColor(238, 245, 252);
+      doc.rect(tableLeft, tableTop, teamColumnWidth, headerHeight, "FD");
+      doc.setTextColor(42, 61, 82);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(headerFontSize);
+      doc.text("Equipo", tableLeft + 2.5, tableTop + 5.2);
+      weekDays.forEach((day, index) => {
+        const x = tableLeft + teamColumnWidth + index * dayColumnWidth;
+        doc.setFillColor(238, 245, 252);
+        doc.rect(x, tableTop, dayColumnWidth, headerHeight, "FD");
+        doc.text(`${SHORT_DAY_LABELS[day.getDay()]} ${day.getDate()}`, x + dayColumnWidth / 2, tableTop + 5.2, { align: "center" });
+      });
+
+      coachesToExport.forEach((coach, rowIndex) => {
+        const y = tableTop + headerHeight + rowIndex * rowHeight;
+        const rowTrainings = allTrainings.filter((event) =>
+          event.coach.id === coach.id &&
+          event.date >= isoDate(weekDays[0]) &&
+          event.date <= isoDate(weekDays[6]));
+
+        doc.setDrawColor(216, 226, 237);
+        doc.setFillColor(rowIndex % 2 === 0 ? 255 : 248, rowIndex % 2 === 0 ? 255 : 251, rowIndex % 2 === 0 ? 255 : 254);
+        doc.rect(tableLeft, y, teamColumnWidth, rowHeight, "FD");
+        doc.setTextColor(19, 45, 78);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(fontSize);
+        doc.text(fitText(coach.teamLabel, teamColumnWidth - 5), tableLeft + 2.5, y + rowHeight / 2 + fontSize * 0.32);
+
+        weekDays.forEach((day, dayIndex) => {
+          const date = isoDate(day);
+          const x = tableLeft + teamColumnWidth + dayIndex * dayColumnWidth;
+          const dayTrainings = rowTrainings
+            .filter((event) => event.date === date)
+            .sort((first, second) => first.startTime.localeCompare(second.startTime));
+          const hasTraining = dayTrainings.length > 0;
+          doc.setFillColor(hasTraining ? 232 : rowIndex % 2 === 0 ? 255 : 248, hasTraining ? 247 : rowIndex % 2 === 0 ? 255 : 251, hasTraining ? 239 : rowIndex % 2 === 0 ? 255 : 254);
+          doc.rect(x, y, dayColumnWidth, rowHeight, "FD");
+          doc.setTextColor(hasTraining ? 7 : 128, hasTraining ? 90 : 143, hasTraining ? 63 : 158);
+          doc.setFont("helvetica", hasTraining ? "bold" : "normal");
+          const content = hasTraining
+            ? dayTrainings.map(compactTrainingLabel).join(" / ")
+            : "-";
+          doc.text(fitText(content, dayColumnWidth - 4, fontSize), x + 2, y + rowHeight / 2 + fontSize * 0.32);
+        });
+      });
+
+      doc.setDrawColor(216, 226, 237);
+      doc.line(PDF_MARGIN, footerY - 3, PDF_WIDTH - PDF_MARGIN, footerY - 3);
+      doc.setTextColor(92, 111, 133);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.2);
+      doc.text("Una fila por equipo. Las actividades del mismo dia se agrupan en la misma celda.", PDF_MARGIN, footerY);
+      doc.text("Pagina 1 de 1", PDF_WIDTH - PDF_MARGIN, footerY, { align: "right" });
+      doc.save(`cuadrante-entrenamientos-${isoDate(weekDays[0])}.pdf`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo exportar el cuadrante.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="training-planner">
+      {!hideCommand && <section className="training-planner-command">
+        <div><span><Dumbbell size={15} /> PLANIFICACIÓN DE ENTRENAMIENTOS</span><strong>Horarios habituales y excepciones</strong><small>Crea la rutina semanal una vez y modifica únicamente los días que cambien.</small></div>
+        <button type="button" onClick={() => { setFormCoachId(selectedCoachId === "all" ? "" : selectedCoachId); setShowForm(true); setMessage(""); }}><Plus size={17} /> Añadir entrenamiento</button>
+      </section>}
+      {message && <div className="coordinator-match-message" role="status">{message}</div>}
+
+      {showForm && (
+        <section className="training-series-form">
+          <header><div><span>NUEVO HORARIO HABITUAL</span><h3>Planificación semanal</h3><small>Configura tantos días como necesite el equipo.</small></div><button type="button" aria-label="Cerrar formulario" onClick={() => setShowForm(false)}><X size={18} /></button></header>
+          <div className="training-series-range">
+            <label><span>Equipo</span><select value={formCoachId} onChange={(event) => setFormCoachId(event.target.value)}><option value="">Selecciona equipo</option>{coaches.map((coach) => <option value={coach.id} key={coach.id}>{coach.teamLabel} · {coach.name}</option>)}</select></label>
+            <label><span>Desde</span><input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} /></label>
+            <label><span>Hasta</span><input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} /></label>
+          </div>
+          <div className="training-slot-list">
+            {slots.map((slot, index) => (
+              <article key={index}>
+                <div className="training-slot-heading"><strong>Día habitual {index + 1}</strong>{slots.length > 1 && <button type="button" onClick={() => setSlots((current) => current.filter((_, slotIndex) => slotIndex !== index))}>Quitar</button>}</div>
+                <div className="training-slot-fields">
+                  <label><span>Día</span><select value={slot.weekday} onChange={(event) => updateSlot(index, { weekday: Number(event.target.value) })}>{DAY_LABELS.slice(1, 7).map((label, dayIndex) => <option value={dayIndex + 1} key={label}>{label}</option>)}</select></label>
+                  <label><span>Empieza</span><input type="time" value={slot.startTime} onChange={(event) => updateSlot(index, { startTime: event.target.value })} /></label>
+                  <label><span>Termina</span><input type="time" value={slot.endTime} onChange={(event) => updateSlot(index, { endTime: event.target.value })} /></label>
+                  <label><span>Campo</span><select value={slot.fieldId} onChange={(event) => updateSlot(index, { fieldId: event.target.value as TrainingFieldId, zoneIds: [] })}>{TRAINING_FIELDS.map((field) => <option value={field.id} key={field.id}>{field.label}</option>)}</select></label>
+                </div>
+                <div className="training-zone-section"><div><strong>Selecciona la zona</strong><small>Pulsa una o varias partes del campo.</small></div><FieldZoneMap fieldId={slot.fieldId} selectedZoneIds={slot.zoneIds} onChange={(zoneIds) => updateSlot(index, { zoneIds })} /></div>
+                <label className="training-slot-notes"><span>Observaciones de este día</span><textarea rows={2} value={slot.notes} onChange={(event) => updateSlot(index, { notes: event.target.value })} placeholder="Opcional" /></label>
+              </article>
+            ))}
+          </div>
+          <footer><button type="button" className="secondary-button" onClick={() => setSlots((current) => [...current, newSlot(current.length ? Math.min(6, current[current.length - 1].weekday + 1) : 2)])}><Plus size={16} /> Añadir otro día</button><button type="button" className="primary-button" disabled={busy} onClick={() => void saveSeries()}><Save size={16} /> {busy ? "Guardando…" : "Guardar horario habitual"}</button></footer>
+        </section>
+      )}
+
+      <section className="training-week-calendar">
+        <header className="training-week-toolbar">
+          <div className="training-week-navigation"><button type="button" aria-label="Semana anterior" onClick={() => setWeek((current) => addDays(current, -7))}><ChevronLeft size={18} /></button><button type="button" onClick={() => setWeek(startOfWeek(new Date()))}>Hoy</button><button type="button" aria-label="Semana siguiente" onClick={() => setWeek((current) => addDays(current, 7))}><ChevronRight size={18} /></button></div>
+          <div><span>SEMANA</span><h3>{new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "long" }).format(weekDays[0])} – {new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "long", year: "numeric" }).format(weekDays[6])}</h3></div>
+          <div className="training-time-range">{([ ["all", "Todo"], ["morning", "Mañana"], ["afternoon", "Tarde"] ] as const).map(([value, label]) => <button type="button" className={range === value ? "active" : ""} key={value} onClick={() => setRange(value)}>{label}</button>)}</div>
+          <button type="button" className="training-export-button" disabled={exporting} onClick={() => void exportQuadrantPdf()}><Download size={15} /> {exporting ? "Exportando..." : "Exportar"}</button>
+        </header>
+        <div className="training-week-grid" style={{ "--hour-count": hours.length } as CSSProperties}>
+          <div className="training-week-corner"><Clock size={14} /></div>
+          {weekDays.map((day) => <div className={`training-week-day-title${isoDate(day) === isoDate(today) ? " today" : ""}`} key={isoDate(day)}><span>{SHORT_DAY_LABELS[day.getDay()]}</span><strong>{day.getDate()}</strong></div>)}
+          <div className="training-week-hours">{hours.map((hour) => <span key={hour}>{String(hour).padStart(2, "0")}:00</span>)}</div>
+          {weekDays.map((day) => {
+            const date = isoDate(day);
+            const dayEvents = visibleTrainings.filter((event) => event.date === date);
+            return <div className="training-week-day-track" key={date}>
+              {hours.map((hour) => <i key={hour} />)}
+              {dayEvents.map((event) => {
+                const top = Math.max(0, (minutes(event.startTime) - firstHour * 60) / 60 * 72);
+                const height = Math.max(34, Math.min((lastHour - firstHour) * 72 - top, (minutes(event.endTime) - minutes(event.startTime)) / 60 * 72));
+                const conflict = hasConflict(event);
+                const cancelled = event.exceptionStatus === "holiday" || event.exceptionStatus === "cancelled";
+                return <button type="button" className={`training-week-event${conflict ? " conflict" : ""}${cancelled ? " cancelled" : ""}`} style={{ top, height, "--team-color": teamColor(event.coach.id) } as CSSProperties} key={event.id} onClick={() => openException(event)} title="Editar únicamente este día"><strong>{event.coach.teamLabel}</strong><span>{cancelled ? event.exceptionStatus === "holiday" ? "Festivo" : "Cancelado" : `${event.startTime}–${event.endTime}`}</span><small><MapPin size={10} /> {event.fieldName} · {fieldZoneLabel(event.fieldId, event.zoneIds)}</small>{conflict && <em><TriangleAlert size={10} /> Coincidencia</em>}</button>;
+              })}
+            </div>;
+          })}
+        </div>
+      </section>
+
+      {editing && editDraft && (
+        <div className="training-exception-backdrop" role="presentation" onMouseDown={() => setEditing(null)}>
+          <section className="training-exception-dialog" role="dialog" aria-modal="true" aria-labelledby="training-exception-title" onMouseDown={(event) => event.stopPropagation()}>
+            <header><div><span>EDITAR SOLO ESTE DÍA</span><h3 id="training-exception-title">{editing.coach.teamLabel}</h3><small>{new Intl.DateTimeFormat("es-ES", { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${editing.date}T12:00:00`))}</small></div><button type="button" aria-label="Cerrar" onClick={() => setEditing(null)}><X size={18} /></button></header>
+            <div className="training-exception-status">{([ ["scheduled", "Entrena"], ["holiday", "Festivo"], ["cancelled", "Cancelado"] ] as const).map(([value, label]) => <button type="button" className={editDraft.exceptionStatus === value ? "active" : ""} key={value} onClick={() => setEditDraft({ ...editDraft, exceptionStatus: value })}>{label}</button>)}</div>
+            <div className="training-exception-fields"><label><span>Empieza</span><input type="time" value={editDraft.startTime} onChange={(event) => setEditDraft({ ...editDraft, startTime: event.target.value })} /></label><label><span>Termina</span><input type="time" value={editDraft.endTime} onChange={(event) => setEditDraft({ ...editDraft, endTime: event.target.value })} /></label><label><span>Campo</span><select value={editDraft.fieldId} onChange={(event) => setEditDraft({ ...editDraft, fieldId: event.target.value as TrainingFieldId, zoneIds: [] })}>{TRAINING_FIELDS.map((field) => <option value={field.id} key={field.id}>{field.label}</option>)}</select></label></div>
+            <FieldZoneMap fieldId={editDraft.fieldId} selectedZoneIds={editDraft.zoneIds} onChange={(zoneIds) => setEditDraft({ ...editDraft, zoneIds })} />
+            <label className="training-slot-notes"><span>Motivo u observaciones</span><textarea rows={2} value={editDraft.notes} onChange={(event) => setEditDraft({ ...editDraft, notes: event.target.value })} placeholder="Ej. Festivo local" /></label>
+            <footer><button type="button" className="secondary-button" onClick={() => setEditing(null)}>Cancelar</button><button type="button" className="primary-button" disabled={busy || !editDraft.zoneIds.length} onClick={() => void saveException()}><Save size={16} /> Guardar solo este día</button></footer>
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}
