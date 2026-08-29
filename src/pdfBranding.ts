@@ -66,55 +66,57 @@ export function drawMagicPdfHeader(
     margin: number;
   },
 ) {
-  doc.setFillColor(...pdfBrand.surface);
+  doc.setFillColor(...pdfBrand.white);
   doc.rect(0, 0, width, 210, "F");
-  doc.setFillColor(...pdfBrand.navy);
-  doc.rect(0, 0, width, 28, "F");
   doc.setFillColor(...pdfBrand.green);
-  doc.rect(0, 27, width, 1.2, "F");
+  doc.rect(0, 0, width, 3.2, "F");
   doc.setFillColor(...pdfBrand.amber);
-  doc.roundedRect(margin, 7, 1.8, 15, 0.8, 0.8, "F");
+  doc.rect(0, 3.2, width, 1.1, "F");
 
-  doc.setTextColor(...pdfBrand.white);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.text(pdfCleanText(title), margin + 5, 10.8);
-  doc.setFontSize(8.4);
-  doc.setTextColor(213, 232, 248);
-  doc.text(pdfCleanText(period), margin + 5, 17.2);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.3);
-  doc.setTextColor(186, 219, 207);
-  doc.text(pdfCleanText(scope).toUpperCase(), margin + 5, 22.7);
-
-  const crestSize = 18;
-  const crestX = width - margin - crestSize;
+  const crestSize = 19;
+  const crestX = margin;
+  const crestY = 7.5;
   if (crestDataUrl) {
-    doc.setFillColor(...pdfBrand.white);
-    doc.roundedRect(crestX - 1.2, 4.2, crestSize + 2.4, crestSize + 2.4, 2.6, 2.6, "F");
-    doc.addImage(crestDataUrl, "JPEG", crestX, 5.4, crestSize, crestSize);
-  } else {
-    doc.setDrawColor(255, 255, 255);
+    doc.setDrawColor(226, 233, 241);
     doc.setFillColor(255, 255, 255);
-    doc.circle(crestX + crestSize / 2, 14.4, crestSize / 2, "FD");
-    doc.setTextColor(...pdfBrand.navy);
+    doc.roundedRect(crestX, crestY, crestSize, crestSize, 3, 3, "FD");
+    doc.addImage(crestDataUrl, "JPEG", crestX + 1.5, crestY + 1.5, crestSize - 3, crestSize - 3);
+  } else {
+    doc.setDrawColor(226, 233, 241);
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(crestX, crestY, crestSize, crestSize, 3, 3, "FD");
+    doc.setTextColor(...pdfBrand.green);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(6.8);
-    doc.text("UD", crestX + crestSize / 2, 13.7, { align: "center" });
-    doc.text("OLIVA", crestX + crestSize / 2, 17.2, { align: "center" });
+    doc.text("UD", crestX + crestSize / 2, crestY + 8.4, { align: "center" });
+    doc.text("OLIVA", crestX + crestSize / 2, crestY + 12.3, { align: "center" });
   }
 
-  const quoteX = width - margin - crestSize - 121;
-  const quoteWidth = 112;
-  doc.setFillColor(255, 255, 255);
-  doc.roundedRect(quoteX, 6.2, quoteWidth, 17.2, 3, 3, "F");
-  doc.setTextColor(...pdfBrand.green);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(5.5);
-  doc.text("FRASE DEL DIA", quoteX + 4, 11);
+  const textX = margin + crestSize + 8;
   doc.setTextColor(...pdfBrand.ink);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15.5);
+  doc.text(pdfCleanText(title), textX, 12.5);
+  doc.setTextColor(...pdfBrand.green);
+  doc.setFontSize(10.6);
+  doc.text(pdfCleanText(period).toUpperCase(), textX, 20.4);
+  doc.setTextColor(...pdfBrand.muted);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
-  const phraseLines = doc.splitTextToSize(pdfCleanText(phrase), quoteWidth - 8) as string[];
-  doc.text(phraseLines.slice(0, 2), quoteX + 4, 16);
+  doc.setFontSize(7.4);
+  doc.text(pdfCleanText(scope), textX, 26.5);
+
+  const phraseText = `Frase del dia: ${pdfCleanText(phrase)}`;
+  const phraseWidth = Math.min(118, width - textX - margin);
+  const phraseLines = doc.splitTextToSize(phraseText, phraseWidth) as string[];
+  doc.setTextColor(101, 119, 139);
+  doc.setFont("helvetica", "italic");
+  doc.setFontSize(7.1);
+  doc.text(phraseLines.slice(0, 1), width - margin, 15.3, { align: "right" });
+
+  doc.setDrawColor(222, 231, 240);
+  doc.line(margin, 32.2, width - margin, 32.2);
+  doc.setDrawColor(...pdfBrand.amber);
+  doc.setLineWidth(0.8);
+  doc.line(margin, 32.2, margin + 36, 32.2);
+  doc.setLineWidth(0.3);
 }

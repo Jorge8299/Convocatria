@@ -1957,12 +1957,18 @@ function CoordinatorPanel({
         const time = match.callupTime || subtractMatchMinutes(match.startTime, 45);
         return `${shortFieldName(place)} ${pdfTime(time)}`.trim();
       };
+      const selectedDate = new Date(`${selectedAgendaDate}T12:00:00`);
+      const selectedWeekStart = new Date(selectedDate);
+      selectedWeekStart.setDate(selectedWeekStart.getDate() - ((selectedWeekStart.getDay() + 6) % 7));
+      const selectedWeekEnd = new Date(selectedWeekStart);
+      selectedWeekEnd.setDate(selectedWeekStart.getDate() + 6);
+      const weekTitle = `${new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "long" }).format(selectedWeekStart)} - ${new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "long", year: "numeric" }).format(selectedWeekEnd)}`;
       const monthTitle = coordinatorMonthFormatter.format(agendaCursor).toUpperCase();
 
       drawMagicPdfHeader(doc, {
         title: "Cuadrante de partidos",
-        period: `Mes de ${monthTitle}`,
-        scope: selectedCoach?.teamLabel || "Todo el club",
+        period: `Semana del ${weekTitle}`,
+        scope: `${selectedCoach?.teamLabel || "Todo el club"} | Mes: ${monthTitle}`,
         phrase: getDailyFootballPhrase(monthStart),
         crestDataUrl: await getClubCrestDataUrl(),
         width: pageWidth,

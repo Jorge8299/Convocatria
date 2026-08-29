@@ -178,40 +178,45 @@ export async function buildTrainingPdf(input: TrainingPdfInput) {
   let y = 0;
 
   const drawHeader = (continuation = false) => {
-    doc.setFillColor(...palette.navy); doc.rect(0, 0, PAGE_WIDTH, continuation ? 24 : 49, "F");
-    doc.setFillColor(...palette.green); doc.rect(0, continuation ? 23 : 48, PAGE_WIDTH, 1.1, "F");
-    doc.setFillColor(...palette.amber); doc.roundedRect(MARGIN, 9, 2, continuation ? 10 : 21, 0.8, 0.8, "F");
-    doc.setTextColor(...palette.white); doc.setFont("helvetica", "bold"); doc.setFontSize(continuation ? 15 : 21);
-    doc.text(continuation ? "Plan de entrenamiento - continuacion" : "Plan de entrenamiento", MARGIN + (continuation ? 0 : 6), continuation ? 11 : 16);
-    doc.setFontSize(8); doc.setTextColor(180, 213, 248);
-    doc.text(`CONVO | ${cleanText(input.categoryLabel).toUpperCase()}`, MARGIN + (continuation ? 0 : 6), continuation ? 17 : 23);
+    doc.setFillColor(...palette.white); doc.rect(0, 0, PAGE_WIDTH, continuation ? 32 : 49, "F");
+    doc.setFillColor(...palette.green); doc.rect(0, 0, PAGE_WIDTH, 3.2, "F");
+    doc.setFillColor(...palette.amber); doc.rect(0, 3.2, PAGE_WIDTH, 1.1, "F");
+    const titleX = continuation ? MARGIN : MARGIN + 30;
+    doc.setTextColor(...palette.ink); doc.setFont("helvetica", "bold"); doc.setFontSize(continuation ? 15 : 20);
+    doc.text(continuation ? "Plan de entrenamiento - continuacion" : "Plan de entrenamiento", titleX, continuation ? 14 : 16);
+    doc.setFontSize(8); doc.setTextColor(...palette.muted);
+    doc.text(`CONVO | ${cleanText(input.categoryLabel).toUpperCase()}`, titleX, continuation ? 21 : 23);
     if (!continuation) {
-      doc.setTextColor(221, 235, 250); doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
-      doc.text(cleanText(formatTrainingDate(input.date)), MARGIN + 6, 31);
-      doc.setFontSize(7.5);
-      doc.setTextColor(186, 219, 207);
-      doc.text(cleanText(formatTrainingWeek(input.date)), MARGIN + 6, 38);
-      doc.setFillColor(...palette.white);
-      doc.roundedRect(107, 9, 57, 25, 3, 3, "F");
+      if (crestDataUrl) {
+        doc.setDrawColor(...palette.border);
+        doc.setFillColor(...palette.white);
+        doc.roundedRect(MARGIN, 9, 22, 22, 3, 3, "FD");
+        doc.addImage(crestDataUrl, "JPEG", MARGIN + 2, 11, 18, 18);
+      }
       doc.setTextColor(...palette.green);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(5.8);
-      doc.text("FRASE DEL DIA", 111, 14);
+      doc.setFontSize(9.8);
+      doc.text(cleanText(formatTrainingWeek(input.date)).toUpperCase(), titleX, 31);
       doc.setTextColor(...palette.ink);
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(7);
-      const phraseLines = doc.splitTextToSize(cleanText(dailyPhrase), 49) as string[];
-      doc.text(phraseLines.slice(0, 3), 111, 19);
-      if (crestDataUrl) {
-        doc.setFillColor(...palette.white);
-        doc.roundedRect(174, 8.5, 22, 22, 3, 3, "F");
-        doc.addImage(crestDataUrl, "JPEG", 176, 10.5, 18, 18);
-      }
-      doc.setTextColor(...palette.white);
+      doc.setFontSize(8.8);
+      doc.text(cleanText(formatTrainingDate(input.date)), titleX, 38);
+      doc.setTextColor(...palette.green);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
-      doc.text(`${input.startTime || "--:--"} - ${input.endTime || "--:--"}`, PAGE_WIDTH - MARGIN, 41, { align: "right" });
+      doc.text(`${input.startTime || "--:--"} - ${input.endTime || "--:--"}`, PAGE_WIDTH - MARGIN, 17, { align: "right" });
+      doc.setTextColor(...palette.muted);
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(7.1);
+      const phraseLines = doc.splitTextToSize(`Frase del dia: ${cleanText(dailyPhrase)}`, 78) as string[];
+      doc.text(phraseLines.slice(0, 2), PAGE_WIDTH - MARGIN, 29, { align: "right" });
     }
+    doc.setDrawColor(...palette.border);
+    doc.line(MARGIN, continuation ? 28 : 45, PAGE_WIDTH - MARGIN, continuation ? 28 : 45);
+    doc.setDrawColor(...palette.amber);
+    doc.setLineWidth(0.8);
+    doc.line(MARGIN, continuation ? 28 : 45, MARGIN + 32, continuation ? 28 : 45);
+    doc.setLineWidth(0.3);
     y = continuation ? 31 : 57;
   };
 
