@@ -7,6 +7,7 @@ import {
   ChevronRight,
   CloudUpload,
   Clock,
+  Download,
   FileText,
   FileUp,
   Home,
@@ -152,6 +153,11 @@ const MATCH_HOURS = Array.from({ length: 24 }, (_, index) =>
 const emptyCoordinatorMatch = (date: string): CoordinatorMatchInput => ({
   date,
   startTime: "09:00",
+  callupTime: "08:15",
+  callupPlace: "Morer",
+  kit: "",
+  homeLockerRoom: "",
+  awayLockerRoom: "",
   notes: "",
   playInWhite: false,
   matchType: "liga",
@@ -160,6 +166,34 @@ const emptyCoordinatorMatch = (date: string): CoordinatorMatchInput => ({
   rivalName: "",
   field: "",
 });
+
+const subtractMatchMinutes = (time: string, minutesToSubtract: number) => {
+  const [hour, minute] = time.split(":").map(Number);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return "";
+  const total = (hour * 60 + minute - minutesToSubtract + 24 * 60) % (24 * 60);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+};
+
+const pdfTime = (time?: string) => {
+  if (!time) return "";
+  const [hour, minute = "00"] = time.split(":");
+  return `${Number(hour)}'${minute}H`;
+};
+
+const pdfDateTime = (date: string, time?: string) => {
+  const day = new Intl.DateTimeFormat("es-ES", { weekday: "long" })
+    .format(new Date(`${date}T12:00:00`))
+    .toUpperCase();
+  return `${day} ${pdfTime(time) || "HORA PENDIENTE"}`;
+};
+
+const shortFieldName = (field?: string) => {
+  const clean = (field || "").trim();
+  if (/morer/i.test(clean)) return "MORER";
+  if (/campo c/i.test(clean)) return "CAMPO C";
+  if (/poli|polideportivo/i.test(clean)) return "POLIDEPORTIVO";
+  return clean.toUpperCase();
+};
 
 function QuickTimeInput({
   value,
@@ -1588,6 +1622,7 @@ function CoordinatorPanel({
     emptyCoordinatorMatch(todayIso),
   );
   const [matchSaving, setMatchSaving] = useState(false);
+  const [exportingMatches, setExportingMatches] = useState(false);
   const [matchMessage, setMatchMessage] = useState("");
   const [sortBy, setSortBy] = useState<
     "rating" | "goals" | "assists" | "matches"
@@ -1862,6 +1897,132 @@ function CoordinatorPanel({
       setMatchSaving(false);
     }
   };
+  const exportMatchQuadrantPdf = async () => {
+    const monthStart = coordinatorIsoDate(agendaCursor.getFullYear(), agendaCursor.getMonth(), 1);
+    const monthEnd = coordinatorIsoDate(agendaCursor.getFullYear(), agendaCursor.getMonth() + 1, 0);
+    const monthMatches = agendaMatches.filter((match) => match.date >= monthStart && match.date <= monthEnd);
+    const rows = filtered
+      .map((item) => ({
+        coach: item.coach,
+        matches: monthMatches.filter((match) => match.coach.id === item.coach.id),
+      }))
+      .filter((row) => row.matches.length);
+    if (!rows.length) {
+      setMatchMessage("No hay partidos en este mes para exportar.");
+      return;
+    }
+    setExportingMatches(true);
+    try {
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4", compress: true });
+      const pageWidth = 297;
+      const margin = 7;
+      const tableTop = 32;
+      const footerY = 203;
+      const headerHeight = 8.5;
+      const rowHeight = Math.max(4.8, Math.min(10.5, (footerY - tableTop - headerHeight - 4) / rows.length));
+      const fontSize = rowHeight < 6 ? 4.4 : rowHeight < 8 ? 5.2 : 6.2;
+      const columns = [
+        { label: "EQUIPO", width: 42 },
+        { label: "VS", width: 49 },
+        { label: "EQUIP.", width: 18 },
+        { label: "CAMPO", width: 39 },
+        { label: "HORARIO", width: 40 },
+        { label: "CITACIÓN", width: 36 },
+        { label: "VESTUARIO", width: 29 },
+        { label: "VEST. VISIT.", width: 30 },
+      ];
+      const clean = (value: string) => value.replace(/\s+/g, " ").trim();
+      const fitText = (value: string, width: number, size = fontSize) => {
+        const text = clean(value);
+        doc.setFontSize(size);
+        if (doc.getTextWidth(text) <= width) return text;
+        let start = 0;
+        let end = text.length;
+        while (start < end) {
+          const middle = Math.ceil((start + end) / 2);
+          if (doc.getTextWidth(`${text.slice(0, middle)}...`) <= width) start = middle;
+          else end = middle - 1;
+        }
+        return `${text.slice(0, Math.max(1, start)).trim()}...`;
+      };
+      const valueList = (matches: typeof monthMatches, getValue: (match: typeof monthMatches[number]) => string) =>
+        matches.map(getValue).filter(Boolean).join(" / ");
+      const rowValue = (row: typeof rows[number], getValue: (match: typeof monthMatches[number]) => string) =>
+        valueList(row.matches, getValue);
+      const meetingText = (match: typeof monthMatches[number]) => {
+        const place = match.callupPlace?.trim() || "Morer";
+        const time = match.callupTime || subtractMatchMinutes(match.startTime, 45);
+        return `${shortFieldName(place)} ${pdfTime(time)}`.trim();
+      };
+      const monthTitle = coordinatorMonthFormatter.format(agendaCursor).toUpperCase();
+
+      doc.setFillColor(255, 255, 255);
+      doc.rect(0, 0, pageWidth, 210, "F");
+      doc.setTextColor(10, 18, 28);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text(`HORARIOS ${monthTitle}`, pageWidth / 2, 12, { align: "center" });
+      doc.setFontSize(9);
+      doc.text(selectedCoach?.teamLabel.toUpperCase() || "UD OLIVA", pageWidth / 2, 18, { align: "center" });
+
+      let x = margin;
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.35);
+      columns.forEach((column) => {
+        doc.setFillColor(255, 255, 255);
+        doc.rect(x, tableTop, column.width, headerHeight, "S");
+        doc.setTextColor(0, 0, 0);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(column.width < 20 ? 5.2 : 8.4);
+        doc.text(column.label, x + column.width / 2, tableTop + 5.7, { align: "center" });
+        x += column.width;
+      });
+
+      rows.forEach((row, rowIndex) => {
+        let cellX = margin;
+        const y = tableTop + headerHeight + rowIndex * rowHeight;
+        const values = [
+          `${row.coach.teamLabel} ${firstName(row.coach.name)}`.toUpperCase(),
+          rowValue(row, (match) => match.rivalName.toUpperCase()),
+          rowValue(row, (match) => (match.kit || (match.playInWhite ? "BLANCO" : "")).toUpperCase()),
+          rowValue(row, (match) => shortFieldName(match.field)),
+          rowValue(row, (match) => pdfDateTime(match.date, match.startTime)),
+          rowValue(row, meetingText),
+          rowValue(row, (match) => (match.homeLockerRoom || "").toUpperCase()),
+          rowValue(row, (match) => (match.awayLockerRoom || "").toUpperCase()),
+        ];
+        columns.forEach((column, columnIndex) => {
+          const value = values[columnIndex] || "";
+          if (columnIndex === 3 && value) doc.setFillColor(0, 150, 34);
+          else if (columnIndex === 4 && /DOMINGO/.test(value)) doc.setFillColor(255, 137, 55);
+          else if (columnIndex === 4 && /SÁBADO|SABADO/.test(value)) doc.setFillColor(255, 240, 0);
+          else if (columnIndex === 4 && value) doc.setFillColor(210, 224, 244);
+          else if (columnIndex === 2 && value) doc.setFillColor(245, 39, 172);
+          else if ((columnIndex === 6 || columnIndex === 7) && /2/.test(value)) doc.setFillColor(22, 111, 170);
+          else if ((columnIndex === 6 || columnIndex === 7) && value) doc.setFillColor(255, 16, 10);
+          else doc.setFillColor(255, 255, 255);
+          doc.rect(cellX, y, column.width, rowHeight, "FD");
+          doc.setTextColor(columnIndex === 3 || ((columnIndex === 6 || columnIndex === 7) && value) ? 0 : 0, 0, 0);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(column.width < 20 ? Math.max(4, fontSize - 0.4) : fontSize);
+          doc.text(fitText(value, column.width - 2.4, column.width < 20 ? Math.max(4, fontSize - 0.4) : fontSize), cellX + column.width / 2, y + rowHeight / 2 + fontSize * 0.32, { align: "center" });
+          cellX += column.width;
+        });
+      });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(5.8);
+      doc.setTextColor(70, 70, 70);
+      doc.text("Cuadrante compacto: una fila por equipo; si un equipo tiene varios partidos en el mes, aparecen juntos en la misma línea.", margin, 207);
+      doc.text("Página 1 de 1", pageWidth - margin, 207, { align: "right" });
+      doc.save(`cuadrante-partidos-${monthStart}.pdf`);
+    } catch (error) {
+      setMatchMessage(error instanceof Error ? error.message : "No se pudo exportar el cuadrante de partidos.");
+    } finally {
+      setExportingMatches(false);
+    }
+  };
 
   return (
     <div className="role-shell coordinator-shell">
@@ -2006,18 +2167,23 @@ function CoordinatorPanel({
               <div className="coordinator-match-grid">
                 <label><span>Fecha</span><input type="date" value={matchDraft.date} onChange={(event) => setMatchDraft((current) => ({ ...current, date: event.target.value }))} /></label>
                 <label><span>Rival</span><select value={matchDraft.rivalId} onChange={(event) => updateCoordinatorRival(event.target.value)}><option value="">Selecciona rival</option>{selectedCoachData.rivals.map((rival) => <option key={rival.id} value={rival.id}>{rival.nombre}</option>)}</select></label>
-                <div className="coordinator-time-field"><span>Hora del partido</span><QuickTimeInput value={matchDraft.startTime} onChange={(startTime) => setMatchDraft((current) => ({ ...current, startTime }))} /></div>
+                <div className="coordinator-time-field"><span>Hora del partido</span><QuickTimeInput value={matchDraft.startTime} onChange={(startTime) => setMatchDraft((current) => ({ ...current, startTime, callupTime: !current.callupTime || current.callupTime === subtractMatchMinutes(current.startTime, 45) ? subtractMatchMinutes(startTime, 45) : current.callupTime }))} /></div>
                 {matchDraft.home ? (
                   <label><span>Campo</span><select value={matchDraft.field} onChange={(event) => setMatchDraft((current) => ({ ...current, field: event.target.value }))}><option value="">Selecciona campo</option>{HOME_FIELDS.map((field) => <option key={field}>{field}</option>)}</select></label>
                 ) : (
                   <label><span>Campo del rival</span><input value={matchDraft.field} onChange={(event) => setMatchDraft((current) => ({ ...current, field: event.target.value }))} placeholder="Se completa desde el rival, pero puedes editarlo" /></label>
                 )}
+                <label><span>Equipación</span><input value={matchDraft.kit || ""} onChange={(event) => setMatchDraft((current) => ({ ...current, kit: event.target.value }))} placeholder={matchDraft.playInWhite ? "Blanco" : "Opcional"} /></label>
+                <label><span>Lugar citación</span><input value={matchDraft.callupPlace || ""} onChange={(event) => setMatchDraft((current) => ({ ...current, callupPlace: event.target.value }))} placeholder="Morer" /></label>
+                <label><span>Hora citación</span><input type="time" value={matchDraft.callupTime || ""} onChange={(event) => setMatchDraft((current) => ({ ...current, callupTime: event.target.value }))} /></label>
+                <label><span>Vestuario</span><input value={matchDraft.homeLockerRoom || ""} onChange={(event) => setMatchDraft((current) => ({ ...current, homeLockerRoom: event.target.value }))} placeholder="Oliva 1" /></label>
+                <label><span>Vestuario visitante</span><input value={matchDraft.awayLockerRoom || ""} onChange={(event) => setMatchDraft((current) => ({ ...current, awayLockerRoom: event.target.value }))} placeholder="Visitante 1" /></label>
               </div>
               {!selectedCoachData.rivals.length && <p className="coordinator-no-rivals">Este equipo todavía no tiene rivales guardados.</p>}
               <div className="match-observations-group">
                 <label className="coordinator-match-notes"><span>Observaciones</span><textarea rows={2} value={matchDraft.notes} onChange={(event) => setMatchDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Escribe cualquier indicación para el entrenador" /></label>
                 <label className={`white-kit-toggle${matchDraft.playInWhite ? " active" : ""}`}>
-                  <input type="checkbox" checked={matchDraft.playInWhite} onChange={(event) => setMatchDraft((current) => ({ ...current, playInWhite: event.target.checked }))} />
+                  <input type="checkbox" checked={matchDraft.playInWhite} onChange={(event) => setMatchDraft((current) => ({ ...current, playInWhite: event.target.checked, kit: event.target.checked && !current.kit ? "Blanco" : current.kit }))} />
                   <span aria-hidden="true" />
                   <strong>Añadir en observaciones: JUGAMOS DE BLANCO</strong>
                 </label>
@@ -2162,6 +2328,7 @@ function CoordinatorPanel({
               <footer className="coordinator-agenda-legend">
                 <span><i className="scheduled" /> Programado</span>
                 <span><i className="completed" /> Con estadísticas</span>
+                <button type="button" className="coordinator-agenda-export" disabled={exportingMatches} onClick={() => void exportMatchQuadrantPdf()}><Download size={14} /> {exportingMatches ? "Exportando..." : "Exportar partidos"}</button>
                 <strong>{agendaMatches.length} partidos en la agenda</strong>
               </footer>
             </div>

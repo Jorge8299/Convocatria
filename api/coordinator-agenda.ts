@@ -14,6 +14,11 @@ const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 interface MatchInput {
   date?: string;
   startTime?: string;
+  callupTime?: string;
+  callupPlace?: string;
+  kit?: string;
+  homeLockerRoom?: string;
+  awayLockerRoom?: string;
   notes?: string;
   playInWhite?: boolean;
   matchType?: string;
@@ -93,6 +98,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           !MATCH_TYPES.has(match.matchType || '') || typeof match.home !== 'boolean' || !match.rivalId || !match.rivalName?.trim() || !match.field?.trim()) {
         res.status(400).json({ error: 'Completa equipo, fecha, hora, rival y campo.' }); return;
       }
+      if (match.callupTime && !TIME_PATTERN.test(match.callupTime)) { res.status(400).json({ error: 'Revisa la hora de citación.' }); return }
       if (match.home && !HOME_FIELDS.has(match.field)) { res.status(400).json({ error: 'Selecciona un campo local válido.' }); return }
 
       const rivalRows = await sql`SELECT data FROM club_stores WHERE account_id=${body.accountId} AND area='rivals' LIMIT 1`;
@@ -106,6 +112,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         type: 'match',
         date: match.date,
         startTime: match.startTime,
+        callupTime: match.callupTime || '',
+        callupPlace: String(match.callupPlace || '').trim().slice(0, 80),
+        kit: String(match.kit || '').trim().slice(0, 40),
+        homeLockerRoom: String(match.homeLockerRoom || '').trim().slice(0, 40),
+        awayLockerRoom: String(match.awayLockerRoom || '').trim().slice(0, 40),
         notes: String(match.notes || '').trim().slice(0, 500),
         playInWhite: match.playInWhite === true,
         matchType: match.matchType,

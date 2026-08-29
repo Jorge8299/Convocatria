@@ -94,6 +94,11 @@ export interface MatchAgendaEvent extends AgendaEventBase {
   rivalId: string;
   rivalName: string;
   field: string;
+  callupTime?: string;
+  callupPlace?: string;
+  kit?: string;
+  homeLockerRoom?: string;
+  awayLockerRoom?: string;
   playInWhite?: boolean;
   assignedByCoordinator?: boolean;
   assignedByName?: string;
@@ -784,6 +789,10 @@ export function AgendaView({
               <div><span>Hora</span><strong>{draft.startTime}</strong></div>
               <div><span>Condición</span><strong>{draft.home ? "En casa" : "A domicilio"}</strong></div>
               <div><span>Campo</span><strong>{draft.field}</strong></div>
+              {(draft.callupPlace || draft.callupTime) && <div><span>Citación</span><strong>{[draft.callupPlace, draft.callupTime].filter(Boolean).join(" · ")}</strong></div>}
+              {draft.kit && <div><span>Equipación</span><strong>{draft.kit}</strong></div>}
+              {draft.homeLockerRoom && <div><span>Vestuario</span><strong>{draft.homeLockerRoom}</strong></div>}
+              {draft.awayLockerRoom && <div><span>Vest. visitante</span><strong>{draft.awayLockerRoom}</strong></div>}
             </div>
             {(draft.playInWhite || draft.notes) && (
               <div className="assigned-match-observations">

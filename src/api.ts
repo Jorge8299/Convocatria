@@ -4,6 +4,11 @@ export type StoreArea = "team" | "stats" | "journeys" | "rivals" | "boards" | "a
 export interface CoordinatorMatchInput {
   date: string;
   startTime: string;
+  callupTime?: string;
+  callupPlace?: string;
+  kit?: string;
+  homeLockerRoom?: string;
+  awayLockerRoom?: string;
   notes: string;
   playInWhite: boolean;
   matchType: "liga" | "amistoso" | "torneo";
