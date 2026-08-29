@@ -1905,10 +1905,9 @@ function CoordinatorPanel({
       .map((item) => ({
         coach: item.coach,
         matches: monthMatches.filter((match) => match.coach.id === item.coach.id),
-      }))
-      .filter((row) => row.matches.length);
+      }));
     if (!rows.length) {
-      setMatchMessage("No hay partidos en este mes para exportar.");
+      setMatchMessage("No hay equipos para exportar.");
       return;
     }
     setExportingMatches(true);
@@ -1948,8 +1947,10 @@ function CoordinatorPanel({
       };
       const valueList = (matches: typeof monthMatches, getValue: (match: typeof monthMatches[number]) => string) =>
         matches.map(getValue).filter(Boolean).join(" / ");
-      const rowValue = (row: typeof rows[number], getValue: (match: typeof monthMatches[number]) => string) =>
-        valueList(row.matches, getValue);
+      const isRestMatch = (match: typeof monthMatches[number]) =>
+        /descans[ao]/i.test(`${match.rivalName} ${match.notes} ${match.field}`);
+      const regularMatches = (row: typeof rows[number]) =>
+        row.matches.filter((match) => !isRestMatch(match));
       const meetingText = (match: typeof monthMatches[number]) => {
         const place = match.callupPlace?.trim() || "Morer";
         const time = match.callupTime || subtractMatchMinutes(match.startTime, 45);
@@ -1982,15 +1983,17 @@ function CoordinatorPanel({
       rows.forEach((row, rowIndex) => {
         let cellX = margin;
         const y = tableTop + headerHeight + rowIndex * rowHeight;
+        const matchesToShow = regularMatches(row);
+        const emptyLabel = row.matches.length ? "DESCANSO" : "PENDIENTE";
         const values = [
           `${row.coach.teamLabel} ${firstName(row.coach.name)}`.toUpperCase(),
-          rowValue(row, (match) => match.rivalName.toUpperCase()),
-          rowValue(row, (match) => (match.kit || (match.playInWhite ? "BLANCO" : "")).toUpperCase()),
-          rowValue(row, (match) => shortFieldName(match.field)),
-          rowValue(row, (match) => pdfDateTime(match.date, match.startTime)),
-          rowValue(row, meetingText),
-          rowValue(row, (match) => (match.homeLockerRoom || "").toUpperCase()),
-          rowValue(row, (match) => (match.awayLockerRoom || "").toUpperCase()),
+          matchesToShow.length ? valueList(matchesToShow, (match) => match.rivalName.toUpperCase()) : emptyLabel,
+          matchesToShow.length ? valueList(matchesToShow, (match) => (match.kit || (match.playInWhite ? "BLANCO" : "")).toUpperCase()) : "",
+          matchesToShow.length ? valueList(matchesToShow, (match) => shortFieldName(match.field)) : "",
+          matchesToShow.length ? valueList(matchesToShow, (match) => pdfDateTime(match.date, match.startTime)) : "",
+          matchesToShow.length ? valueList(matchesToShow, meetingText) : "",
+          matchesToShow.length ? valueList(matchesToShow, (match) => (match.homeLockerRoom || "").toUpperCase()) : "",
+          matchesToShow.length ? valueList(matchesToShow, (match) => (match.awayLockerRoom || "").toUpperCase()) : "",
         ];
         columns.forEach((column, columnIndex) => {
           const value = values[columnIndex] || "";
@@ -2001,6 +2004,8 @@ function CoordinatorPanel({
           else if (columnIndex === 2 && value) doc.setFillColor(245, 39, 172);
           else if ((columnIndex === 6 || columnIndex === 7) && /2/.test(value)) doc.setFillColor(22, 111, 170);
           else if ((columnIndex === 6 || columnIndex === 7) && value) doc.setFillColor(255, 16, 10);
+          else if (columnIndex === 1 && value === "DESCANSO") doc.setFillColor(232, 247, 239);
+          else if (columnIndex === 1 && value === "PENDIENTE") doc.setFillColor(255, 247, 226);
           else doc.setFillColor(255, 255, 255);
           doc.rect(cellX, y, column.width, rowHeight, "FD");
           doc.setTextColor(columnIndex === 3 || ((columnIndex === 6 || columnIndex === 7) && value) ? 0 : 0, 0, 0);
