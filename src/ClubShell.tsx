@@ -8,6 +8,7 @@ import {
   CloudUpload,
   Clock,
   Download,
+  Dumbbell,
   FileText,
   FileUp,
   Home,
@@ -1605,6 +1606,9 @@ function CoordinatorPanel({
   >(
     "resumen",
   );
+  const [agendaView, setAgendaView] = useState<"trainings" | "matches">(
+    "trainings",
+  );
   const today = new Date();
   const todayIso = coordinatorIsoDate(
     today.getFullYear(),
@@ -1813,7 +1817,7 @@ function CoordinatorPanel({
     tab === "agenda"
       ? selectedCoach
         ? `Agenda de ${selectedCoach.teamLabel}`
-        : "Agenda de partidos del club"
+        : "Agenda del club"
       : tab === "resumen"
       ? selectedCoach
         ? `Resumen de ${selectedCoach.teamLabel}`
@@ -1834,12 +1838,14 @@ function CoordinatorPanel({
       setPendingMatchCreation(false);
       setMatchMessage("");
       setTab("agenda");
+      setAgendaView("matches");
     } else if (id === "all") {
       setPendingMatchCreation(false);
     }
   };
   const openMatchCreator = () => {
     setTab("agenda");
+    setAgendaView("matches");
     setMatchMessage("");
     setShowTrainingCreator(false);
     if (!selectedCoach) {
@@ -2156,7 +2162,7 @@ function CoordinatorPanel({
             </div>
             <div className="coordinator-activity-actions">
               <button type="button" className={showMatchCreator ? "active" : ""} onClick={openMatchCreator}><Plus size={17} /> Añadir partido</button>
-              <button type="button" className={showTrainingCreator ? "active training" : "training"} onClick={() => { setShowMatchCreator(false); setPendingMatchCreation(false); setShowTeamPicker(false); setMatchMessage(""); setShowTrainingCreator(true); }}><Plus size={17} /> Añadir entrenamiento</button>
+              <button type="button" className={showTrainingCreator ? "active training" : "training"} onClick={() => { setAgendaView("trainings"); setShowMatchCreator(false); setPendingMatchCreation(false); setShowTeamPicker(false); setMatchMessage(""); setShowTrainingCreator(true); }}><Plus size={17} /> Añadir entrenamiento</button>
             </div>
           </section>}
           {matchMessage && <div className="coordinator-match-message" role="status">{matchMessage}</div>}
@@ -2212,19 +2218,25 @@ function CoordinatorPanel({
               </footer>
             </section>
           )}
-          <CoordinatorTrainingPlanner
-            coaches={coaches}
-            stores={stores}
-            selectedCoachId={coachFilter}
-            onSelectCoach={setCoachFilter}
-            onRefresh={onRefresh}
-            formOpen={showTrainingCreator}
-            onFormOpenChange={setShowTrainingCreator}
-            onExportMatches={() => void exportMatchQuadrantPdf()}
-            exportingMatches={exportingMatches}
-            hideCommand
-          />
-          <section className="coordinator-agenda-layout">
+          <div className="coordinator-agenda-view-tabs" role="tablist" aria-label="Vista de agenda">
+            <button type="button" role="tab" aria-selected={agendaView === "trainings"} className={agendaView === "trainings" ? "active" : ""} onClick={() => setAgendaView("trainings")}><Dumbbell size={15} /> Entrenamientos</button>
+            <button type="button" role="tab" aria-selected={agendaView === "matches"} className={agendaView === "matches" ? "active" : ""} onClick={() => setAgendaView("matches")}><Trophy size={15} /> Partidos</button>
+          </div>
+          <div hidden={agendaView !== "trainings"}>
+            <CoordinatorTrainingPlanner
+              coaches={coaches}
+              stores={stores}
+              selectedCoachId={coachFilter}
+              onSelectCoach={setCoachFilter}
+              onRefresh={onRefresh}
+              formOpen={showTrainingCreator}
+              onFormOpenChange={setShowTrainingCreator}
+              onExportMatches={() => void exportMatchQuadrantPdf()}
+              exportingMatches={exportingMatches}
+              hideCommand
+            />
+          </div>
+          <section className="coordinator-agenda-layout" hidden={agendaView !== "matches"}>
             <div className="coordinator-agenda-calendar">
               <header className="coordinator-agenda-toolbar">
                 <button
@@ -2264,6 +2276,9 @@ function CoordinatorPanel({
                   <ChevronRight size={18} />
                 </button>
               </header>
+              <div className="coordinator-match-calendar-actions">
+                <button type="button" className="training-export-button matches" disabled={exportingMatches} onClick={() => void exportMatchQuadrantPdf()}><Download size={15} /> {exportingMatches ? "Exportando..." : "Exportar partidos"}</button>
+              </div>
               <button
                 type="button"
                 className="coordinator-agenda-today"
