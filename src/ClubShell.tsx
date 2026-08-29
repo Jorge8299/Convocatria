@@ -2203,6 +2203,8 @@ function CoordinatorPanel({
             onRefresh={onRefresh}
             formOpen={showTrainingCreator}
             onFormOpenChange={setShowTrainingCreator}
+            onExportMatches={() => void exportMatchQuadrantPdf()}
+            exportingMatches={exportingMatches}
             hideCommand
           />
           <section className="coordinator-agenda-layout">
@@ -2328,7 +2330,6 @@ function CoordinatorPanel({
               <footer className="coordinator-agenda-legend">
                 <span><i className="scheduled" /> Programado</span>
                 <span><i className="completed" /> Con estadísticas</span>
-                <button type="button" className="coordinator-agenda-export" disabled={exportingMatches} onClick={() => void exportMatchQuadrantPdf()}><Download size={14} /> {exportingMatches ? "Exportando..." : "Exportar partidos"}</button>
                 <strong>{agendaMatches.length} partidos en la agenda</strong>
               </footer>
             </div>

@@ -68,6 +68,8 @@ export function CoordinatorTrainingPlanner({
   onRefresh,
   formOpen,
   onFormOpenChange,
+  onExportMatches,
+  exportingMatches = false,
   hideCommand = false,
 }: {
   coaches: ClubAccount[];
@@ -77,6 +79,8 @@ export function CoordinatorTrainingPlanner({
   onRefresh: () => Promise<void>;
   formOpen?: boolean;
   onFormOpenChange?: (open: boolean) => void;
+  onExportMatches?: () => void;
+  exportingMatches?: boolean;
   hideCommand?: boolean;
 }) {
   const today = new Date();
@@ -325,7 +329,10 @@ export function CoordinatorTrainingPlanner({
           <div className="training-week-navigation"><button type="button" aria-label="Semana anterior" onClick={() => setWeek((current) => addDays(current, -7))}><ChevronLeft size={18} /></button><button type="button" onClick={() => setWeek(startOfWeek(new Date()))}>Hoy</button><button type="button" aria-label="Semana siguiente" onClick={() => setWeek((current) => addDays(current, 7))}><ChevronRight size={18} /></button></div>
           <div><span>SEMANA</span><h3>{new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "long" }).format(weekDays[0])} – {new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "long", year: "numeric" }).format(weekDays[6])}</h3></div>
           <div className="training-time-range">{([ ["all", "Todo"], ["morning", "Mañana"], ["afternoon", "Tarde"] ] as const).map(([value, label]) => <button type="button" className={range === value ? "active" : ""} key={value} onClick={() => setRange(value)}>{label}</button>)}</div>
-          <button type="button" className="training-export-button" disabled={exporting} onClick={() => void exportQuadrantPdf()}><Download size={15} /> {exporting ? "Exportando..." : "Exportar"}</button>
+          <div className="training-export-actions">
+            <button type="button" className="training-export-button" disabled={exporting} onClick={() => void exportQuadrantPdf()}><Download size={15} /> {exporting ? "Exportando..." : "Exportar entrenes"}</button>
+            {onExportMatches && <button type="button" className="training-export-button matches" disabled={exportingMatches} onClick={onExportMatches}><Download size={15} /> {exportingMatches ? "Exportando..." : "Exportar partidos"}</button>}
+          </div>
         </header>
         <div className="training-week-grid" style={{ "--hour-count": hours.length } as CSSProperties}>
           <div className="training-week-corner"><Clock size={14} /></div>
