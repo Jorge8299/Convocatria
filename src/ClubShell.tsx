@@ -148,6 +148,14 @@ const coordinatorIsoDate = (year: number, month: number, day: number) =>
 const normalizedMatchName = (value: string) =>
   value.trim().toLocaleLowerCase("es").replace(/\s+/g, " ");
 const HOME_FIELDS = ["El Morer", "Campo C", "Polideportivo"];
+const CALLUP_PLACES = ["Morer", "Parking del Lidl"];
+const HOME_LOCKER_ROOMS = ["Local 1", "Local 2", "Polideportivo"];
+const AWAY_LOCKER_ROOMS = ["Visitante 1", "Visitante 2", "Polideportivo"];
+const DEFAULT_AWAY_LOCKER_ROOM: Record<string, string> = {
+  "Local 1": "Visitante 1",
+  "Local 2": "Visitante 2",
+  Polideportivo: "Polideportivo",
+};
 const MATCH_HOURS = Array.from({ length: 24 }, (_, index) =>
   String(index).padStart(2, "0"),
 );
@@ -158,8 +166,8 @@ const emptyCoordinatorMatch = (date: string): CoordinatorMatchInput => ({
   callupTime: "08:15",
   callupPlace: "Morer",
   kit: "",
-  homeLockerRoom: "",
-  awayLockerRoom: "",
+  homeLockerRoom: "Local 1",
+  awayLockerRoom: "Visitante 1",
   notes: "",
   playInWhite: false,
   matchType: "liga",
@@ -2078,15 +2086,6 @@ function CoordinatorPanel({
             </small>
           </div>
           <div className="context-actions">
-            {nextCoach && (
-              <button
-                type="button"
-                className="next-team-button"
-                onClick={goToNextTeam}
-              >
-                Siguiente <ChevronRight size={18} />
-              </button>
-            )}
             <button
               className="change-team-button"
               onClick={() => setShowTeamPicker((current) => !current)}
@@ -2171,7 +2170,10 @@ function CoordinatorPanel({
               <header>
                 <div>
                   <span>PARTIDO PARA</span>
-                  <h3>{selectedCoach.teamLabel}</h3>
+                  <div className="coordinator-match-team-heading">
+                    <h3>{selectedCoach.teamLabel}</h3>
+                    {nextCoach && <button type="button" className="next-team-button" onClick={goToNextTeam}>Siguiente equipo <ChevronRight size={17} /></button>}
+                  </div>
                   <small>{selectedCoach.name}</small>
                 </div>
                 <button type="button" aria-label="Cerrar formulario" onClick={() => setShowMatchCreator(false)}><X size={18} /></button>
@@ -2197,10 +2199,10 @@ function CoordinatorPanel({
                   <label><span>Campo del rival</span><input value={matchDraft.field} onChange={(event) => setMatchDraft((current) => ({ ...current, field: event.target.value }))} placeholder="Se completa desde el rival, pero puedes editarlo" /></label>
                 )}
                 <label><span>Equipación</span><input value={matchDraft.kit || ""} onChange={(event) => setMatchDraft((current) => ({ ...current, kit: event.target.value }))} placeholder={matchDraft.playInWhite ? "Blanco" : "Opcional"} /></label>
-                <label><span>Lugar citación</span><input value={matchDraft.callupPlace || ""} onChange={(event) => setMatchDraft((current) => ({ ...current, callupPlace: event.target.value }))} placeholder="Morer" /></label>
+                <label><span>Lugar citación</span><select value={CALLUP_PLACES.includes(matchDraft.callupPlace || "") ? matchDraft.callupPlace : "Otro"} onChange={(event) => setMatchDraft((current) => ({ ...current, callupPlace: event.target.value === "Otro" ? "" : event.target.value }))}>{CALLUP_PLACES.map((place) => <option key={place}>{place}</option>)}<option value="Otro">Otro</option></select>{!CALLUP_PLACES.includes(matchDraft.callupPlace || "") && <input value={matchDraft.callupPlace || ""} onChange={(event) => setMatchDraft((current) => ({ ...current, callupPlace: event.target.value }))} placeholder="Escribe el lugar de citación" />}</label>
                 <label><span>Hora citación</span><input type="time" value={matchDraft.callupTime || ""} onChange={(event) => setMatchDraft((current) => ({ ...current, callupTime: event.target.value }))} /></label>
-                <label><span>Vestuario</span><input value={matchDraft.homeLockerRoom || ""} onChange={(event) => setMatchDraft((current) => ({ ...current, homeLockerRoom: event.target.value }))} placeholder="Oliva 1" /></label>
-                <label><span>Vestuario visitante</span><input value={matchDraft.awayLockerRoom || ""} onChange={(event) => setMatchDraft((current) => ({ ...current, awayLockerRoom: event.target.value }))} placeholder="Visitante 1" /></label>
+                <label><span>Vestuario</span><select value={matchDraft.homeLockerRoom || "Local 1"} onChange={(event) => { const homeLockerRoom = event.target.value; setMatchDraft((current) => ({ ...current, homeLockerRoom, awayLockerRoom: DEFAULT_AWAY_LOCKER_ROOM[homeLockerRoom] })) }}>{HOME_LOCKER_ROOMS.map((lockerRoom) => <option key={lockerRoom}>{lockerRoom}</option>)}</select></label>
+                <label><span>Vestuario visitante</span><select value={matchDraft.awayLockerRoom || "Visitante 1"} onChange={(event) => setMatchDraft((current) => ({ ...current, awayLockerRoom: event.target.value }))}>{AWAY_LOCKER_ROOMS.map((lockerRoom) => <option key={lockerRoom}>{lockerRoom}</option>)}</select></label>
               </div>
               {!selectedCoachData.rivals.length && <p className="coordinator-no-rivals">Este equipo todavía no tiene rivales guardados.</p>}
               <div className="match-observations-group">
@@ -2213,7 +2215,6 @@ function CoordinatorPanel({
               </div>
               <footer>
                 <button type="button" className="secondary-button" onClick={() => setShowMatchCreator(false)}>Cancelar</button>
-                {nextCoach && <button type="button" className="next-team-button" onClick={goToNextTeam}>Siguiente equipo <ChevronRight size={17} /></button>}
                 <button type="button" className="primary-button" disabled={matchSaving || !selectedCoachData.rivals.length} onClick={() => void saveCoordinatorMatch()}><Save size={17} /> {matchSaving ? "Guardando…" : "Guardar en su agenda"}</button>
               </footer>
             </section>
