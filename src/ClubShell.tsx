@@ -162,7 +162,7 @@ const MATCH_HOURS = Array.from({ length: 24 }, (_, index) =>
 const emptyCoordinatorMatch = (date: string): CoordinatorMatchInput => ({
   date,
   startTime: "09:00",
-  callupTime: "08:15",
+  callupTime: "08:00",
   callupPlace: "Morer",
   kit: "",
   homeLockerRoom: "Local 1",
@@ -2185,13 +2185,13 @@ function CoordinatorPanel({
                 ))}
               </div>
               <div className="coordinator-match-home-away">
-                <button type="button" className={matchDraft.home ? "active" : ""} onClick={() => setMatchDraft((current) => ({ ...current, home: true, field: "" }))}><Home size={17} /> En casa</button>
-                <button type="button" className={!matchDraft.home ? "active" : ""} onClick={() => { const rival = selectedCoachData.rivals.find((item) => item.id === matchDraft.rivalId); setMatchDraft((current) => ({ ...current, home: false, field: rival?.campo || current.field })); }}><Plane size={17} /> Fuera</button>
+                <button type="button" className={matchDraft.home ? "active" : ""} onClick={() => setMatchDraft((current) => ({ ...current, home: true, field: "", callupTime: !current.callupTime || current.callupTime === subtractMatchMinutes(current.startTime, current.home ? 60 : 90) ? subtractMatchMinutes(current.startTime, 60) : current.callupTime }))}><Home size={17} /> En casa</button>
+                <button type="button" className={!matchDraft.home ? "active" : ""} onClick={() => { const rival = selectedCoachData.rivals.find((item) => item.id === matchDraft.rivalId); setMatchDraft((current) => ({ ...current, home: false, field: rival?.campo || current.field, callupTime: !current.callupTime || current.callupTime === subtractMatchMinutes(current.startTime, current.home ? 60 : 90) ? subtractMatchMinutes(current.startTime, 90) : current.callupTime })); }}><Plane size={17} /> Fuera</button>
               </div>
               <div className="coordinator-match-grid">
                 <label><span>Fecha</span><input type="date" value={matchDraft.date} onChange={(event) => setMatchDraft((current) => ({ ...current, date: event.target.value }))} /></label>
                 <label><span>Rival</span><select value={matchDraft.rivalId} onChange={(event) => updateCoordinatorRival(event.target.value)}><option value="">Selecciona rival</option>{selectedCoachData.rivals.map((rival) => <option key={rival.id} value={rival.id}>{rival.nombre}</option>)}</select></label>
-                <div className="coordinator-time-field"><span>Hora del partido</span><QuickTimeInput value={matchDraft.startTime} onChange={(startTime) => setMatchDraft((current) => ({ ...current, startTime, callupTime: !current.callupTime || current.callupTime === subtractMatchMinutes(current.startTime, 45) ? subtractMatchMinutes(startTime, 45) : current.callupTime }))} /></div>
+                <div className="coordinator-time-field"><span>Hora del partido</span><QuickTimeInput value={matchDraft.startTime} onChange={(startTime) => setMatchDraft((current) => ({ ...current, startTime, callupTime: !current.callupTime || current.callupTime === subtractMatchMinutes(current.startTime, current.home ? 60 : 90) ? subtractMatchMinutes(startTime, current.home ? 60 : 90) : current.callupTime }))} /></div>
                 {matchDraft.home ? (
                   <label><span>Campo</span><select value={matchDraft.field} onChange={(event) => setMatchDraft((current) => ({ ...current, field: event.target.value }))}><option value="">Selecciona campo</option>{HOME_FIELDS.map((field) => <option key={field}>{field}</option>)}</select></label>
                 ) : (
