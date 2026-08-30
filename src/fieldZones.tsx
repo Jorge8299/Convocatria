@@ -30,10 +30,10 @@ export const TRAINING_FIELDS: TrainingField[] = [
     label: "El Morer",
     image: "/fields/morer.png",
     zones: [
-      { id: "m-1", label: "Zona 1", points: "9,31 56,9 48,54 28,65" },
-      { id: "m-2", label: "Zona 2", points: "56,9 89,71 69,43 48,54" },
-      { id: "m-3", label: "Zona 3", points: "89,71 42,96 63,89 48,54 69,43" },
-      { id: "m-4", label: "Zona 4", points: "42,96 9,31 28,65 48,54 63,89" },
+      { id: "m-1", label: "Zona 1", points: "9,31 33,20 48,54 28,65" },
+      { id: "m-2", label: "Zona 2", points: "33,20 56,9 69,43 48,54" },
+      { id: "m-3", label: "Zona 3", points: "48,54 69,43 89,71 63,89" },
+      { id: "m-4", label: "Zona 4", points: "28,65 48,54 63,89 42,96" },
     ],
   },
   {
@@ -41,10 +41,10 @@ export const TRAINING_FIELDS: TrainingField[] = [
     label: "Polideportivo",
     image: "/fields/poli.png",
     zones: [
-      { id: "p-1", label: "Zona 1", points: "21,36 59,21 55,50 36,62" },
-      { id: "p-2", label: "Zona 2", points: "59,21 92,73 72,43 55,50" },
-      { id: "p-3", label: "Zona 3", points: "92,73 51,89 70,78 55,50 72,43" },
-      { id: "p-4", label: "Zona 4", points: "51,89 21,36 36,62 55,50 70,78" },
+      { id: "p-1", label: "Zona 1", points: "21,36 43,27 55,50 36,62" },
+      { id: "p-2", label: "Zona 2", points: "43,27 59,21 72,43 55,50" },
+      { id: "p-3", label: "Zona 3", points: "55,50 72,43 92,73 70,78" },
+      { id: "p-4", label: "Zona 4", points: "36,62 55,50 70,78 51,89" },
     ],
   },
 ];
