@@ -2336,6 +2336,9 @@ function CoordinatorPanel({
                   const dayMatches = agendaMatches.filter(
                     (match) => match.date === cell.date,
                   );
+                  const cancelledMatches = dayMatches.filter(
+                    (match) => match.coordinatorStatus === "cancelled",
+                  );
                   return (
                     <button
                       type="button"
@@ -2353,31 +2356,17 @@ function CoordinatorPanel({
                       </span>
                       {dayMatches.length > 0 && (
                         <>
-                          <span className="coordinator-agenda-preview">
-                            <i
-                              className={dayMatches[0].stats ? "completed" : "scheduled"}
-                            >
-                              {dayMatches[0].stats ? (
-                                <Trophy size={13} />
-                              ) : (
-                                <Calendar size={13} />
-                              )}
-                            </i>
-                            <span>
-                              <strong>{dayMatches[0].coach.teamLabel}</strong>
-                              <small>
-                                {dayMatches[0].startTime || "Sin hora"} · {dayMatches[0].rivalName}
-                              </small>
-                            </span>
-                          </span>
-                          <span className="coordinator-agenda-markers">
+                          <span className="coordinator-agenda-team-list">
                             {dayMatches.slice(0, 3).map((match) => (
-                              <i
-                                className={match.stats ? "completed" : "scheduled"}
-                                key={`${match.coach.id}-${match.id}`}
-                              />
+                              <span className={match.coordinatorStatus === "cancelled" ? "cancelled" : match.stats ? "completed" : "scheduled"} key={`${match.coach.id}-${match.id}`}>
+                                <i />
+                                <strong>{match.coach.teamLabel}</strong>
+                                <small>{match.startTime || "Sin hora"}</small>
+                              </span>
                             ))}
+                            {dayMatches.length > 3 && <em>+{dayMatches.length - 3} más</em>}
                           </span>
+                          {cancelledMatches.length > 0 && <span className="coordinator-agenda-cancelled-count">{cancelledMatches.length} cancelado{cancelledMatches.length === 1 ? "" : "s"}</span>}
                           <b className="coordinator-agenda-count">
                             {dayMatches.length}
                           </b>

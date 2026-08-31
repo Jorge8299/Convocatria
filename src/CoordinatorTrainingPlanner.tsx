@@ -112,10 +112,10 @@ export function CoordinatorTrainingPlanner({
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(week, index)), [week]);
   const firstHour = range === "afternoon" ? 15 : 8;
   const lastHour = range === "morning" ? 15 : 23;
-  const hours = Array.from({ length: lastHour - firstHour }, (_, index) => firstHour + index);
   const selectedCoach = selectedCoachId === "all"
     ? undefined
     : coaches.find((coach) => coach.id === selectedCoachId);
+  const displayedCoaches = selectedCoach ? [selectedCoach] : coaches;
   const allTrainings = useMemo(() => coaches.flatMap((coach) =>
     getStored<AgendaEvent[]>(stores, coach.id, "agenda", [])
       .filter((event): event is TrainingAgendaEvent => event.type === "training" && event.assignedByCoordinator === true)
@@ -367,28 +367,33 @@ export function CoordinatorTrainingPlanner({
             {onExportMatches && <button type="button" className="training-export-button matches" disabled={exportingMatches} onClick={onExportMatches}><Download size={15} /> {exportingMatches ? "Exportando..." : "Exportar partidos"}</button>}
           </div>
         </header>
-        <div className="training-week-grid" style={{ "--hour-count": hours.length } as CSSProperties}>
-          <div className="training-week-corner"><Clock size={14} /></div>
-          {weekDays.map((day) => {
-            const date = isoDate(day);
-            const count = allTrainings.filter((event) => event.date === date && (selectedCoachId === "all" || event.coach.id === selectedCoachId)).length;
-            return <div className={`training-week-day-title${date === isoDate(today) ? " today" : ""}`} key={date}><span>{SHORT_DAY_LABELS[day.getDay()]}</span><strong>{day.getDate()}</strong>{count > 0 && <button type="button" onClick={() => openBatchEditor(date)} title="Gestionar todos los entrenamientos de este día"><CalendarCheck size={11} /> Gestionar</button>}</div>;
-          })}
-          <div className="training-week-hours">{hours.map((hour) => <span key={hour}>{String(hour).padStart(2, "0")}:00</span>)}</div>
-          {weekDays.map((day) => {
-            const date = isoDate(day);
-            const dayEvents = visibleTrainings.filter((event) => event.date === date);
-            return <div className="training-week-day-track" key={date}>
-              {hours.map((hour) => <i key={hour} />)}
-              {dayEvents.map((event) => {
-                const top = Math.max(0, (minutes(event.startTime) - firstHour * 60) / 60 * 72);
-                const height = Math.max(34, Math.min((lastHour - firstHour) * 72 - top, (minutes(event.endTime) - minutes(event.startTime)) / 60 * 72));
-                const conflict = hasConflict(event);
-                const cancelled = event.exceptionStatus === "holiday" || event.exceptionStatus === "cancelled";
-                return <button type="button" className={`training-week-event${conflict ? " conflict" : ""}${cancelled ? " cancelled" : ""}`} style={{ top, height, "--team-color": teamColor(event.coach.id) } as CSSProperties} key={event.id} onClick={() => openException(event)} title="Editar únicamente este día"><strong>{event.coach.teamLabel}</strong><span>{cancelled ? event.exceptionStatus === "holiday" ? "Festivo" : "Cancelado" : `${event.startTime}–${event.endTime}`}</span><small><MapPin size={10} /> {event.fieldName} · {fieldZoneLabel(event.fieldId, event.zoneIds)}</small>{conflict && <em><TriangleAlert size={10} /> Coincidencia</em>}</button>;
-              })}
-            </div>;
-          })}
+        <div className="training-team-calendar">
+          <div className="training-team-calendar-header">
+            <div className="training-team-calendar-corner"><Clock size={14} /> Equipo</div>
+            {weekDays.map((day) => {
+              const date = isoDate(day);
+              const count = allTrainings.filter((event) => event.date === date && (selectedCoachId === "all" || event.coach.id === selectedCoachId)).length;
+              return <div className={`training-week-day-title${date === isoDate(today) ? " today" : ""}`} key={date}><span>{SHORT_DAY_LABELS[day.getDay()]}</span><strong>{day.getDate()}</strong>{count > 0 && <button type="button" onClick={() => openBatchEditor(date)} title="Gestionar todos los entrenamientos de este día"><CalendarCheck size={11} /> Gestionar</button>}</div>;
+            })}
+          </div>
+          <div className="training-team-calendar-body">
+            {displayedCoaches.map((coach) => (
+              <div className="training-team-calendar-row" key={coach.id}>
+                <div className="training-team-name" style={{ "--team-color": teamColor(coach.id) } as CSSProperties}><i /><span><strong>{coach.teamLabel}</strong><small>{coach.name}</small></span></div>
+                {weekDays.map((day) => {
+                  const date = isoDate(day);
+                  const events = visibleTrainings.filter((event) => event.coach.id === coach.id && event.date === date);
+                  return <div className="training-team-day-cell" key={date}>
+                    {events.length ? events.map((event) => {
+                      const conflict = hasConflict(event);
+                      const cancelled = event.exceptionStatus === "holiday" || event.exceptionStatus === "cancelled";
+                      return <button type="button" className={`training-team-event${conflict ? " conflict" : ""}${cancelled ? " cancelled" : ""}`} style={{ "--team-color": teamColor(event.coach.id) } as CSSProperties} key={event.id} onClick={() => openException(event)} title="Editar únicamente este día"><span>{cancelled ? event.exceptionStatus === "holiday" ? "Festivo" : "Cancelado" : `${event.startTime}–${event.endTime}`}</span><small><MapPin size={10} /> {event.fieldName} · {fieldZoneLabel(event.fieldId, event.zoneIds)}</small>{conflict && <em><TriangleAlert size={10} /> Coincidencia</em>}</button>;
+                    }) : <span className="training-team-empty">—</span>}
+                  </div>;
+                })}
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
