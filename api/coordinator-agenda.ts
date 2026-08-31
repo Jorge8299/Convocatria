@@ -137,7 +137,53 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
 
     if (req.method === 'PATCH') {
-      const body = jsonBody<{ action?: string; accountId?: string; eventId?: string; changes?: Record<string, unknown> }>(req);
+      const body = jsonBody<{ action?: string; accountId?: string; eventId?: string; changes?: Record<string, unknown>; selections?: Array<{ accountId?: string; eventId?: string }>; exceptionStatus?: string; match?: MatchInput; coordinatorStatus?: string }>(req);
+      if (session.role === 'coordinador' && body.action === 'batchTrainingStatus') {
+        const selections = Array.isArray(body.selections) ? body.selections.slice(0, 100) : [];
+        if (!selections.length || !['scheduled', 'holiday', 'cancelled'].includes(body.exceptionStatus || '') || selections.some((item) => !item.accountId || !item.eventId)) {
+          res.status(400).json({ error: 'Selecciona entrenamientos y una acción válida.' }); return;
+        }
+        let updated = 0;
+        for (const selection of selections) {
+          const rows = await sql`UPDATE club_stores
+            SET data=(SELECT jsonb_agg(CASE WHEN item->>'id'=${selection.eventId!} AND item->>'type'='training' AND item->>'assignedByCoordinator'='true' THEN item || jsonb_build_object('exceptionStatus',${body.exceptionStatus!}::text) ELSE item END) FROM jsonb_array_elements(data) AS item),updated_at=NOW()
+            WHERE account_id=${selection.accountId!} AND area='agenda'
+              AND EXISTS (SELECT 1 FROM jsonb_array_elements(data) AS item WHERE item->>'id'=${selection.eventId!} AND item->>'type'='training' AND item->>'assignedByCoordinator'='true')
+            RETURNING account_id`;
+          if (rows[0]) updated += 1;
+        }
+        res.status(200).json({ ok: true, updated }); return;
+      }
+      if (session.role === 'coordinador' && body.action === 'updateMatch') {
+        if (!body.accountId || !body.eventId) { res.status(400).json({ error: 'Partido no válido.' }); return }
+        let changes: Record<string, unknown> = {};
+        if (body.match) {
+          const match = body.match;
+          if (!DATE_PATTERN.test(match.date || '') || !TIME_PATTERN.test(match.startTime || '') || !MATCH_TYPES.has(match.matchType || '') || typeof match.home !== 'boolean' || !match.rivalId || !match.rivalName?.trim() || !match.field?.trim()) {
+            res.status(400).json({ error: 'Completa fecha, hora, rival y campo.' }); return;
+          }
+          if (match.callupTime && !TIME_PATTERN.test(match.callupTime)) { res.status(400).json({ error: 'Revisa la hora de citación.' }); return }
+          if (match.home && !HOME_FIELDS.has(match.field)) { res.status(400).json({ error: 'Selecciona un campo local válido.' }); return }
+          changes = {
+            date: match.date, startTime: match.startTime, callupTime: match.callupTime || '', callupPlace: String(match.callupPlace || '').trim().slice(0, 80),
+            kit: String(match.kit || '').trim().slice(0, 40), homeLockerRoom: String(match.homeLockerRoom || '').trim().slice(0, 40), awayLockerRoom: String(match.awayLockerRoom || '').trim().slice(0, 40),
+            notes: String(match.notes || '').trim().slice(0, 500), playInWhite: match.playInWhite === true, matchType: match.matchType, home: match.home,
+            rivalId: match.rivalId, rivalName: match.rivalName.trim().slice(0, 120), field: match.field.trim().slice(0, 160),
+          };
+        }
+        if (body.coordinatorStatus) {
+          if (!['scheduled', 'cancelled'].includes(body.coordinatorStatus)) { res.status(400).json({ error: 'Estado de partido no válido.' }); return }
+          changes.coordinatorStatus = body.coordinatorStatus;
+        }
+        if (!Object.keys(changes).length) { res.status(400).json({ error: 'No hay cambios para guardar.' }); return }
+        const rows = await sql`UPDATE club_stores
+          SET data=(SELECT jsonb_agg(CASE WHEN item->>'id'=${body.eventId} AND item->>'type'='match' AND item->>'assignedByCoordinator'='true' THEN item || ${JSON.stringify(changes)}::jsonb ELSE item END) FROM jsonb_array_elements(data) AS item),updated_at=NOW()
+          WHERE account_id=${body.accountId} AND area='agenda'
+            AND EXISTS (SELECT 1 FROM jsonb_array_elements(data) AS item WHERE item->>'id'=${body.eventId} AND item->>'type'='match' AND item->>'assignedByCoordinator'='true')
+          RETURNING account_id`;
+        if (!rows[0]) { res.status(404).json({ error: 'No se encontró el partido.' }); return }
+        res.status(200).json({ ok: true }); return;
+      }
       if (session.role === 'coordinador' && body.action === 'updateTrainingOccurrence') {
         const changes = body.changes || {};
         const fieldId = String(changes.fieldId || '');

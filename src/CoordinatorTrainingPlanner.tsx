@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { ChevronLeft, ChevronRight, Clock, Download, Dumbbell, MapPin, Plus, Save, TriangleAlert, X } from "lucide-react";
+import { CalendarCheck, ChevronLeft, ChevronRight, Clock, Download, Dumbbell, MapPin, Plus, Save, TriangleAlert, X } from "lucide-react";
 import type { ClubAccount } from "./clubTypes";
 import type { StoreRow, CoordinatorTrainingSlotInput, CoordinatorTrainingExceptionInput } from "./api";
 import { clubApi, getStored } from "./api";
@@ -94,6 +94,9 @@ export function CoordinatorTrainingPlanner({
   const [slots, setSlots] = useState<CoordinatorTrainingSlotInput[]>([newSlot(2), newSlot(4)]);
   const [editing, setEditing] = useState<TrainingWithCoach | null>(null);
   const [editDraft, setEditDraft] = useState<CoordinatorTrainingExceptionInput | null>(null);
+  const [batchDate, setBatchDate] = useState("");
+  const [batchSelection, setBatchSelection] = useState<Set<string>>(() => new Set());
+  const [batchStatus, setBatchStatus] = useState<CoordinatorTrainingExceptionInput["exceptionStatus"]>("cancelled");
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [message, setMessage] = useState("");
@@ -175,6 +178,37 @@ export function CoordinatorTrainingPlanner({
       setMessage("Excepción guardada únicamente para ese día.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudo guardar la excepción.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openBatchEditor = (date: string) => {
+    const events = allTrainings.filter((event) =>
+      event.date === date && (selectedCoachId === "all" || event.coach.id === selectedCoachId));
+    setBatchDate(date);
+    setBatchSelection(new Set(events.map((event) => `${event.coach.id}:${event.id}`)));
+    setBatchStatus("cancelled");
+  };
+
+  const batchEvents = batchDate
+    ? allTrainings.filter((event) => event.date === batchDate && (selectedCoachId === "all" || event.coach.id === selectedCoachId))
+    : [];
+
+  const saveBatchStatus = async () => {
+    const selections = batchEvents
+      .filter((event) => batchSelection.has(`${event.coach.id}:${event.id}`))
+      .map((event) => ({ accountId: event.coach.id, eventId: event.id }));
+    if (!selections.length) return;
+    setBusy(true);
+    try {
+      const result = await clubApi.updateCoordinatorTrainingStatus(selections, batchStatus);
+      await onRefresh();
+      setBatchDate("");
+      setBatchSelection(new Set());
+      setMessage(`${result.updated} entrenamiento${result.updated === 1 ? "" : "s"} actualizado${result.updated === 1 ? "" : "s"} para ese día.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudieron actualizar los entrenamientos.");
     } finally {
       setBusy(false);
     }
@@ -335,7 +369,11 @@ export function CoordinatorTrainingPlanner({
         </header>
         <div className="training-week-grid" style={{ "--hour-count": hours.length } as CSSProperties}>
           <div className="training-week-corner"><Clock size={14} /></div>
-          {weekDays.map((day) => <div className={`training-week-day-title${isoDate(day) === isoDate(today) ? " today" : ""}`} key={isoDate(day)}><span>{SHORT_DAY_LABELS[day.getDay()]}</span><strong>{day.getDate()}</strong></div>)}
+          {weekDays.map((day) => {
+            const date = isoDate(day);
+            const count = allTrainings.filter((event) => event.date === date && (selectedCoachId === "all" || event.coach.id === selectedCoachId)).length;
+            return <div className={`training-week-day-title${date === isoDate(today) ? " today" : ""}`} key={date}><span>{SHORT_DAY_LABELS[day.getDay()]}</span><strong>{day.getDate()}</strong>{count > 0 && <button type="button" onClick={() => openBatchEditor(date)} title="Gestionar todos los entrenamientos de este día"><CalendarCheck size={11} /> Gestionar</button>}</div>;
+          })}
           <div className="training-week-hours">{hours.map((hour) => <span key={hour}>{String(hour).padStart(2, "0")}:00</span>)}</div>
           {weekDays.map((day) => {
             const date = isoDate(day);
@@ -363,6 +401,19 @@ export function CoordinatorTrainingPlanner({
             <FieldZoneMap fieldId={editDraft.fieldId} selectedZoneIds={editDraft.zoneIds} onChange={(zoneIds) => setEditDraft({ ...editDraft, zoneIds })} />
             <label className="training-slot-notes"><span>Motivo u observaciones</span><textarea rows={2} value={editDraft.notes} onChange={(event) => setEditDraft({ ...editDraft, notes: event.target.value })} placeholder="Ej. Festivo local" /></label>
             <footer><button type="button" className="secondary-button" onClick={() => setEditing(null)}>Cancelar</button><button type="button" className="primary-button" disabled={busy || !editDraft.zoneIds.length} onClick={() => void saveException()}><Save size={16} /> Guardar solo este día</button></footer>
+          </section>
+        </div>
+      )}
+      {batchDate && (
+        <div className="training-exception-backdrop" role="presentation" onMouseDown={() => setBatchDate("")}>
+          <section className="training-exception-dialog training-batch-dialog" role="dialog" aria-modal="true" aria-labelledby="training-batch-title" onMouseDown={(event) => event.stopPropagation()}>
+            <header><div><span>GESTIONAR ENTRENAMIENTOS DEL DÍA</span><h3 id="training-batch-title">{new Intl.DateTimeFormat("es-ES", { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${batchDate}T12:00:00`))}</h3><small>Selecciona únicamente los equipos a los que quieres aplicar el cambio.</small></div><button type="button" aria-label="Cerrar" onClick={() => setBatchDate("")}><X size={18} /></button></header>
+            <div className="training-batch-selection">
+              <div className="training-batch-selection-actions"><button type="button" onClick={() => setBatchSelection(new Set(batchEvents.map((event) => `${event.coach.id}:${event.id}`)))}>Seleccionar todos</button><button type="button" onClick={() => setBatchSelection(new Set())}>Quitar selección</button></div>
+              {batchEvents.map((event) => { const key = `${event.coach.id}:${event.id}`; return <label key={key}><input type="checkbox" checked={batchSelection.has(key)} onChange={(change) => setBatchSelection((current) => { const next = new Set(current); if (change.target.checked) next.add(key); else next.delete(key); return next; })} /><span><strong>{event.coach.teamLabel}</strong><small>{event.startTime}–{event.endTime} · {event.fieldName}</small></span></label>; })}
+            </div>
+            <div className="training-exception-status">{([ ["cancelled", "Cancelar"], ["holiday", "Festivo"], ["scheduled", "Restaurar"] ] as const).map(([value, label]) => <button type="button" className={batchStatus === value ? "active" : ""} key={value} onClick={() => setBatchStatus(value)}>{label}</button>)}</div>
+            <footer><button type="button" className="secondary-button" onClick={() => setBatchDate("")}>Volver</button><button type="button" className="primary-button" disabled={busy || batchSelection.size === 0} onClick={() => void saveBatchStatus()}><Save size={16} /> Aplicar a {batchSelection.size} equipo{batchSelection.size === 1 ? "" : "s"}</button></footer>
           </section>
         </div>
       )}

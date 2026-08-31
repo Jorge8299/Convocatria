@@ -1633,6 +1633,7 @@ function CoordinatorPanel({
   const [matchDraft, setMatchDraft] = useState<CoordinatorMatchInput>(() =>
     emptyCoordinatorMatch(todayIso),
   );
+  const [editingMatch, setEditingMatch] = useState<{ accountId: string; eventId: string } | null>(null);
   const [matchSaving, setMatchSaving] = useState(false);
   const [exportingMatches, setExportingMatches] = useState(false);
   const [matchMessage, setMatchMessage] = useState("");
@@ -1862,6 +1863,7 @@ function CoordinatorPanel({
       return;
     }
     setMatchDraft(emptyCoordinatorMatch(selectedAgendaDate));
+    setEditingMatch(null);
     setShowMatchCreator(true);
   };
   const updateCoordinatorRival = (rivalId: string) => {
@@ -1896,17 +1898,45 @@ function CoordinatorPanel({
     }
     setMatchSaving(true);
     try {
-      await clubApi.assignCoordinatorMatch(selectedCoach.id, matchDraft);
+      if (editingMatch) await clubApi.updateCoordinatorMatch(editingMatch.accountId, editingMatch.eventId, matchDraft);
+      else await clubApi.assignCoordinatorMatch(selectedCoach.id, matchDraft);
       await onRefresh();
       const date = new Date(`${matchDraft.date}T12:00:00`);
       const savedDate = matchDraft.date;
       setAgendaCursor(new Date(date.getFullYear(), date.getMonth(), 1));
       setSelectedAgendaDate(savedDate);
       setMatchDraft(emptyCoordinatorMatch(savedDate));
-      setShowMatchCreator(true);
-      setMatchMessage(`Partido añadido a la agenda de ${selectedCoach.teamLabel}. Puedes pasar al siguiente equipo.`);
+      setShowMatchCreator(!editingMatch);
+      setMatchMessage(editingMatch ? `Partido de ${selectedCoach.teamLabel} actualizado.` : `Partido añadido a la agenda de ${selectedCoach.teamLabel}. Puedes pasar al siguiente equipo.`);
+      setEditingMatch(null);
     } catch (error) {
       setMatchMessage(error instanceof Error ? error.message : "No se pudo añadir el partido.");
+    } finally {
+      setMatchSaving(false);
+    }
+  };
+  const editCoordinatorMatch = (match: (typeof agendaMatches)[number]) => {
+    setCoachFilter(match.coach.id);
+    setSelectedAgendaDate(match.date);
+    setMatchDraft({
+      date: match.date, startTime: match.startTime, callupTime: match.callupTime || "", callupPlace: match.callupPlace || "",
+      kit: match.kit || "", homeLockerRoom: match.homeLockerRoom || "", awayLockerRoom: match.awayLockerRoom || "",
+      notes: match.notes || "", playInWhite: match.playInWhite === true, matchType: match.matchType, home: match.home,
+      rivalId: match.rivalId, rivalName: match.rivalName, field: match.field,
+    });
+    setEditingMatch({ accountId: match.coach.id, eventId: match.id });
+    setShowTrainingCreator(false);
+    setShowMatchCreator(true);
+    setMatchMessage("");
+  };
+  const changeCoordinatorMatchStatus = async (match: (typeof agendaMatches)[number], status: "scheduled" | "cancelled") => {
+    setMatchSaving(true);
+    try {
+      await clubApi.setCoordinatorMatchStatus(match.coach.id, match.id, status);
+      await onRefresh();
+      setMatchMessage(status === "cancelled" ? `Partido de ${match.coach.teamLabel} cancelado.` : `Partido de ${match.coach.teamLabel} restaurado.`);
+    } catch (error) {
+      setMatchMessage(error instanceof Error ? error.message : "No se pudo actualizar el partido.");
     } finally {
       setMatchSaving(false);
     }
@@ -2168,14 +2198,14 @@ function CoordinatorPanel({
             <section className="coordinator-match-form">
               <header>
                 <div>
-                  <span>PARTIDO PARA</span>
+                  <span>{editingMatch ? "EDITAR PARTIDO DE" : "PARTIDO PARA"}</span>
                   <div className="coordinator-match-team-heading">
                     <h3>{selectedCoach.teamLabel}</h3>
                     {nextCoach && <button type="button" className="next-team-button" onClick={goToNextTeam}>Siguiente equipo <ChevronRight size={17} /></button>}
                   </div>
                   <small>{selectedCoach.name}</small>
                 </div>
-                <button type="button" aria-label="Cerrar formulario" onClick={() => setShowMatchCreator(false)}><X size={18} /></button>
+                <button type="button" aria-label="Cerrar formulario" onClick={() => { setShowMatchCreator(false); setEditingMatch(null); }}><X size={18} /></button>
               </header>
               <div className="coordinator-match-type">
                 {(["liga", "amistoso", "torneo"] as const).map((type) => (
@@ -2211,8 +2241,8 @@ function CoordinatorPanel({
                 </label>
               </div>
               <footer>
-                <button type="button" className="secondary-button" onClick={() => setShowMatchCreator(false)}>Cancelar</button>
-                <button type="button" className="primary-button" disabled={matchSaving || !selectedCoachData.rivals.length} onClick={() => void saveCoordinatorMatch()}><Save size={17} /> {matchSaving ? "Guardando…" : "Guardar en su agenda"}</button>
+                <button type="button" className="secondary-button" onClick={() => { setShowMatchCreator(false); setEditingMatch(null); }}>Cancelar</button>
+                <button type="button" className="primary-button" disabled={matchSaving || !selectedCoachData.rivals.length} onClick={() => void saveCoordinatorMatch()}><Save size={17} /> {matchSaving ? "Guardando…" : editingMatch ? "Guardar cambios" : "Guardar en su agenda"}</button>
               </footer>
             </section>
           )}
@@ -2390,13 +2420,15 @@ function CoordinatorPanel({
                       : null;
                     return (
                       <article
-                        className={`${stats ? "completed" : isPast ? "pending" : "scheduled"}${match.assignedByCoordinator ? " coordinator-created" : ""}`}
+                        className={`${match.coordinatorStatus === "cancelled" ? "cancelled" : stats ? "completed" : isPast ? "pending" : "scheduled"}${match.assignedByCoordinator ? " coordinator-created" : ""}`}
                         key={`${match.coach.id}-${match.id}`}
                       >
                         <div className="coordinator-agenda-match-status">
-                          {stats ? <Trophy size={16} /> : <Calendar size={16} />}
+                          {match.coordinatorStatus === "cancelled" ? <X size={16} /> : stats ? <Trophy size={16} /> : <Calendar size={16} />}
                           <span>
-                            {stats
+                            {match.coordinatorStatus === "cancelled"
+                              ? "Cancelado"
+                              : stats
                               ? "Finalizado"
                               : isPast
                                 ? "Resultado pendiente"
@@ -2416,6 +2448,14 @@ function CoordinatorPanel({
                           <span><Clock size={14} /> {match.startTime || "Hora pendiente"}</span>
                           <span><MapPin size={14} /> {match.field || "Campo pendiente"}</span>
                         </div>
+                        {match.assignedByCoordinator && (
+                          <div className="coordinator-match-management-actions">
+                            <button type="button" disabled={matchSaving} onClick={() => editCoordinatorMatch(match)}><Pencil size={14} /> Editar</button>
+                            {match.coordinatorStatus === "cancelled"
+                              ? <button type="button" disabled={matchSaving} onClick={() => void changeCoordinatorMatchStatus(match, "scheduled")}><Calendar size={14} /> Restaurar</button>
+                              : <button type="button" className="danger" disabled={matchSaving} onClick={() => void changeCoordinatorMatchStatus(match, "cancelled")}><X size={14} /> Cancelar partido</button>}
+                          </div>
+                        )}
                         {stats && (
                           <details className="coordinator-agenda-statistics">
                             <summary>

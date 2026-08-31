@@ -38,6 +38,10 @@ export interface CoordinatorTrainingExceptionInput {
   notes: string;
   exceptionStatus: "scheduled" | "holiday" | "cancelled";
 }
+export interface CoordinatorTrainingSelection {
+  accountId: string;
+  eventId: string;
+}
 export interface StoreRow {
   account_id: string;
   area: StoreArea;
@@ -336,6 +340,32 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
     localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
     return { event: newEvents[0], events: newEvents } as T;
   } else if (url.pathname === "/api/coordinator-agenda" && method === "PATCH") {
+    if (session?.role === "coordinador" && body.action === "batchTrainingStatus") {
+      const selections = body.selections as unknown as CoordinatorTrainingSelection[];
+      const exceptionStatus = body.exceptionStatus as CoordinatorTrainingExceptionInput["exceptionStatus"];
+      selections.forEach(({ accountId, eventId }) => {
+        const agendaStore = stores.find((store) => store.account_id === accountId && store.area === "agenda");
+        agendaStore && (agendaStore.data = (agendaStore.data as Array<Record<string, unknown>>).map((event) =>
+          event.id === eventId && event.type === "training" && event.assignedByCoordinator === true
+            ? { ...event, exceptionStatus }
+            : event,
+        ));
+      });
+      localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
+      return { ok: true, updated: selections.length } as T;
+    }
+    if (session?.role === "coordinador" && body.action === "updateMatch") {
+      const accountId = String(body.accountId || "");
+      const eventId = String(body.eventId || "");
+      const agendaStore = stores.find((store) => store.account_id === accountId && store.area === "agenda");
+      agendaStore && (agendaStore.data = (agendaStore.data as Array<Record<string, unknown>>).map((event) =>
+        event.id === eventId && event.type === "match" && event.assignedByCoordinator === true
+          ? { ...event, ...(body.match as object), ...(body.coordinatorStatus ? { coordinatorStatus: body.coordinatorStatus } : {}) }
+          : event,
+      ));
+      localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
+      return { ok: true } as T;
+    }
     if (session?.role === "coordinador" && body.action === "updateTrainingOccurrence") {
       const accountId = String(body.accountId || "");
       const agendaStore = stores.find((store) => store.account_id === accountId && store.area === "agenda");
@@ -451,6 +481,21 @@ export const clubApi = {
     request<{ ok: true }>("/api/coordinator-agenda", {
       method: "PATCH",
       body: JSON.stringify({ action: "updateTrainingOccurrence", accountId, eventId, changes }),
+    }),
+  updateCoordinatorTrainingStatus: (selections: CoordinatorTrainingSelection[], exceptionStatus: CoordinatorTrainingExceptionInput["exceptionStatus"]) =>
+    request<{ ok: true; updated: number }>("/api/coordinator-agenda", {
+      method: "PATCH",
+      body: JSON.stringify({ action: "batchTrainingStatus", selections, exceptionStatus }),
+    }),
+  updateCoordinatorMatch: (accountId: string, eventId: string, match: CoordinatorMatchInput) =>
+    request<{ ok: true }>("/api/coordinator-agenda", {
+      method: "PATCH",
+      body: JSON.stringify({ action: "updateMatch", accountId, eventId, match }),
+    }),
+  setCoordinatorMatchStatus: (accountId: string, eventId: string, coordinatorStatus: "scheduled" | "cancelled") =>
+    request<{ ok: true }>("/api/coordinator-agenda", {
+      method: "PATCH",
+      body: JSON.stringify({ action: "updateMatch", accountId, eventId, coordinatorStatus }),
     }),
   acknowledgeCoordinatorMatch: (eventId: string) =>
     request<{ ok: true; acknowledgedAt: string }>("/api/coordinator-agenda", {
