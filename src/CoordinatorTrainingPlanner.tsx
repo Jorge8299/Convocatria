@@ -387,7 +387,7 @@ export function CoordinatorTrainingPlanner({
                     {events.length ? events.map((event) => {
                       const conflict = hasConflict(event);
                       const cancelled = event.exceptionStatus === "holiday" || event.exceptionStatus === "cancelled";
-                      return <button type="button" className={`training-team-event${conflict ? " conflict" : ""}${cancelled ? " cancelled" : ""}`} style={{ "--team-color": teamColor(event.coach.id) } as CSSProperties} key={event.id} onClick={() => openException(event)} title="Editar únicamente este día"><span>{cancelled ? event.exceptionStatus === "holiday" ? "Festivo" : "Cancelado" : `${event.startTime}–${event.endTime}`}</span><small><MapPin size={10} /> {event.fieldName} · {fieldZoneLabel(event.fieldId, event.zoneIds)}</small>{conflict && <em><TriangleAlert size={10} /> Coincidencia</em>}</button>;
+                      return <button type="button" className={`training-team-event${conflict ? " conflict" : ""}${cancelled ? " cancelled" : ""}`} data-cancellation-label={cancelled ? event.exceptionStatus === "holiday" ? "FESTIVO" : "CANCELADO" : undefined} style={{ "--team-color": teamColor(event.coach.id) } as CSSProperties} key={event.id} onClick={() => openException(event)} title="Editar únicamente este día"><span>{cancelled ? event.exceptionStatus === "holiday" ? "Festivo" : "Cancelado" : `${event.startTime}–${event.endTime}`}</span><small><MapPin size={10} /> {event.fieldName} · {fieldZoneLabel(event.fieldId, event.zoneIds)}</small>{conflict && <em><TriangleAlert size={10} /> Coincidencia</em>}</button>;
                     }) : <span className="training-team-empty">—</span>}
                   </div>;
                 })}

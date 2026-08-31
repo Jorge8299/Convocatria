@@ -589,7 +589,7 @@ export function AgendaView({
           <>
             <div className="agenda-event-list">
               {selectedEvents.map((event) => (
-                <article className={`${event.type}${event.assignedByCoordinator ? " coordinator-assigned" : ""}${event.type === "training" && event.exceptionStatus !== "scheduled" && event.exceptionStatus ? " cancelled" : ""}${event.type === "match" && event.coordinatorStatus === "cancelled" ? " cancelled" : ""}`} key={event.id}>
+                <article className={`${event.type}${event.assignedByCoordinator ? " coordinator-assigned" : ""}${event.type === "training" && event.exceptionStatus !== "scheduled" && event.exceptionStatus ? " cancelled" : ""}${event.type === "match" && event.coordinatorStatus === "cancelled" ? " cancelled" : ""}`} data-cancellation-label={event.type === "training" && event.exceptionStatus === "holiday" ? "FESTIVO" : event.type === "training" && event.exceptionStatus === "cancelled" || event.type === "match" && event.coordinatorStatus === "cancelled" ? "CANCELADO" : undefined} key={event.id}>
                   <button className="agenda-event-main" onClick={() => event.type === "training" ? openTraining(event) : setDraft({ ...event })}>
                     <span className="agenda-event-icon" aria-hidden="true">
                       {event.type === "training" ? <Dumbbell size={22} /> : <Trophy size={22} />}
@@ -648,7 +648,7 @@ export function AgendaView({
         )}
 
         {draft?.type === "training" && draft.assignedByCoordinator && (
-          <div className={`agenda-form assigned-training-detail${draft.exceptionStatus !== "scheduled" && draft.exceptionStatus ? " cancelled" : ""}`}>
+          <div className={`agenda-form assigned-training-detail${draft.exceptionStatus !== "scheduled" && draft.exceptionStatus ? " cancelled" : ""}`} data-cancellation-label={draft.exceptionStatus === "holiday" ? "FESTIVO" : draft.exceptionStatus === "cancelled" ? "CANCELADO" : undefined}>
             <div className="assigned-training-heading"><span><ShieldCheck size={16} /> ASIGNADO POR COORDINACIÓN</span><strong>{draft.exceptionStatus === "holiday" ? "Festivo · No hay entrenamiento" : draft.exceptionStatus === "cancelled" ? "Entrenamiento cancelado" : "Entrenamiento"}</strong><small>{draft.recurrenceLabel || "Horario habitual"}</small></div>
             <div className="assigned-match-ticket"><div><span>Hora</span><strong>{draft.startTime}–{draft.endTime}</strong></div><div><span>Campo</span><strong>{draft.fieldName || "Pendiente"}</strong></div><div><span>Zona</span><strong>{fieldZoneLabel(draft.fieldId, draft.zoneIds)}</strong></div><div><span>Fecha</span><strong>{new Intl.DateTimeFormat("es-ES", { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${draft.date}T12:00:00`))}</strong></div></div>
             {draft.notes && <p className="assigned-match-notes">{draft.notes}</p>}
@@ -779,7 +779,7 @@ export function AgendaView({
         )}
 
         {draft?.type === "match" && draft.assignedByCoordinator && (
-          <div className={`agenda-form assigned-match-detail${draft.coordinatorStatus === "cancelled" ? " cancelled" : ""}`}>
+          <div className={`agenda-form assigned-match-detail${draft.coordinatorStatus === "cancelled" ? " cancelled" : ""}`} data-cancellation-label={draft.coordinatorStatus === "cancelled" ? "CANCELADO" : undefined}>
             <div className="assigned-match-heading">
               <span><ShieldCheck size={16} /> PARTIDO ASIGNADO POR COORDINACIÓN</span>
               <strong>{draft.coordinatorStatus === "cancelled" ? `CANCELADO · ${draft.rivalName}` : draft.rivalName}</strong>

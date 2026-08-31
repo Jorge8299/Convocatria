@@ -2410,6 +2410,7 @@ function CoordinatorPanel({
                     return (
                       <article
                         className={`${match.coordinatorStatus === "cancelled" ? "cancelled" : stats ? "completed" : isPast ? "pending" : "scheduled"}${match.assignedByCoordinator ? " coordinator-created" : ""}`}
+                        data-cancellation-label={match.coordinatorStatus === "cancelled" ? "CANCELADO" : undefined}
                         key={`${match.coach.id}-${match.id}`}
                       >
                         <div className="coordinator-agenda-match-status">
