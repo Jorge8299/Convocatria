@@ -552,17 +552,28 @@ export function AgendaView({
                 <div>
                   {(eventsByDate.get(cell.date) || [])
                     .slice(0, 3)
-                    .map((event) => (
-                      <small className={`${event.type}${event.type === "match" && event.assignedByCoordinator ? " coordinator-assigned" : ""}`} key={event.id}>
-                        <span className="agenda-cell-event-icon" aria-hidden="true">
-                          {event.type === "training" ? <Dumbbell size={11} /> : <Trophy size={11} />}
-                        </span>
-                        <span className="agenda-cell-event-copy">
-                          <b>{event.type === "training" ? "Entreno" : event.rivalName || "Partido"}</b>
-                          <em>{event.startTime || "Sin hora"}{event.type === "match" ? ` · ${event.home ? "Local" : "Fuera"}` : ""}</em>
-                        </span>
-                      </small>
-                    ))}
+                    .map((event) => {
+                      const calendarStatus = event.type === "training"
+                        ? event.exceptionStatus === "holiday"
+                          ? "FESTIVO"
+                          : event.exceptionStatus === "cancelled"
+                            ? "CANCELADO"
+                            : null
+                        : event.coordinatorStatus === "cancelled"
+                          ? "CANCELADO"
+                          : null;
+                      return (
+                        <small className={`${event.type}${event.type === "match" && event.assignedByCoordinator ? " coordinator-assigned" : ""}${calendarStatus === "FESTIVO" ? " holiday" : calendarStatus ? " cancelled" : ""}`} key={event.id}>
+                          <span className="agenda-cell-event-icon" aria-hidden="true">
+                            {event.type === "training" ? <Dumbbell size={11} /> : <Trophy size={11} />}
+                          </span>
+                          <span className="agenda-cell-event-copy">
+                            <b>{calendarStatus || (event.type === "training" ? "Entreno" : event.rivalName || "Partido")}</b>
+                            <em>{calendarStatus ? `${event.type === "training" ? "Entreno" : event.rivalName || "Partido"} · ` : ""}{event.startTime || "Sin hora"}{event.type === "match" && !calendarStatus ? ` · ${event.home ? "Local" : "Fuera"}` : ""}</em>
+                          </span>
+                        </small>
+                      );
+                    })}
                 </div>
               </button>
             ) : (
