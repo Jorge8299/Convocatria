@@ -1892,7 +1892,7 @@ function CoordinatorPanel({
     setTab("agenda");
   };
   const saveCoordinatorMatch = async () => {
-    if (!selectedCoach || !matchDraft.date || !matchDraft.startTime || !matchDraft.rivalId || !matchDraft.field) {
+    if (!selectedCoach || !matchDraft.date || !matchDraft.startTime || !matchDraft.rivalName.trim() || (matchDraft.matchType !== "amistoso" && !matchDraft.rivalId) || !matchDraft.field) {
       setMatchMessage("Completa fecha, hora, rival y campo.");
       return;
     }
@@ -2220,7 +2220,7 @@ function CoordinatorPanel({
               </div>
               <div className="coordinator-match-grid">
                 <label><span>Fecha</span><input type="date" value={matchDraft.date} onChange={(event) => setMatchDraft((current) => ({ ...current, date: event.target.value }))} /></label>
-                <label><span>Rival</span><select value={matchDraft.rivalId} onChange={(event) => updateCoordinatorRival(event.target.value)}><option value="">Selecciona rival</option>{selectedCoachData.rivals.map((rival) => <option key={rival.id} value={rival.id}>{rival.nombre}</option>)}</select></label>
+                <label><span>Rival</span>{matchDraft.matchType === "amistoso" ? <input value={matchDraft.rivalName} onChange={(event) => setMatchDraft((current) => ({ ...current, rivalId: "", rivalName: event.target.value }))} placeholder="Escribe el rival" /> : <select value={matchDraft.rivalId} onChange={(event) => updateCoordinatorRival(event.target.value)}><option value="">Selecciona rival</option>{selectedCoachData.rivals.map((rival) => <option key={rival.id} value={rival.id}>{rival.nombre}</option>)}</select>}</label>
                 <div className="coordinator-time-field"><span>Hora del partido</span><QuickTimeInput value={matchDraft.startTime} onChange={(startTime) => setMatchDraft((current) => ({ ...current, startTime, callupTime: !current.callupTime || current.callupTime === subtractMatchMinutes(current.startTime, current.home ? 60 : 90) ? subtractMatchMinutes(startTime, current.home ? 60 : 90) : current.callupTime }))} /></div>
                 {matchDraft.home ? (
                   <label><span>Campo</span><select value={matchDraft.field} onChange={(event) => setMatchDraft((current) => ({ ...current, field: event.target.value }))}><option value="">Selecciona campo</option>{HOME_FIELDS.map((field) => <option key={field}>{field}</option>)}</select></label>
@@ -2231,7 +2231,7 @@ function CoordinatorPanel({
                 {matchDraft.home && <label><span>Vestuario</span><select value={matchDraft.homeLockerRoom || "Local 1"} onChange={(event) => { const homeLockerRoom = event.target.value; setMatchDraft((current) => ({ ...current, homeLockerRoom, awayLockerRoom: DEFAULT_AWAY_LOCKER_ROOM[homeLockerRoom] })) }}>{HOME_LOCKER_ROOMS.map((lockerRoom) => <option key={lockerRoom}>{lockerRoom}</option>)}</select></label>}
                 {matchDraft.home && <label><span>Vestuario visitante</span><select value={matchDraft.awayLockerRoom || "Visitante 1"} onChange={(event) => setMatchDraft((current) => ({ ...current, awayLockerRoom: event.target.value }))}>{AWAY_LOCKER_ROOMS.map((lockerRoom) => <option key={lockerRoom}>{lockerRoom}</option>)}</select></label>}
               </div>
-              {!selectedCoachData.rivals.length && <p className="coordinator-no-rivals">Este equipo todavía no tiene rivales guardados.</p>}
+              {!selectedCoachData.rivals.length && matchDraft.matchType !== "amistoso" && <p className="coordinator-no-rivals">Este equipo todavía no tiene rivales guardados.</p>}
               <div className="match-observations-group">
                 <label className="coordinator-match-notes"><span>Observaciones</span><textarea rows={2} value={matchDraft.notes} onChange={(event) => setMatchDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Escribe cualquier indicación para el entrenador" /></label>
                 <label className={`white-kit-toggle${matchDraft.playInWhite ? " active" : ""}`}>
@@ -2242,7 +2242,7 @@ function CoordinatorPanel({
               </div>
               <footer>
                 <button type="button" className="secondary-button" onClick={() => { setShowMatchCreator(false); setEditingMatch(null); }}>Cancelar</button>
-                <button type="button" className="primary-button" disabled={matchSaving || !selectedCoachData.rivals.length} onClick={() => void saveCoordinatorMatch()}><Save size={17} /> {matchSaving ? "Guardando…" : editingMatch ? "Guardar cambios" : "Guardar en su agenda"}</button>
+                <button type="button" className="primary-button" disabled={matchSaving || (matchDraft.matchType !== "amistoso" && !selectedCoachData.rivals.length)} onClick={() => void saveCoordinatorMatch()}><Save size={17} /> {matchSaving ? "Guardando…" : editingMatch ? "Guardar cambios" : "Guardar en su agenda"}</button>
               </footer>
             </section>
           )}
