@@ -56,6 +56,7 @@ export function drawMagicPdfHeader(
     crestDataUrl,
     width,
     margin,
+    emphasizePhrase = false,
   }: {
     title: string;
     period: string;
@@ -64,6 +65,7 @@ export function drawMagicPdfHeader(
     crestDataUrl?: string | null;
     width: number;
     margin: number;
+    emphasizePhrase?: boolean;
   },
 ) {
   doc.setFillColor(...pdfBrand.white);
@@ -108,10 +110,20 @@ export function drawMagicPdfHeader(
   const phraseText = `Frase del dia: ${pdfCleanText(phrase)}`;
   const phraseWidth = Math.min(118, width - textX - margin);
   const phraseLines = doc.splitTextToSize(phraseText, phraseWidth) as string[];
-  doc.setTextColor(101, 119, 139);
-  doc.setFont("helvetica", "italic");
-  doc.setFontSize(7.1);
-  doc.text(phraseLines.slice(0, 1), width - margin, 15.3, { align: "right" });
+  if (emphasizePhrase) {
+    const phraseBoxX = width - margin - phraseWidth - 4;
+    doc.setFillColor(255, 248, 226);
+    doc.roundedRect(phraseBoxX, 7.5, phraseWidth + 4, 18, 2, 2, "F");
+    doc.setTextColor(173, 112, 11);
+    doc.setFont("helvetica", "bolditalic");
+    doc.setFontSize(8);
+    doc.text(phraseLines.slice(0, 2), width - margin - 2, 13.3, { align: "right", lineHeightFactor: 1.35 });
+  } else {
+    doc.setTextColor(101, 119, 139);
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(7.1);
+    doc.text(phraseLines.slice(0, 1), width - margin, 15.3, { align: "right" });
+  }
 
   doc.setDrawColor(222, 231, 240);
   doc.line(margin, 32.2, width - margin, 32.2);

@@ -2044,6 +2044,7 @@ function CoordinatorPanel({
         crestDataUrl: await getClubCrestDataUrl(),
         width: pageWidth,
         margin,
+        emphasizePhrase: true,
       });
 
       let x = margin;
@@ -2109,9 +2110,30 @@ function CoordinatorPanel({
       doc.setTextColor(...pdfBrand.muted);
       doc.text("Cuadrante compacto: una fila por equipo; si un equipo tiene varios partidos en el mes, aparecen juntos en la misma línea.", margin, 207);
       doc.text("Página 1 de 1", pageWidth - margin, 207, { align: "right" });
-      doc.save(`cuadrante-partidos-${monthStart}.pdf`);
+      const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist");
+      const pdfWorkerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default;
+      GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+      const renderedPdf = await getDocument({ data: new Uint8Array(doc.output("arraybuffer")) }).promise;
+      const page = await renderedPdf.getPage(1);
+      const viewport = page.getViewport({ scale: 3 });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("No se pudo preparar la imagen del cuadrante.");
+      await page.render({ canvas, canvasContext: context, viewport }).promise;
+      const imageBlob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("No se pudo crear la imagen del cuadrante.")), "image/png");
+      });
+      const imageUrl = URL.createObjectURL(imageBlob);
+      const downloadLink = document.createElement("a");
+      downloadLink.href = imageUrl;
+      downloadLink.download = `cuadrante-partidos-${monthStart}.png`;
+      downloadLink.click();
+      URL.revokeObjectURL(imageUrl);
+      await renderedPdf.destroy();
     } catch (error) {
-      setMatchMessage(error instanceof Error ? error.message : "No se pudo exportar el cuadrante de partidos.");
+      setMatchMessage(error instanceof Error ? error.message : "No se pudo exportar la imagen del cuadrante de partidos.");
     } finally {
       setExportingMatches(false);
     }
