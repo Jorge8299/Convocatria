@@ -1963,12 +1963,21 @@ function CoordinatorPanel({
   const exportMatchQuadrantPdf = async () => {
     const monthStart = coordinatorIsoDate(agendaCursor.getFullYear(), agendaCursor.getMonth(), 1);
     const monthEnd = coordinatorIsoDate(agendaCursor.getFullYear(), agendaCursor.getMonth() + 1, 0);
-    const monthMatches = agendaMatches.filter((match) => match.date >= monthStart && match.date <= monthEnd);
+    const monthMatches = agendaMatches
+      .filter((match) => match.date >= monthStart && match.date <= monthEnd)
+      .sort((left, right) => `${left.date}T${left.startTime || "00:00"}`.localeCompare(`${right.date}T${right.startTime || "00:00"}`));
     const rows = filtered
       .map((item) => ({
         coach: item.coach,
         matches: monthMatches.filter((match) => match.coach.id === item.coach.id),
-      }));
+      }))
+      .sort((left, right) => {
+        const leftMatch = left.matches[0];
+        const rightMatch = right.matches[0];
+        if (!leftMatch) return rightMatch ? 1 : 0;
+        if (!rightMatch) return -1;
+        return `${leftMatch.date}T${leftMatch.startTime || "00:00"}`.localeCompare(`${rightMatch.date}T${rightMatch.startTime || "00:00"}`);
+      });
     if (!rows.length) {
       setMatchMessage("No hay equipos para exportar.");
       return;
@@ -2054,20 +2063,25 @@ function CoordinatorPanel({
         let cellX = margin;
         const y = tableTop + headerHeight + rowIndex * rowHeight;
         const matchesToShow = regularMatches(row);
+        const allMatchesAtHome = matchesToShow.length > 0 && matchesToShow.every((match) => match.home);
+        const allMatchesAway = matchesToShow.length > 0 && matchesToShow.every((match) => !match.home);
         const emptyLabel = row.matches.length ? "DESCANSO" : "PENDIENTE";
         const values = [
           `${row.coach.teamLabel} ${firstName(row.coach.name)}`.toUpperCase(),
-          matchesToShow.length ? valueList(matchesToShow, (match) => match.rivalName.toUpperCase()) : emptyLabel,
+          matchesToShow.length ? valueList(matchesToShow, (match) => `${match.home ? "CASA" : "FUERA"}: ${match.rivalName.toUpperCase()}`) : emptyLabel,
           matchesToShow.length ? valueList(matchesToShow, (match) => (match.kit || (match.playInWhite ? "BLANCO" : "")).toUpperCase()) : "",
           matchesToShow.length ? valueList(matchesToShow, (match) => shortFieldName(match.field)) : "",
           matchesToShow.length ? valueList(matchesToShow, (match) => pdfDateTime(match.date, match.startTime)) : "",
           matchesToShow.length ? valueList(matchesToShow, meetingText) : "",
-          matchesToShow.length ? valueList(matchesToShow, (match) => (match.homeLockerRoom || "").toUpperCase()) : "",
-          matchesToShow.length ? valueList(matchesToShow, (match) => (match.awayLockerRoom || "").toUpperCase()) : "",
+          matchesToShow.length ? valueList(matchesToShow, (match) => match.home ? (match.homeLockerRoom || "").toUpperCase() : "") : "",
+          matchesToShow.length ? valueList(matchesToShow, (match) => match.home ? (match.awayLockerRoom || "").toUpperCase() : "") : "",
         ];
         columns.forEach((column, columnIndex) => {
           const value = values[columnIndex] || "";
-          if (columnIndex === 3 && value) doc.setFillColor(8, 150, 84);
+          if (columnIndex === 1 && allMatchesAtHome) doc.setFillColor(8, 150, 84);
+          else if (columnIndex === 1 && allMatchesAway) doc.setFillColor(22, 111, 170);
+          else if (columnIndex === 1 && matchesToShow.length) doc.setFillColor(112, 78, 170);
+          else if (columnIndex === 3 && value) doc.setFillColor(8, 150, 84);
           else if (columnIndex === 4 && /DOMINGO/.test(value)) doc.setFillColor(255, 137, 55);
           else if (columnIndex === 4 && /SÁBADO|SABADO/.test(value)) doc.setFillColor(255, 240, 0);
           else if (columnIndex === 4 && value) doc.setFillColor(210, 224, 244);
@@ -2078,7 +2092,8 @@ function CoordinatorPanel({
           else if (columnIndex === 1 && value === "PENDIENTE") doc.setFillColor(255, 247, 226);
           else doc.setFillColor(rowIndex % 2 === 0 ? 255 : 248, rowIndex % 2 === 0 ? 255 : 251, rowIndex % 2 === 0 ? 255 : 254);
           doc.rect(cellX, y, column.width, rowHeight, "FD");
-          if (columnIndex === 3 && value) doc.setTextColor(255, 255, 255);
+          if (columnIndex === 1 && matchesToShow.length) doc.setTextColor(255, 255, 255);
+          else if (columnIndex === 3 && value) doc.setTextColor(255, 255, 255);
           else if ((columnIndex === 6 || columnIndex === 7) && value) doc.setTextColor(255, 255, 255);
           else if (columnIndex === 1 && value === "DESCANSO") doc.setTextColor(8, 116, 82);
           else if (columnIndex === 1 && value === "PENDIENTE") doc.setTextColor(173, 112, 11);
