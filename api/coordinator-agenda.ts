@@ -95,18 +95,16 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
       const match = body.match || {};
       if (!body.accountId || !DATE_PATTERN.test(match.date || '') || !TIME_PATTERN.test(match.startTime || '') ||
-          !MATCH_TYPES.has(match.matchType || '') || typeof match.home !== 'boolean' || (match.matchType !== 'amistoso' && !match.rivalId) || !match.rivalName?.trim() || !match.field?.trim()) {
+          !MATCH_TYPES.has(match.matchType || '') || typeof match.home !== 'boolean' || !match.rivalId || !match.rivalName?.trim() || !match.field?.trim()) {
         res.status(400).json({ error: 'Completa equipo, fecha, hora, rival y campo.' }); return;
       }
       if (match.callupTime && !TIME_PATTERN.test(match.callupTime)) { res.status(400).json({ error: 'Revisa la hora de citación.' }); return }
       if (match.home && !HOME_FIELDS.has(match.field)) { res.status(400).json({ error: 'Selecciona un campo local válido.' }); return }
 
-      if (match.matchType !== 'amistoso') {
-        const rivalRows = await sql`SELECT data FROM club_stores WHERE account_id=${body.accountId} AND area='rivals' LIMIT 1`;
-        const rivals = Array.isArray(rivalRows[0]?.data) ? rivalRows[0].data as Array<Record<string, unknown>> : [];
-        const rival = rivals.find((item) => String(item.id) === match.rivalId);
-        if (!rival || String(rival.nombre).trim() !== match.rivalName.trim()) { res.status(400).json({ error: 'Selecciona un rival guardado para este equipo.' }); return }
-      }
+      const rivalRows = await sql`SELECT data FROM club_stores WHERE account_id=${body.accountId} AND area='rivals' LIMIT 1`;
+      const rivals = Array.isArray(rivalRows[0]?.data) ? rivalRows[0].data as Array<Record<string, unknown>> : [];
+      const rival = rivals.find((item) => String(item.id) === match.rivalId);
+      if (!rival || String(rival.nombre).trim() !== match.rivalName.trim()) { res.status(400).json({ error: 'Selecciona un rival guardado para este equipo.' }); return }
 
       const now = new Date().toISOString();
       const event = {
@@ -161,7 +159,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         let changes: Record<string, unknown> = {};
         if (body.match) {
           const match = body.match;
-          if (!DATE_PATTERN.test(match.date || '') || !TIME_PATTERN.test(match.startTime || '') || !MATCH_TYPES.has(match.matchType || '') || typeof match.home !== 'boolean' || (match.matchType !== 'amistoso' && !match.rivalId) || !match.rivalName?.trim() || !match.field?.trim()) {
+          if (!DATE_PATTERN.test(match.date || '') || !TIME_PATTERN.test(match.startTime || '') || !MATCH_TYPES.has(match.matchType || '') || typeof match.home !== 'boolean' || !match.rivalId || !match.rivalName?.trim() || !match.field?.trim()) {
             res.status(400).json({ error: 'Completa fecha, hora, rival y campo.' }); return;
           }
           if (match.callupTime && !TIME_PATTERN.test(match.callupTime)) { res.status(400).json({ error: 'Revisa la hora de citación.' }); return }
