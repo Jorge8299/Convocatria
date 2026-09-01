@@ -2063,12 +2063,11 @@ function CoordinatorPanel({
         let cellX = margin;
         const y = tableTop + headerHeight + rowIndex * rowHeight;
         const matchesToShow = regularMatches(row);
-        const allMatchesAtHome = matchesToShow.length > 0 && matchesToShow.every((match) => match.home);
-        const allMatchesAway = matchesToShow.length > 0 && matchesToShow.every((match) => !match.home);
+        const playsAtHome = matchesToShow[0]?.home === true;
         const emptyLabel = row.matches.length ? "DESCANSO" : "PENDIENTE";
         const values = [
           `${row.coach.teamLabel} ${firstName(row.coach.name)}`.toUpperCase(),
-          matchesToShow.length ? valueList(matchesToShow, (match) => `${match.home ? "CASA" : "FUERA"}: ${match.rivalName.toUpperCase()}`) : emptyLabel,
+          matchesToShow.length ? valueList(matchesToShow, (match) => match.rivalName.toUpperCase()) : emptyLabel,
           matchesToShow.length ? valueList(matchesToShow, (match) => (match.kit || (match.playInWhite ? "BLANCO" : "")).toUpperCase()) : "",
           matchesToShow.length ? valueList(matchesToShow, (match) => shortFieldName(match.field)) : "",
           matchesToShow.length ? valueList(matchesToShow, (match) => pdfDateTime(match.date, match.startTime)) : "",
@@ -2078,10 +2077,10 @@ function CoordinatorPanel({
         ];
         columns.forEach((column, columnIndex) => {
           const value = values[columnIndex] || "";
-          if (columnIndex === 1 && allMatchesAtHome) doc.setFillColor(8, 150, 84);
-          else if (columnIndex === 1 && allMatchesAway) doc.setFillColor(22, 111, 170);
-          else if (columnIndex === 1 && matchesToShow.length) doc.setFillColor(112, 78, 170);
-          else if (columnIndex === 3 && value) doc.setFillColor(8, 150, 84);
+          if ((columnIndex === 1 || columnIndex === 3) && matchesToShow.length) {
+            if (playsAtHome) doc.setFillColor(8, 150, 84);
+            else doc.setFillColor(22, 111, 170);
+          }
           else if (columnIndex === 4 && /DOMINGO/.test(value)) doc.setFillColor(255, 137, 55);
           else if (columnIndex === 4 && /SÁBADO|SABADO/.test(value)) doc.setFillColor(255, 240, 0);
           else if (columnIndex === 4 && value) doc.setFillColor(210, 224, 244);
