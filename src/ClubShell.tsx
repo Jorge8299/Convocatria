@@ -647,6 +647,7 @@ function AdminPanel({
   });
   const [message, setMessage] = useState("");
   const [migrationPin, setMigrationPin] = useState("");
+  const [clearingAgendas, setClearingAgendas] = useState(false);
   const legacySnapshot = useMemo(() => buildLegacySnapshot(), []);
   const managedAccounts = accounts.filter(
     (item) => item.role !== "superadmin" && (platformMode || item.role !== "admin"),
@@ -935,6 +936,20 @@ function AdminPanel({
       );
     }
   };
+  const clearAllAgendas = async () => {
+    if (!window.confirm("¿Borrar todos los partidos y entrenamientos de las agendas de todos los equipos? Los jugadores, rivales, estadísticas y demás datos se conservarán. Esta acción no se puede deshacer.")) return;
+    setClearingAgendas(true);
+    setMessage("");
+    try {
+      const result = await clubApi.clearAllAgendas();
+      await onRefresh();
+      setMessage(`Agendas vaciadas: se han eliminado ${result.removed} partidos y entrenamientos de ${result.accounts} equipos.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudieron vaciar las agendas.");
+    } finally {
+      setClearingAgendas(false);
+    }
+  };
   return (
     <div className="role-shell">
       <LocalDemoBanner />
@@ -949,6 +964,16 @@ function AdminPanel({
             <span><ShieldCheck size={20} /> NIVEL SUPERADMIN</span>
             <h2>Control y revisión de todas las cuentas</h2>
             <p>Entra como administrador, coordinador o entrenador para comprobar exactamente lo que ve cada perfil. El acceso del administrador del club permanece separado.</p>
+          </section>
+        )}
+        {platformMode && (
+          <section className="superadmin-danger-zone">
+            <div>
+              <span>VACIAR AGENDAS</span>
+              <strong>Eliminar todos los partidos y entrenamientos</strong>
+              <small>Se borrarán de todos los equipos. Los jugadores, rivales, estadísticas y demás datos no cambiarán.</small>
+            </div>
+            <button type="button" disabled={clearingAgendas} onClick={() => void clearAllAgendas()}><Trash2 size={17} /> {clearingAgendas ? "Borrando…" : "Borrar todas las agendas"}</button>
           </section>
         )}
         <section className="form-card admin-create-section">
@@ -1856,12 +1881,6 @@ function CoordinatorPanel({
     setAgendaView("matches");
     setMatchMessage("");
     setShowTrainingCreator(false);
-    if (!selectedCoach) {
-      setPendingMatchCreation(true);
-      setShowTeamPicker(true);
-      setMatchMessage("Selecciona el equipo que recibirá el partido.");
-      return;
-    }
     setMatchDraft(emptyCoordinatorMatch(selectedAgendaDate));
     setEditingMatch(null);
     setShowMatchCreator(true);
@@ -2194,16 +2213,16 @@ function CoordinatorPanel({
             </div>
           </section>}
           {matchMessage && <div className="coordinator-match-message" role="status">{matchMessage}</div>}
-          {showMatchCreator && selectedCoach && selectedCoachData && (
+          {showMatchCreator && (
             <section className="coordinator-match-form">
               <header>
                 <div>
                   <span>{editingMatch ? "EDITAR PARTIDO DE" : "PARTIDO PARA"}</span>
                   <div className="coordinator-match-team-heading">
-                    <h3>{selectedCoach.teamLabel}</h3>
+                    <h3>{selectedCoach?.teamLabel || "Selecciona equipo"}</h3>
                     {nextCoach && <button type="button" className="next-team-button" onClick={goToNextTeam}>Siguiente equipo <ChevronRight size={17} /></button>}
                   </div>
-                  <small>{selectedCoach.name}</small>
+                  <small>{selectedCoach?.name || "Elige el equipo que recibirá el partido"}</small>
                 </div>
                 <button type="button" aria-label="Cerrar formulario" onClick={() => { setShowMatchCreator(false); setEditingMatch(null); }}><X size={18} /></button>
               </header>
@@ -2216,11 +2235,12 @@ function CoordinatorPanel({
               </div>
               <div className="coordinator-match-home-away">
                 <button type="button" className={matchDraft.home ? "active" : ""} onClick={() => setMatchDraft((current) => ({ ...current, home: true, field: "", callupTime: !current.callupTime || current.callupTime === subtractMatchMinutes(current.startTime, current.home ? 60 : 90) ? subtractMatchMinutes(current.startTime, 60) : current.callupTime }))}><Home size={17} /> En casa</button>
-                <button type="button" className={!matchDraft.home ? "active" : ""} onClick={() => { const rival = selectedCoachData.rivals.find((item) => item.id === matchDraft.rivalId); setMatchDraft((current) => ({ ...current, home: false, field: rival?.campo || current.field, callupTime: !current.callupTime || current.callupTime === subtractMatchMinutes(current.startTime, current.home ? 60 : 90) ? subtractMatchMinutes(current.startTime, 90) : current.callupTime })); }}><Plane size={17} /> Fuera</button>
+                <button type="button" className={!matchDraft.home ? "active" : ""} onClick={() => { const rival = selectedCoachData?.rivals.find((item) => item.id === matchDraft.rivalId); setMatchDraft((current) => ({ ...current, home: false, field: rival?.campo || current.field, callupTime: !current.callupTime || current.callupTime === subtractMatchMinutes(current.startTime, current.home ? 60 : 90) ? subtractMatchMinutes(current.startTime, 90) : current.callupTime })); }}><Plane size={17} /> Fuera</button>
               </div>
               <div className="coordinator-match-grid">
+                <label><span>Equipo</span><select value={coachFilter} disabled={Boolean(editingMatch)} onChange={(event) => { setCoachFilter(event.target.value); setMatchDraft((current) => ({ ...current, rivalId: "", rivalName: "", field: "" })); }}><option value="">Selecciona equipo</option>{coaches.map((coach) => <option key={coach.id} value={coach.id}>{coach.teamLabel} · {coach.name}</option>)}</select></label>
                 <label><span>Fecha</span><input type="date" value={matchDraft.date} onChange={(event) => setMatchDraft((current) => ({ ...current, date: event.target.value }))} /></label>
-                <label><span>Rival</span><select value={matchDraft.rivalId} onChange={(event) => updateCoordinatorRival(event.target.value)}><option value="">Selecciona rival</option>{selectedCoachData.rivals.map((rival) => <option key={rival.id} value={rival.id}>{rival.nombre}</option>)}</select></label>
+                <label><span>Rival</span><select value={matchDraft.rivalId} disabled={!selectedCoachData} onChange={(event) => updateCoordinatorRival(event.target.value)}><option value="">Selecciona rival</option>{(selectedCoachData?.rivals || []).map((rival) => <option key={rival.id} value={rival.id}>{rival.nombre}</option>)}</select></label>
                 <div className="coordinator-time-field"><span>Hora del partido</span><QuickTimeInput value={matchDraft.startTime} onChange={(startTime) => setMatchDraft((current) => ({ ...current, startTime, callupTime: !current.callupTime || current.callupTime === subtractMatchMinutes(current.startTime, current.home ? 60 : 90) ? subtractMatchMinutes(startTime, current.home ? 60 : 90) : current.callupTime }))} /></div>
                 {matchDraft.home ? (
                   <label><span>Campo</span><select value={matchDraft.field} onChange={(event) => setMatchDraft((current) => ({ ...current, field: event.target.value }))}><option value="">Selecciona campo</option>{HOME_FIELDS.map((field) => <option key={field}>{field}</option>)}</select></label>
@@ -2231,7 +2251,7 @@ function CoordinatorPanel({
                 {matchDraft.home && <label><span>Vestuario</span><select value={matchDraft.homeLockerRoom || "Local 1"} onChange={(event) => { const homeLockerRoom = event.target.value; setMatchDraft((current) => ({ ...current, homeLockerRoom, awayLockerRoom: DEFAULT_AWAY_LOCKER_ROOM[homeLockerRoom] })) }}>{HOME_LOCKER_ROOMS.map((lockerRoom) => <option key={lockerRoom}>{lockerRoom}</option>)}</select></label>}
                 {matchDraft.home && <label><span>Vestuario visitante</span><select value={matchDraft.awayLockerRoom || "Visitante 1"} onChange={(event) => setMatchDraft((current) => ({ ...current, awayLockerRoom: event.target.value }))}>{AWAY_LOCKER_ROOMS.map((lockerRoom) => <option key={lockerRoom}>{lockerRoom}</option>)}</select></label>}
               </div>
-              {!selectedCoachData.rivals.length && <p className="coordinator-no-rivals">Este equipo todavía no tiene rivales guardados.</p>}
+              {selectedCoachData && !selectedCoachData.rivals.length && <p className="coordinator-no-rivals">Este equipo todavía no tiene rivales guardados.</p>}
               <div className="match-observations-group">
                 <label className="coordinator-match-notes"><span>Observaciones</span><textarea rows={2} value={matchDraft.notes} onChange={(event) => setMatchDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Escribe cualquier indicación para el entrenador" /></label>
                 <label className={`white-kit-toggle${matchDraft.playInWhite ? " active" : ""}`}>
@@ -2242,7 +2262,7 @@ function CoordinatorPanel({
               </div>
               <footer>
                 <button type="button" className="secondary-button" onClick={() => { setShowMatchCreator(false); setEditingMatch(null); }}>Cancelar</button>
-                <button type="button" className="primary-button" disabled={matchSaving || !selectedCoachData.rivals.length} onClick={() => void saveCoordinatorMatch()}><Save size={17} /> {matchSaving ? "Guardando…" : editingMatch ? "Guardar cambios" : "Guardar en su agenda"}</button>
+                <button type="button" className="primary-button" disabled={matchSaving || !selectedCoachData?.rivals.length} onClick={() => void saveCoordinatorMatch()}><Save size={17} /> {matchSaving ? "Guardando…" : editingMatch ? "Guardar cambios" : "Guardar en su agenda"}</button>
               </footer>
             </section>
           )}

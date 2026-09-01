@@ -464,6 +464,10 @@ export const clubApi = {
       method: "PUT",
       body: JSON.stringify({ area, data }),
     }),
+  clearAllAgendas: () =>
+    request<{ ok: true; removed: number; accounts: number }>("/api/data", {
+      method: "DELETE",
+    }),
   assignCoordinatorMatch: (accountId: string, match: CoordinatorMatchInput) =>
     request<{ event: CoordinatorMatchInput & { id: string } }>(
       "/api/coordinator-agenda",
