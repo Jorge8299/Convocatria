@@ -659,6 +659,7 @@ function AdminPanel({
   const [calendarRows, setCalendarRows] = useState<ImportedRival[]>([]);
   const [calendarFile, setCalendarFile] = useState("");
   const [calendarBusy, setCalendarBusy] = useState(false);
+  const [calendarMessage, setCalendarMessage] = useState("");
   const [overviewCoachId, setOverviewCoachId] = useState("");
   const [overviewRivals, setOverviewRivals] = useState<StoredRival[]>([]);
   const [overviewSaving, setOverviewSaving] = useState(false);
@@ -703,26 +704,26 @@ function AdminPanel({
   const analyzeCalendar = async (file?: File) => {
     if (!file) return;
     if (!calendarCoachId) {
-      setMessage("Primero selecciona el equipo que recibirá los rivales.");
+      setCalendarMessage("Primero selecciona el equipo que recibirá los rivales.");
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
-      setMessage("El archivo debe ocupar menos de 10 MB.");
+      setCalendarMessage("El archivo debe ocupar menos de 10 MB.");
       return;
     }
     setCalendarBusy(true);
-    setMessage("");
+    setCalendarMessage("");
     setCalendarRows([]);
     setCalendarFile(file.name);
     try {
       const result = await clubApi.extractCalendar(file);
       setCalendarRows(result.rivals);
-      setMessage(
+      setCalendarMessage(
         `Revisa los ${result.rivals.length} rivales detectados antes de guardarlos.`,
       );
     } catch (error) {
       setCalendarFile("");
-      setMessage(
+      setCalendarMessage(
         error instanceof Error
           ? error.message
           : "No se pudo leer el calendario.",
@@ -733,7 +734,7 @@ function AdminPanel({
   };
   const saveCalendar = async () => {
     if (!calendarCoachId || !calendarRows.some((item) => item.nombre.trim())) {
-      setMessage("Selecciona un equipo y deja al menos un rival.");
+      setCalendarMessage("Selecciona un equipo y deja al menos un rival.");
       return;
     }
     setCalendarBusy(true);
@@ -742,14 +743,14 @@ function AdminPanel({
         calendarCoachId,
         calendarRows,
       );
-      setMessage(
+      setCalendarMessage(
         `Importación terminada: ${result.added} rivales nuevos, ${result.skipped} ya existentes.`,
       );
       setCalendarRows([]);
       setCalendarFile("");
       await onRefresh();
     } catch (error) {
-      setMessage(
+      setCalendarMessage(
         error instanceof Error
           ? error.message
           : "No se pudieron guardar los rivales.",
@@ -1216,6 +1217,11 @@ function AdminPanel({
               </p>
             </div>
           </div>
+          {calendarMessage && (
+            <div className="admin-message" role="status">
+              <Check size={16} /> {calendarMessage}
+            </div>
+          )}
           <div className="calendar-flow-step">
             <span className="calendar-step-number">1</span>
             <div className="calendar-step-content">
@@ -1228,6 +1234,7 @@ function AdminPanel({
                   setCalendarCoachId(event.target.value);
                   setCalendarRows([]);
                   setCalendarFile("");
+                  setCalendarMessage("");
                 }}
               >
                 <option value="">Selecciona entrenador y equipo</option>

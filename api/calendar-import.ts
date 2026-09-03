@@ -33,6 +33,44 @@ const fieldPattern =
 const teamPattern =
   /\b(c\.?\s*f\.?\s*b?\.?|c\.?\s*d\.?|u\.?\s*d\.?|u\.?\s*e\.?|f\.?\s*c\.?|a\.?\s*d\.?|atl[eé]tic|atl[eé]tico|escola|academia|sporting|racing|club de f[uú]tbol|f[uú]tbol base)\b/i;
 
+function detectFfcvRivals(lines: string[]): ImportedRival[] {
+  const participants = lines
+    .map((line) => line.match(/^\d+\.-\s*(.+?)\s*\(\d+\)\s*$/)?.[1])
+    .filter((name): name is string => Boolean(name))
+    .map(clean);
+  if (participants.length < 4) return [];
+
+  const detailsStart = lines.findIndex((line) =>
+    /datos de inter[eé]s de los equipos participantes/i.test(line),
+  );
+  if (detailsStart < 0) return [];
+
+  const orderedParticipants = [...participants].sort(
+    (left, right) => right.length - left.length,
+  );
+  const fields = new Map<string, string>();
+  let currentClub = "";
+  for (const line of lines.slice(detailsStart + 1)) {
+    const matchingClub = orderedParticipants.find((club) =>
+      normalize(line).startsWith(normalize(club)),
+    );
+    if (matchingClub) currentClub = matchingClub;
+    const field = line.match(/\bCampo:\s*(.+?)(?=\s+Direcci[oó]n campo:|$)/i)?.[1];
+    if (!currentClub || !field || fields.has(normalize(currentClub))) continue;
+    const fieldName = clean(
+      field
+        .replace(/\s*-\s*Hierba\s+(?:Artificial|Natural)\s*\([^)]*\)\s*$/i, "")
+        .replace(/\s+F-\d+\b/gi, " "),
+    );
+    if (fieldName) fields.set(normalize(currentClub), fieldName);
+  }
+
+  return participants
+    .filter((club) => !isOliva(club))
+    .map((club) => ({ nombre: club, campo: fields.get(normalize(club)) || "" }))
+    .filter((rival) => rival.campo);
+}
+
 async function extractText(fileName: string, mimeType: string, base64: string) {
   const buffer = Buffer.from(base64, "base64");
   if (!buffer.length || buffer.length > 10 * 1024 * 1024)
@@ -72,6 +110,8 @@ export function detectRivals(text: string): ImportedRival[] {
     .split(/\r?\n/)
     .map(clean)
     .filter((line) => line.length >= 3 && line.length <= 220);
+  const ffcvRivals = detectFfcvRivals(lines);
+  if (ffcvRivals.length) return ffcvRivals;
   const fields = lines
     .map((line, index) =>
       fieldPattern.test(line) ? { index, value: line } : null,
