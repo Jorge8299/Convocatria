@@ -107,16 +107,16 @@ export function drawMagicPdfHeader(
   doc.setFontSize(7.4);
   doc.text(pdfCleanText(scope), textX, 26.5);
 
-  const phraseText = `Frase del dia: ${pdfCleanText(phrase)}`;
+  const phraseText = `“${pdfCleanText(phrase)}”`;
   const phraseWidth = Math.min(118, width - textX - margin);
   const phraseLines = doc.splitTextToSize(phraseText, phraseWidth) as string[];
   if (emphasizePhrase) {
     const phraseBoxX = width - margin - phraseWidth - 4;
     doc.setFillColor(255, 248, 226);
     doc.roundedRect(phraseBoxX, 7.5, phraseWidth + 4, 18, 2, 2, "F");
-    doc.setTextColor(173, 112, 11);
+    doc.setTextColor(145, 91, 7);
     doc.setFont("helvetica", "bolditalic");
-    doc.setFontSize(8);
+    doc.setFontSize(9);
     doc.text(phraseLines.slice(0, 2), width - margin - 2, 13.3, { align: "right", lineHeightFactor: 1.35 });
   } else {
     doc.setTextColor(101, 119, 139);
