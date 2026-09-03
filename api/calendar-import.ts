@@ -39,6 +39,11 @@ async function extractText(fileName: string, mimeType: string, base64: string) {
     throw new Error("El archivo debe ocupar menos de 10 MB.");
   const extension = fileName.toLowerCase().split(".").pop() || "";
   if (extension === "pdf" || mimeType === "application/pdf") {
+    const { DOMMatrix, ImageData, Path2D } = await import("@napi-rs/canvas");
+    const pdfGlobals = globalThis as Record<string, unknown>;
+    pdfGlobals.DOMMatrix ??= DOMMatrix;
+    pdfGlobals.ImageData ??= ImageData;
+    pdfGlobals.Path2D ??= Path2D;
     const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: buffer });
     try {
