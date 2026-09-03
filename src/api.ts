@@ -47,11 +47,19 @@ export interface StoreRow {
   area: StoreArea;
   data: unknown;
 }
+export interface LoginAuditEntry {
+  id: string | number;
+  account_id: string | null;
+  account_name: string;
+  account_role: ClubAccount["role"];
+  logged_at: string;
+}
 export interface BootstrapPayload {
   accounts: ClubAccount[];
   session: ClubAccount | null;
   impersonator?: ClubAccount | null;
   stores?: StoreRow[];
+  auditLogs?: LoginAuditEntry[];
 }
 export interface ImportedRival {
   id?: string;

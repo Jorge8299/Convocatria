@@ -81,6 +81,14 @@ export async function ensureSchema() {
     attempt_key TEXT NOT NULL,
     attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
+  await sql`CREATE TABLE IF NOT EXISTS club_login_audit (
+    id BIGSERIAL PRIMARY KEY,
+    account_id TEXT REFERENCES club_accounts(id) ON DELETE SET NULL,
+    account_name TEXT NOT NULL,
+    account_role TEXT NOT NULL,
+    logged_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS club_login_audit_logged_at_idx ON club_login_audit (logged_at DESC)`;
   await sql`INSERT INTO club_accounts (id,name,role,team_label,pin_hash,active)
     VALUES ('superadmin','Administrador','admin','Administración','c647f0ac',TRUE)
     ON CONFLICT (id) DO UPDATE SET role='admin'`;
@@ -89,6 +97,7 @@ export async function ensureSchema() {
     ON CONFLICT (id) DO UPDATE SET role='superadmin',pin_hash=EXCLUDED.pin_hash,active=TRUE`;
   await sql`DELETE FROM club_sessions WHERE expires_at < NOW()`;
   await sql`DELETE FROM club_login_attempts WHERE attempted_at < NOW()-INTERVAL '1 hour'`;
+  await sql`DELETE FROM club_login_audit WHERE logged_at < NOW()-INTERVAL '1 year'`;
 }
 
 export function hashPin(pin: string) {

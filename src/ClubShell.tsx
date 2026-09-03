@@ -42,6 +42,7 @@ import {
   getStored,
   ImportedRival,
   IS_LOCAL_DEMO,
+  LoginAuditEntry,
   StoreRow,
 } from "./api";
 import { randomFootballPhrase } from "./motivational";
@@ -336,6 +337,7 @@ export default function ClubShell() {
         platformMode
         accounts={accounts}
         stores={bootstrap.stores || []}
+        auditLogs={bootstrap.auditLogs || []}
         onRefresh={refresh}
         onAccounts={(next) =>
           setBootstrap((current) =>
@@ -614,6 +616,7 @@ function AdminPanel({
   platformMode = false,
   accounts,
   stores,
+  auditLogs = [],
   onRefresh,
   onAccounts,
   onImpersonate,
@@ -623,6 +626,7 @@ function AdminPanel({
   platformMode?: boolean;
   accounts: ClubAccount[];
   stores: StoreRow[];
+  auditLogs?: LoginAuditEntry[];
   onRefresh: () => Promise<void>;
   onAccounts: (accounts: ClubAccount[]) => void;
   onImpersonate?: (accountId: string) => Promise<void>;
@@ -965,6 +969,32 @@ function AdminPanel({
             <span><ShieldCheck size={20} /> NIVEL SUPERADMIN</span>
             <h2>Control y revisión de todas las cuentas</h2>
             <p>Entra como administrador, coordinador o entrenador para comprobar exactamente lo que ve cada perfil. El acceso del administrador del club permanece separado.</p>
+          </section>
+        )}
+        {platformMode && (
+          <section className="superadmin-audit">
+            <div className="superadmin-audit-heading">
+              <div>
+                <span><LogIn size={17} /> AUDITORÍA DE ACCESOS</span>
+                <h2>Quién ha entrado</h2>
+              </div>
+              <small>Últimos 100 accesos correctos · conservación de 1 año</small>
+            </div>
+            <div className="superadmin-audit-list">
+              {auditLogs.map((entry) => (
+                <article key={entry.id}>
+                  <span className={`role-avatar ${entry.account_role}`}><LogIn size={18} /></span>
+                  <div>
+                    <strong>{entry.account_name}</strong>
+                    <small>{roleLabel[entry.account_role] || entry.account_role}</small>
+                  </div>
+                  <time dateTime={entry.logged_at}>
+                    {new Intl.DateTimeFormat("es-ES", { dateStyle: "medium", timeStyle: "short" }).format(new Date(entry.logged_at))}
+                  </time>
+                </article>
+              ))}
+              {auditLogs.length === 0 && <p>Todavía no hay accesos registrados.</p>}
+            </div>
           </section>
         )}
         {platformMode && (

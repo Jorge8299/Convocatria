@@ -15,6 +15,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const account = rows.map((row) => mapAccount(row)).find((item) => item.pinHash === hashPin(pin!)) || null;
     if (!account) { await recordFailedLogin(attemptKey); res.status(401).json({ error: 'El PIN no es correcto.' }); return }
     await clearFailedLogins(attemptKey);
+    await sql`INSERT INTO club_login_audit (account_id,account_name,account_role) VALUES (${account.id},${account.name},${account.role})`;
     await createSession(account.id, res);
     res.status(200).json({ account: publicAccount(account) });
   } catch (error) { fail(res, error) }
