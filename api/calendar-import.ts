@@ -163,11 +163,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return;
     }
     const body = jsonBody<{
-      action: "extract" | "save" | "replace";
+      action: "extract" | "save" | "replace" | "delete";
       fileName?: string;
       mimeType?: string;
       base64?: string;
       accountId?: string;
+      rivalId?: string;
       rivals?: ImportedRival[];
     }>(req);
     if (body.action === "extract") {
@@ -271,6 +272,34 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       await sql`INSERT INTO club_stores (account_id,area,data) VALUES (${body.accountId},'rivals',${JSON.stringify(rivals)}::jsonb)
         ON CONFLICT (account_id,area) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()`;
       res.status(200).json({ rivals });
+      return;
+    }
+    if (body.action === "delete") {
+      if (!body.accountId || !body.rivalId) {
+        res.status(400).json({ error: "Selecciona un equipo y un rival." });
+        return;
+      }
+      const sql = getSql();
+      const coaches =
+        await sql`SELECT id FROM club_accounts WHERE id=${body.accountId} AND role='entrenador' LIMIT 1`;
+      if (!coaches[0]) {
+        res.status(404).json({ error: "El entrenador seleccionado ya no está disponible." });
+        return;
+      }
+      const rows = await sql`UPDATE club_stores
+        SET data=COALESCE((
+          SELECT jsonb_agg(item)
+          FROM jsonb_array_elements(CASE WHEN jsonb_typeof(data)='array' THEN data ELSE '[]'::jsonb END) AS item
+          WHERE item->>'id' <> ${body.rivalId}
+        ),'[]'::jsonb),updated_at=NOW()
+        WHERE account_id=${body.accountId} AND area='rivals'
+        RETURNING data`;
+      if (!rows[0]) {
+        res.status(404).json({ error: "No se encontró la lista de rivales del equipo." });
+        return;
+      }
+      const rivals = Array.isArray(rows[0].data) ? rows[0].data : [];
+      res.status(200).json({ rivals, deletedId: body.rivalId });
       return;
     }
     res.status(400).json({ error: "Acción no válida." });

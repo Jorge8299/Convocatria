@@ -300,9 +300,51 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
     accounts = accounts.filter((account) => account.id !== id);
     stores = stores.filter((store) => store.account_id !== id);
     localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
+  } else if (url.pathname === "/api/data" && method === "DELETE") {
+    if (session?.role !== "superadmin") throw new Error("Solo el superadmin puede borrar todas las agendas.");
+    let removed = 0;
+    let affectedAccounts = 0;
+    stores = stores.map((store) => {
+      if (store.area !== "agenda") return store;
+      affectedAccounts += 1;
+      removed += Array.isArray(store.data) ? store.data.length : 0;
+      return { ...store, data: [] };
+    });
+    localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
+    return { ok: true, removed, accounts: affectedAccounts } as T;
   } else if (url.pathname === "/api/data" && method === "PUT") {
     if (!session) throw new Error("Inicia sesión de nuevo.");
     const area = body.area as StoreArea;
+    if (area === "agenda") {
+      if (impersonator?.role !== "superadmin")
+        throw new Error("La preparación de ejercicios todavía no está disponible.");
+      const currentStore = stores.find(
+        (store) => store.account_id === session.id && store.area === "agenda",
+      );
+      const current = Array.isArray(currentStore?.data)
+        ? (currentStore.data as Array<Record<string, unknown>>)
+        : [];
+      const update = body.data && typeof body.data === "object" && !Array.isArray(body.data)
+        ? (body.data as Record<string, unknown>)
+        : {};
+      const eventId = String(update.eventId || "");
+      const target = current.find((event) => String(event.id) === eventId);
+      if (
+        !eventId ||
+        !update.session ||
+        typeof update.session !== "object" ||
+        !target ||
+        target.type !== "training" ||
+        target.assignedByCoordinator !== true ||
+        (target.exceptionStatus && target.exceptionStatus !== "scheduled")
+      )
+        throw new Error("Solo puedes preparar ejercicios en un entrenamiento vigente asignado por coordinación.");
+      body.data = current.map((event) =>
+        String(event.id) === eventId
+          ? { ...event, session: update.session }
+          : event,
+      );
+    }
     stores = stores.filter(
       (store) => !(store.account_id === session.id && store.area === area),
     );
@@ -423,6 +465,20 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
     ));
     localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
     return { ok: true, acknowledgedAt } as T;
+  } else if (url.pathname === "/api/calendar-import" && body.action === "delete") {
+    if (!session || !["admin", "superadmin"].includes(session.role))
+      throw new Error("Solo administración puede eliminar rivales.");
+    const accountId = String(body.accountId || "");
+    const rivalId = String(body.rivalId || "");
+    const rivalsStore = stores.find(
+      (store) => store.account_id === accountId && store.area === "rivals",
+    );
+    if (!rivalsStore) throw new Error("No se encontró la lista de rivales del equipo.");
+    rivalsStore.data = (rivalsStore.data as ImportedRival[]).filter(
+      (rival) => rival.id !== rivalId,
+    );
+    localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
+    return { rivals: rivalsStore.data, deletedId: rivalId } as T;
   } else if (url.pathname === "/api/calendar-import") {
     throw new Error("La importación de calendarios está desactivada en el modo local.");
   } else if (url.pathname !== "/api/accounts") {
@@ -579,6 +635,14 @@ export const clubApi = {
       method: "POST",
       body: JSON.stringify({ action: "replace", accountId, rivals }),
     }),
+  deleteRival: (accountId: string, rivalId: string) =>
+    request<{ rivals: Required<ImportedRival>[]; deletedId: string }>(
+      "/api/calendar-import",
+      {
+        method: "POST",
+        body: JSON.stringify({ action: "delete", accountId, rivalId }),
+      },
+    ),
 };
 
 export function getStored<T>(

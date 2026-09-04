@@ -8,7 +8,7 @@ import {
 import type { ClubAccount, FootballStage, TrainingYear } from './clubTypes';
 import { clubApi, getStored, StoreArea, StoreRow } from './api';
 import { randomFootballPhrase } from './motivational';
-import { AgendaEvent, AgendaView, MatchAgendaEvent } from './AgendaView';
+import { AgendaEvent, AgendaView, MatchAgendaEvent, TrainingAgendaEvent } from './AgendaView';
 
 type View = 'inicio' | 'agenda' | 'equipo' | 'convocatoria' | 'pizarra' | 'estadisticas' | 'guardados' | 'jugador';
 type BoardMode = 'libre' | 'partido';
@@ -64,7 +64,7 @@ function syncLinkedPlayers(team: TeamData, accountId: string, accounts: ClubAcco
   }) };
 }
 
-export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: { account: ClubAccount; accounts: ClubAccount[]; stores: StoreRow[]; onDataChange: (area:StoreArea,data:unknown) => Promise<unknown>; onLogout: () => void }) {
+export function CoachApp({ account, accounts, stores, canPreviewTrainingPlanner, onDataChange, onLogout }: { account: ClubAccount; accounts: ClubAccount[]; stores: StoreRow[]; canPreviewTrainingPlanner: boolean; onDataChange: (area:StoreArea,data:unknown) => Promise<unknown>; onLogout: () => void }) {
   const [view, setView] = useState<View>('inicio');
   const [viewHistory, setViewHistory] = useState<View[]>([]);
   const [boardMode, setBoardMode] = useState<BoardMode | null>(null);
@@ -90,7 +90,6 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
   useEffect(() => queueSave('team',team), [team]);
   useEffect(() => queueSave('stats',stats), [stats]);
   useEffect(() => queueSave('boards',boards), [boards]);
-  useEffect(() => queueSave('agenda',agendaEvents), [agendaEvents]);
   useEffect(() => {
     const listener = (event: MessageEvent) => {
       if (event.origin === location.origin && event.data?.type === 'convo-pizarra-expanded') setBoardExpanded(Boolean(event.data.expanded));
@@ -172,6 +171,10 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
   };
   const openBoard = (mode: BoardMode) => { setAgendaBoardMatch(null); setBoardMode(mode); goToView('pizarra') };
   const openAgendaBoard = (event: MatchAgendaEvent) => { setAgendaBoardMatch(event); setBoardMode('partido'); goToView('pizarra') };
+  const saveAgendaTraining = async (event: TrainingAgendaEvent) => {
+    await onDataChange('agenda', { eventId: event.id, session: event.session });
+    setAgendaEvents((current) => current.map((item) => item.id === event.id ? event : item));
+  };
   useEffect(() => {
     const returnToAgenda = (event: MessageEvent) => {
       if (event.origin !== location.origin || event.data?.type !== 'convo-pizarra-saved' || !agendaBoardMatch) return;
@@ -198,7 +201,7 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
   const saveJourney = () => { setJourneys((list) => [{ id: uid(), createdAt: new Date().toISOString(), data: cloneData(form), message }, ...list]); setSavedTab('convocatorias'); goToView('guardados') };
   const titles: Record<View, [string, string, string]> = {
     inicio: ['U.D. OLIVA', 'Hola, míster', 'Todo lo necesario para el próximo partido, sin complicaciones.'],
-    agenda: ['TEMPORADA', 'Agenda', 'Entrenamientos y partidos guardados en el día correspondiente.'],
+    agenda: ['TEMPORADA', 'Agenda', 'Entrenamientos y partidos asignados por coordinación.'],
     equipo: ['TU EQUIPO', 'Equipo y plantilla', 'Configura una vez los jugadores que utilizarás en toda la app.'],
     convocatoria: ['ANTES DEL PARTIDO', 'Citación', 'Completa los datos del partido y comparte el mensaje con el equipo.'],
     pizarra: ['HERRAMIENTA DE CAMPO', 'Pizarra Fútbol 8', 'Tu plantilla disponible para preparar cualquier alineación.'],
@@ -217,7 +220,7 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
       </header>
       <AnimatePresence mode="wait"><motion.div key={`${view}-${boardMode || ''}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: .18 }}>
         {view === 'inicio' && <HomeView phrase={phrase} onAgenda={() => goToView('agenda')} onTeam={() => goToView('equipo')} onSaved={() => goToView('guardados')} />}
-        {view === 'agenda' && <AgendaView events={agendaEvents} rivals={rivales} matches={stats} footballStage={account.footballStage} categoryLabel={`${account.footballStage ? FOOTBALL_STAGE_LABEL[account.footballStage] : 'Categoría pendiente'}${account.trainingYear ? ` · ${TRAINING_YEAR_LABEL[account.trainingYear]}` : ''}`} defaultPlayerCount={team.players.filter((player) => player.active).length} onChange={setAgendaEvents} onOpenCallup={openAgendaCallup} onOpenBoard={openAgendaBoard} onOpenStats={(event) => { const completed = stats.some((match) => match.date === event.date && match.rival === event.rivalName && match.home === event.home); if (completed) { setSavedTab('estadisticas'); goToView('guardados') } else { setSelectedAgendaMatch(event); goToView('estadisticas') } }} />}
+        {view === 'agenda' && <AgendaView events={agendaEvents} matches={stats} footballStage={account.footballStage} categoryLabel={`${account.footballStage ? FOOTBALL_STAGE_LABEL[account.footballStage] : 'Categoría pendiente'}${account.trainingYear ? ` · ${TRAINING_YEAR_LABEL[account.trainingYear]}` : ''}`} defaultPlayerCount={team.players.filter((player) => player.active).length} trainingPlannerEnabled={canPreviewTrainingPlanner} onSaveTraining={saveAgendaTraining} onOpenCallup={openAgendaCallup} onOpenBoard={openAgendaBoard} onOpenStats={(event) => { const completed = stats.some((match) => match.date === event.date && match.rival === event.rivalName && match.home === event.home); if (completed) { setSavedTab('estadisticas'); goToView('guardados') } else { setSelectedAgendaMatch(event); goToView('estadisticas') } }} />}
         {view === 'equipo' && <TeamView team={team} setTeam={setTeam} account={account} accounts={accounts} stores={stores} onPlayer={(id) => { setSelectedPlayerId(id); goToView('jugador') }} />}
         {view === 'convocatoria' && <ConvocatoriaView form={form} setForm={setForm} rivales={rivales} rivalName={rivalName} fieldName={fieldName} message={message} copySuccess={copySuccess} onCopy={copyMessage} onWhatsApp={() => open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank')} onSave={saveJourney} onMatchTime={updateTime} onHomeAway={updateHome} />}
         {view === 'pizarra' && <BoardView mode={boardMode} expanded={boardExpanded} accountId={account.id} boards={boards} team={team} matchContext={agendaBoardMatch} onChoose={setBoardMode} onBack={() => { setBoardExpanded(false); if (agendaBoardMatch) { setAgendaBoardMatch(null); setBoardMode(null); goBack() } else setBoardMode(null) }} />}
@@ -232,7 +235,7 @@ export function CoachApp({ account, accounts, stores, onDataChange, onLogout }: 
 
 function Crest({ className = '' }: { className?: string }) { return <span className={`crest ${className}`}><img src={CREST_PATH} alt="Escudo de U.D. Oliva" /></span> }
 function Brand({ account, onHome }: { account: ClubAccount; onHome: () => void }) { return <button type="button" className="brand brand-home" onClick={onHome} aria-label="Ir a la página de inicio"><Crest className="brand-crest" /><span className="brand-copy"><strong>CONVO</strong><small>{account.name} · {account.teamLabel}</small></span></button> }
-function HomeView({ phrase, onAgenda, onTeam, onSaved }: { phrase: string; onAgenda: () => void; onTeam: () => void; onSaved: () => void }) { return <div className="home-layout"><section className="hero-card quote-card"><div className="quote-copy"><span className="hero-label">FRASE DEL DÍA</span><h2>“{phrase}”</h2><p>Una idea para empezar la sesión con el equipo en mente.</p></div><Crest className="hero-crest" /></section><section><div className="section-heading"><span className="eyebrow">¿QUÉ NECESITAS HACER?</span><h2>Accesos rápidos</h2></div><div className="action-grid"><ActionCard icon={Calendar} tone="blue" title="Agenda" text="Organiza entrenamientos y partidos." onClick={onAgenda} /><ActionCard icon={Users} tone="violet" title="Equipo" text="Edita la plantilla y los jugadores B." onClick={onTeam} /><ActionCard icon={Archive} tone="green" title="Guardados" text="Consulta convocatorias, pizarras y estadísticas." onClick={onSaved} /></div></section></div> }
+function HomeView({ phrase, onAgenda, onTeam, onSaved }: { phrase: string; onAgenda: () => void; onTeam: () => void; onSaved: () => void }) { return <div className="home-layout"><section className="hero-card quote-card"><div className="quote-copy"><span className="hero-label">FRASE DEL DÍA</span><h2>“{phrase}”</h2><p>Una idea para empezar la sesión con el equipo en mente.</p></div><Crest className="hero-crest" /></section><section><div className="section-heading"><span className="eyebrow">¿QUÉ NECESITAS HACER?</span><h2>Accesos rápidos</h2></div><div className="action-grid"><ActionCard icon={Calendar} tone="blue" title="Agenda" text="Consulta los entrenamientos y partidos asignados." onClick={onAgenda} /><ActionCard icon={Users} tone="violet" title="Equipo" text="Edita la plantilla y los jugadores B." onClick={onTeam} /><ActionCard icon={Archive} tone="green" title="Guardados" text="Consulta convocatorias, pizarras y estadísticas." onClick={onSaved} /></div></section></div> }
 function ActionCard({ icon: Icon, tone, title, text, onClick }: { icon: React.ElementType; tone: string; title: string; text: string; onClick: () => void }) { return <button className="action-card" onClick={onClick}><span className={`action-icon ${tone}`}><Icon size={22} /></span><span><strong>{title}</strong><small>{text}</small></span><ChevronRight size={19} /></button> }
 
 function TeamView({ team, setTeam, account, accounts, stores, onPlayer }: { team: TeamData; setTeam: React.Dispatch<React.SetStateAction<TeamData>>; account: ClubAccount; accounts: ClubAccount[]; stores:StoreRow[]; onPlayer: (id: string) => void }) {

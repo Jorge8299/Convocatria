@@ -107,19 +107,12 @@ export interface MatchAgendaEvent extends AgendaEventBase {
   coordinatorStatus?: "scheduled" | "cancelled";
 }
 
-interface RivalOption {
-  id: string;
-  nombre: string;
-  campo: string;
-}
-
 interface MatchSummary {
   date: string;
   rival: string;
   home: boolean;
 }
 
-const HOME_FIELDS = ["El Morer", "Campo C", "Polideportivo"];
 const weekDays = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const monthFormatter = new Intl.DateTimeFormat("es-ES", {
   month: "long",
@@ -254,30 +247,6 @@ const defaultSession = (playerCount: number): TrainingSession => ({
 const isoDate = (year: number, month: number, day: number) =>
   `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
-const emptyTraining = (date: string, playerCount: number): TrainingAgendaEvent => ({
-  id: crypto.randomUUID(),
-  type: "training",
-  date,
-  startTime: "17:00",
-  endTime: "18:30",
-  notes: "",
-  session: defaultSession(playerCount),
-});
-
-const emptyMatch = (date: string): MatchAgendaEvent => ({
-  id: crypto.randomUUID(),
-  type: "match",
-  date,
-  startTime: "",
-  notes: "",
-  matchType: "liga",
-  home: true,
-  rivalId: "",
-  rivalName: "",
-  field: "",
-  playInWhite: false,
-});
-
 const trainingExerciseCount = (event: TrainingAgendaEvent) =>
   event.session?.blocks.reduce(
     (total, block) => total + blockExercises(block).length,
@@ -286,26 +255,26 @@ const trainingExerciseCount = (event: TrainingAgendaEvent) =>
 
 export function AgendaView({
   events,
-  rivals,
   matches,
-  onChange,
+  onSaveTraining,
   onOpenBoard,
   onOpenStats,
   onOpenCallup,
   categoryLabel,
   footballStage,
   defaultPlayerCount,
+  trainingPlannerEnabled,
 }: {
   events: AgendaEvent[];
-  rivals: RivalOption[];
   matches: MatchSummary[];
-  onChange: (events: AgendaEvent[]) => void;
+  onSaveTraining: (event: TrainingAgendaEvent) => Promise<void>;
   onOpenBoard: (event: MatchAgendaEvent) => void;
   onOpenStats: (event: MatchAgendaEvent) => void;
   onOpenCallup: (event: MatchAgendaEvent) => void;
   categoryLabel: string;
   footballStage: FootballStage | null;
   defaultPlayerCount: number;
+  trainingPlannerEnabled: boolean;
 }) {
   const today = new Date();
   const todayIso = isoDate(today.getFullYear(), today.getMonth(), today.getDate());
@@ -316,6 +285,8 @@ export function AgendaView({
   const [draft, setDraft] = useState<AgendaEvent | null>(null);
   const [zonePreview, setZonePreview] = useState<TrainingAgendaEvent | null>(null);
   const [trainingView, setTrainingView] = useState<"summary" | "planner">("planner");
+  const [trainingSaving, setTrainingSaving] = useState(false);
+  const [trainingMessage, setTrainingMessage] = useState("");
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [exercisePreview, setExercisePreview] = useState<{
     exercise: PlannedExercise;
@@ -345,7 +316,7 @@ export function AgendaView({
 
   const eventsByDate = useMemo(() => {
     const grouped = new Map<string, AgendaEvent[]>();
-    events.forEach((event) => {
+    events.filter((event) => event.assignedByCoordinator === true).forEach((event) => {
       const day = grouped.get(event.date) || [];
       day.push(event);
       grouped.set(event.date, day);
@@ -356,28 +327,25 @@ export function AgendaView({
     return grouped;
   }, [events]);
   const selectedEvents = eventsByDate.get(selectedDate) || [];
-  const saveDraft = () => {
-    if (!draft) return;
-    if (draft.type === "match" && (!draft.rivalName.trim() || !draft.startTime))
-      return;
-    const exists = events.some((event) => event.id === draft.id);
-    onChange(
-      exists
-        ? events.map((event) => (event.id === draft.id ? draft : event))
-        : [...events, draft],
-    );
-    setDraft(null);
-  };
-
-  const updateMatchRival = (rivalId: string) => {
-    if (!draft || draft.type !== "match") return;
-    const rival = rivals.find((item) => item.id === rivalId);
-    setDraft({
-      ...draft,
-      rivalId,
-      rivalName: rival?.nombre || "",
-      field: draft.home ? draft.field : rival?.campo || "",
-    });
+  const saveDraft = async () => {
+    if (
+      !draft ||
+      draft.type !== "training" ||
+      draft.assignedByCoordinator !== true ||
+      (draft.exceptionStatus && draft.exceptionStatus !== "scheduled")
+    ) return;
+    if (!events.some((event) => event.id === draft.id)) return;
+    setTrainingSaving(true);
+    setTrainingMessage("");
+    try {
+      await onSaveTraining(draft);
+      setTrainingView("summary");
+      setTrainingMessage("Ejercicios guardados correctamente.");
+    } catch (error) {
+      setTrainingMessage(error instanceof Error ? error.message : "No se pudieron guardar los ejercicios.");
+    } finally {
+      setTrainingSaving(false);
+    }
   };
 
   const matchIsCompleted = (event: MatchAgendaEvent) =>
@@ -390,7 +358,8 @@ export function AgendaView({
 
   const openTraining = (event: TrainingAgendaEvent) => {
     setDraft({ ...event, session: event.session || defaultSession(defaultPlayerCount) });
-    setTrainingView("summary");
+    setTrainingView(trainingExerciseCount(event) ? "summary" : "planner");
+    setTrainingMessage("");
   };
 
   const updateSession = (change: Partial<TrainingSession>) => {
@@ -539,12 +508,8 @@ export function AgendaView({
                   (eventsByDate.get(cell.date) || []).some((event) => event.type === "match" && event.assignedByCoordinator) ? "coordinator-assigned-day" : "",
                 ].filter(Boolean).join(" ")}
                 onClick={() => {
-                  const assignedMatch = (eventsByDate.get(cell.date) || []).find(
-                    (event): event is MatchAgendaEvent =>
-                      event.type === "match" && event.assignedByCoordinator === true,
-                  );
                   setSelectedDate(cell.date);
-                  setDraft(assignedMatch ? { ...assignedMatch } : null);
+                  setDraft(null);
                   setExercisePreview(null);
                 }}
               >
@@ -589,7 +554,7 @@ export function AgendaView({
             <span className="eyebrow">DÍA SELECCIONADO</span>
             <h2>{new Intl.DateTimeFormat("es-ES", { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${selectedDate}T12:00:00`))}</h2>
           </div>
-          {draft && !(draft.type === "match" && draft.assignedByCoordinator) && (
+          {draft && (
             <button aria-label="Cerrar formulario" onClick={() => setDraft(null)}>
               <X size={18} />
             </button>
@@ -628,8 +593,11 @@ export function AgendaView({
                       </span>
                     </span>
                   </button>
-                  {event.type === "training" && event.fieldId && event.zoneIds?.length ? (
-                    <div className="agenda-event-side"><button type="button" className="agenda-zone-button" onClick={() => setZonePreview(event)}><MapPin size={15} /> Ver zona</button></div>
+                  {event.type === "training" ? (
+                    <div className="agenda-event-side">
+                      {event.fieldId && event.zoneIds?.length ? <button type="button" className="agenda-zone-button" onClick={() => setZonePreview(event)}><MapPin size={15} /> Ver zona</button> : null}
+                      {(!event.exceptionStatus || event.exceptionStatus === "scheduled") && <button type="button" className="agenda-training-plan-button" onClick={() => openTraining(event)}><PencilRuler size={15} /> {trainingExerciseCount(event) ? "Ver ejercicios" : "Preparar ejercicios"}</button>}
+                    </div>
                   ) : event.type === "match" ? (
                     <div className="agenda-event-side">
                       <span className={matchIsCompleted(event) ? "agenda-status done" : "agenda-status"}>
@@ -645,20 +613,19 @@ export function AgendaView({
                   ) : null}
                 </article>
               ))}
-              {!selectedEvents.length && <p className="agenda-no-events">No hay actividades guardadas.</p>}
+              {!selectedEvents.length && <p className="agenda-no-events">No hay actividades asignadas por coordinación.</p>}
             </div>
-            <div className="agenda-add-actions">
-              <button onClick={() => { setDraft(emptyTraining(selectedDate, defaultPlayerCount)); setTrainingView("planner"); }}>
-                <Plus size={17} /> Entrenamiento
-              </button>
-              <button onClick={() => setDraft(emptyMatch(selectedDate))}>
-                <Plus size={17} /> Partido
-              </button>
+            <div className="agenda-coordination-note">
+              <ShieldCheck size={19} />
+              <span>
+                <strong>Agenda gestionada por coordinación</strong>
+                <small>{trainingPlannerEnabled ? "Los partidos y entrenamientos los añade el coordinador. Puedes revisar el preparador al abrir un entrenamiento asignado." : "Los partidos y entrenamientos los añade el coordinador. La preparación de ejercicios estará disponible próximamente."}</small>
+              </span>
             </div>
           </>
         )}
 
-        {draft?.type === "training" && draft.assignedByCoordinator && (
+        {draft?.type === "training" && draft.assignedByCoordinator && draft.exceptionStatus && draft.exceptionStatus !== "scheduled" && (
           <div className={`agenda-form assigned-training-detail${draft.exceptionStatus !== "scheduled" && draft.exceptionStatus ? " cancelled" : ""}`} data-cancellation-label={draft.exceptionStatus === "holiday" ? "FESTIVO" : draft.exceptionStatus === "cancelled" ? "CANCELADO" : undefined}>
             <div className="assigned-training-heading"><span><ShieldCheck size={16} /> ASIGNADO POR COORDINACIÓN</span><strong>{draft.exceptionStatus === "holiday" ? "Festivo · No hay entrenamiento" : draft.exceptionStatus === "cancelled" ? "Entrenamiento cancelado" : "Entrenamiento"}</strong><small>{draft.recurrenceLabel || "Horario habitual"}</small></div>
             <div className="assigned-match-ticket"><div><span>Hora</span><strong>{draft.startTime}–{draft.endTime}</strong></div><div><span>Campo</span><strong>{draft.fieldName || "Pendiente"}</strong></div><div><span>Zona</span><strong>{fieldZoneLabel(draft.fieldId, draft.zoneIds)}</strong></div><div><span>Fecha</span><strong>{new Intl.DateTimeFormat("es-ES", { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${draft.date}T12:00:00`))}</strong></div></div>
@@ -667,8 +634,33 @@ export function AgendaView({
           </div>
         )}
 
-        {draft?.type === "training" && !draft.assignedByCoordinator && (
+        {draft?.type === "training" && draft.assignedByCoordinator && (!draft.exceptionStatus || draft.exceptionStatus === "scheduled") && !trainingPlannerEnabled && (
+          <div className="agenda-form training-construction-page">
+            <div className="training-construction-icon"><PencilRuler size={30} /></div>
+            <span className="eyebrow">PREPARACIÓN DE ENTRENAMIENTOS</span>
+            <h3>Página en construcción</h3>
+            <p>Estamos preparando esta herramienta para que puedas organizar los ejercicios de cada entrenamiento.</p>
+            <div className="training-construction-assignment">
+              <ShieldCheck size={18} />
+              <span>
+                <strong>Tu entrenamiento sigue asignado</strong>
+                <small>{draft.startTime}–{draft.endTime} · {draft.fieldName || "Campo pendiente"} · {fieldZoneLabel(draft.fieldId, draft.zoneIds)}</small>
+              </span>
+            </div>
+            <small className="training-construction-note">Coordinación te avisará cuando la preparación de ejercicios esté disponible.</small>
+          </div>
+        )}
+
+        {draft?.type === "training" && draft.assignedByCoordinator && (!draft.exceptionStatus || draft.exceptionStatus === "scheduled") && trainingPlannerEnabled && (
           <div className="agenda-form">
+            <div className="assigned-training-heading">
+              <span><ShieldCheck size={16} /> ENTRENAMIENTO ASIGNADO POR COORDINACIÓN</span>
+              <strong>{draft.startTime}–{draft.endTime} · {draft.fieldName || "Campo pendiente"}</strong>
+              <small>{fieldZoneLabel(draft.fieldId, draft.zoneIds)} · {draft.recurrenceLabel || "Horario habitual"}</small>
+            </div>
+            {draft.notes && <p className="assigned-match-notes">{draft.notes}</p>}
+            {draft.fieldId && draft.zoneIds?.length ? <button type="button" className="agenda-zone-button large" onClick={() => setZonePreview(draft)}><MapPin size={17} /> Ver zona del campo</button> : null}
+            {trainingMessage && <div className="training-save-message" role="status">{trainingMessage}</div>}
             <div className="training-session-heading">
               <div><span className="eyebrow">SESIÓN DE ENTRENAMIENTO</span><h3>{categoryLabel}</h3></div>
               <div className="training-view-switch">
@@ -710,7 +702,6 @@ export function AgendaView({
                     </article>;
                   })}
                 </div>
-                {draft.notes && <div className="training-review-notes"><strong>Observaciones generales</strong><p>{draft.notes}</p></div>}
                 <div className="training-review-actions">
                   <button type="button" className="training-pdf-button" disabled={downloadingPdf} onClick={() => void downloadSummaryPdf()}><Download size={16} /> {downloadingPdf ? "Preparando PDF..." : "Descargar PDF"}</button>
                   <button type="button" className="primary-button training-edit-button" onClick={() => setTrainingView("planner")}><PencilRuler size={16} /> Editar planificación</button>
@@ -718,10 +709,6 @@ export function AgendaView({
               </section>
             ) : (
               <>
-                <div className="agenda-time-row">
-                  <label><span>Empieza</span><input type="time" value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} /></label>
-                  <label><span>Termina</span><input type="time" value={draft.endTime} onChange={(event) => setDraft({ ...draft, endTime: event.target.value })} /></label>
-                </div>
                 <div className="training-session-summary training-session-focus">
                   <label><span>Matiz que quieres trabajar</span><input value={trainingSession?.focus || ""} onChange={(event) => updateSession({ focus: event.target.value })} placeholder="Ej. atraer para jugar por fuera" /></label>
                 </div>
@@ -757,8 +744,9 @@ export function AgendaView({
                     <textarea rows={2} value={block.task} onChange={(event) => updateSession({ blocks: (draft.session?.blocks || defaultBlocks()).map((item) => item.id === block.id ? { ...item, task: event.target.value } : item) })} placeholder="Nota o tarea libre adicional para este bloque" />
                   </article>;
                 })}</div>
-                <label><span>Observaciones generales</span><textarea rows={3} value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="Opcional" /></label>
-                <AgendaFormActions onSave={saveDraft} onDelete={events.some((event) => event.id === draft.id) ? () => { onChange(events.filter((event) => event.id !== draft.id)); setDraft(null); } : undefined} />
+                <div className="agenda-form-actions">
+                  <button className="primary-button" disabled={trainingSaving} onClick={() => void saveDraft()}><Save size={16} /> {trainingSaving ? "Guardando…" : "Guardar ejercicios"}</button>
+                </div>
               </>
             )}
 
@@ -821,45 +809,8 @@ export function AgendaView({
           </div>
         )}
 
-        {draft?.type === "match" && !draft.assignedByCoordinator && (
-          <div className="agenda-form">
-            <span className="eyebrow">PARTIDO</span>
-            <div className="agenda-segmented">
-              {(["liga", "amistoso", "torneo"] as const).map((type) => <button className={draft.matchType === type ? "active" : ""} key={type} onClick={() => setDraft({ ...draft, matchType: type })}>{type}</button>)}
-            </div>
-            <div className="agenda-segmented">
-              <button className={draft.home ? "active" : ""} onClick={() => setDraft({ ...draft, home: true, field: "" })}>Local</button>
-              <button className={!draft.home ? "active" : ""} onClick={() => { const rival = rivals.find((item) => item.id === draft.rivalId); setDraft({ ...draft, home: false, field: rival?.campo || draft.field }); }}>Visitante</button>
-            </div>
-            <label><span>Rival</span><select value={draft.rivalId} onChange={(event) => updateMatchRival(event.target.value)}><option value="">Selecciona rival</option>{rivals.map((rival) => <option key={rival.id} value={rival.id}>{rival.nombre}</option>)}</select></label>
-            <label><span>Hora</span><input type="time" value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} /></label>
-            {draft.home ? (
-              <label><span>Campo</span><select value={draft.field} onChange={(event) => setDraft({ ...draft, field: event.target.value })}><option value="">Selecciona campo</option>{HOME_FIELDS.map((field) => <option key={field}>{field}</option>)}</select></label>
-            ) : (
-              <label><span>Campo del rival</span><input value={draft.field} onChange={(event) => setDraft({ ...draft, field: event.target.value })} placeholder="Se completa desde el rival" /></label>
-            )}
-            <div className="match-observations-group">
-              <label><span>Observaciones</span><textarea rows={2} value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="Escribe cualquier indicación para el equipo" /></label>
-              <label className={`white-kit-toggle${draft.playInWhite ? " active" : ""}`}>
-                <input type="checkbox" checked={draft.playInWhite === true} onChange={(event) => setDraft({ ...draft, playInWhite: event.target.checked })} />
-                <span aria-hidden="true" />
-                <strong>Añadir en observaciones: JUGAMOS DE BLANCO</strong>
-              </label>
-            </div>
-            <div className="agenda-linked-actions">
-              <button type="button" onClick={() => onOpenCallup(draft)}><ClipboardList size={17} /> Citación</button>
-              <button onClick={() => onOpenBoard(draft)}><PencilRuler size={17} /> Abrir alineación</button>
-              <button onClick={() => onOpenStats(draft)}><BarChart3 size={17} /> Estadísticas</button>
-            </div>
-            <AgendaFormActions onSave={saveDraft} onDelete={events.some((event) => event.id === draft.id) ? () => { onChange(events.filter((event) => event.id !== draft.id)); setDraft(null); } : undefined} />
-          </div>
-        )}
       </aside>
       {zonePreview?.fieldId && zonePreview.zoneIds ? <FieldZoneDialog fieldId={zonePreview.fieldId} zoneIds={zonePreview.zoneIds} onClose={() => setZonePreview(null)} /> : null}
     </div>
   );
-}
-
-function AgendaFormActions({ onSave, onDelete }: { onSave: () => void; onDelete?: () => void }) {
-  return <div className="agenda-form-actions">{onDelete && <button className="danger" onClick={onDelete}><Trash2 size={16} /> Eliminar</button>}<button className="primary-button" onClick={onSave}><Save size={16} /> Guardar</button></div>;
 }

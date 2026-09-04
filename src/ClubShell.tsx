@@ -398,6 +398,7 @@ export default function ClubShell() {
         account={session}
         accounts={accounts}
         stores={bootstrap.stores || []}
+        canPreviewTrainingPlanner={bootstrap.impersonator?.role === "superadmin"}
         onDataChange={(area, data) => clubApi.saveData(area, data)}
         onLogout={logout}
       />
@@ -667,6 +668,7 @@ function AdminPanel({
   const [overviewCoachId, setOverviewCoachId] = useState("");
   const [overviewRivals, setOverviewRivals] = useState<StoredRival[]>([]);
   const [overviewSaving, setOverviewSaving] = useState(false);
+  const [overviewDeletingId, setOverviewDeletingId] = useState("");
   const overviewCoach = coaches.find((coach) => coach.id === overviewCoachId);
   const overviewTeam = getStored<StoredTeam>(stores, overviewCoachId, "team", {
     name: "U.D. Oliva",
@@ -703,6 +705,24 @@ function AdminPanel({
       );
     } finally {
       setOverviewSaving(false);
+    }
+  };
+  const deleteOverviewRival = async (rival: StoredRival) => {
+    if (!overviewCoachId) return;
+    if (!window.confirm(`¿Eliminar a ${rival.nombre || "este rival"} y su campo? Los partidos y estadísticas ya guardados se conservarán.`)) return;
+    setOverviewDeletingId(rival.id);
+    setMessage("");
+    try {
+      const result = await clubApi.deleteRival(overviewCoachId, rival.id);
+      setOverviewRivals(result.rivals);
+      await onRefresh();
+      setMessage(`${rival.nombre || "El rival"} se ha eliminado correctamente.`);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "No se pudo eliminar el rival.",
+      );
+    } finally {
+      setOverviewDeletingId("");
     }
   };
   const analyzeCalendar = async (file?: File) => {
@@ -1206,6 +1226,16 @@ function AdminPanel({
                           }
                         />
                       </label>
+                      <button
+                        type="button"
+                        className="overview-delete-rival"
+                        aria-label={`Eliminar ${rival.nombre || `rival ${index + 1}`}`}
+                        title={`Eliminar ${rival.nombre || "rival"}`}
+                        disabled={overviewSaving || Boolean(overviewDeletingId)}
+                        onClick={() => void deleteOverviewRival(rival)}
+                      >
+                        <Trash2 size={17} />
+                      </button>
                     </div>
                   ))}
                   {overviewRivals.length === 0 && (
@@ -1217,7 +1247,7 @@ function AdminPanel({
                 {overviewRivals.length > 0 && (
                   <button
                     className="primary-button save-overview-button"
-                    disabled={overviewSaving}
+                    disabled={overviewSaving || Boolean(overviewDeletingId)}
                     onClick={() => void saveOverviewRivals()}
                   >
                     <Check size={17} />
@@ -1689,9 +1719,9 @@ function CoordinatorPanel({
   );
   const [selectedAgendaDate, setSelectedAgendaDate] = useState(todayIso);
   const [showTeamPicker, setShowTeamPicker] = useState(false);
-  const [pendingMatchCreation, setPendingMatchCreation] = useState(false);
   const [showMatchCreator, setShowMatchCreator] = useState(false);
   const [showTrainingCreator, setShowTrainingCreator] = useState(false);
+  const [matchCoachId, setMatchCoachId] = useState("");
   const [matchDraft, setMatchDraft] = useState<CoordinatorMatchInput>(() =>
     emptyCoordinatorMatch(todayIso),
   );
@@ -1874,13 +1904,14 @@ function CoordinatorPanel({
   const assists = playerRows.reduce((total, row) => total + row.assists, 0);
   const coordinatorName = account.name.trim().split(/\s+/)[0];
   const selectedCoach = coaches.find((coach) => coach.id === coachFilter);
-  const selectedCoachData = data.find((item) => item.coach.id === coachFilter);
-  const selectedCoachIndex = selectedCoach
-    ? coaches.findIndex((coach) => coach.id === selectedCoach.id)
+  const matchCoach = coaches.find((coach) => coach.id === matchCoachId);
+  const matchCoachData = data.find((item) => item.coach.id === matchCoachId);
+  const matchCoachIndex = matchCoach
+    ? coaches.findIndex((coach) => coach.id === matchCoach.id)
     : -1;
-  const nextCoach =
-    selectedCoachIndex >= 0 && coaches.length > 1
-      ? coaches[(selectedCoachIndex + 1) % coaches.length]
+  const nextMatchCoach =
+    matchCoachIndex >= 0 && coaches.length > 1
+      ? coaches[(matchCoachIndex + 1) % coaches.length]
       : undefined;
   const firstName = (name: string) => name.trim().split(/\s+/)[0];
   const viewTitle =
@@ -1902,28 +1933,19 @@ function CoordinatorPanel({
   const chooseTeam = (id: string) => {
     setCoachFilter(id);
     setShowTeamPicker(false);
-    if (pendingMatchCreation && id !== "all") {
-      setMatchDraft(emptyCoordinatorMatch(selectedAgendaDate));
-      setShowMatchCreator(true);
-      setPendingMatchCreation(false);
-      setMatchMessage("");
-      setTab("agenda");
-      setAgendaView("matches");
-    } else if (id === "all") {
-      setPendingMatchCreation(false);
-    }
   };
   const openMatchCreator = () => {
     setTab("agenda");
     setAgendaView("matches");
     setMatchMessage("");
     setShowTrainingCreator(false);
+    setMatchCoachId(selectedCoach?.id || "");
     setMatchDraft(emptyCoordinatorMatch(selectedAgendaDate));
     setEditingMatch(null);
     setShowMatchCreator(true);
   };
   const updateCoordinatorRival = (rivalId: string) => {
-    const rival = selectedCoachData?.rivals.find((item) => item.id === rivalId);
+    const rival = matchCoachData?.rivals.find((item) => item.id === rivalId);
     setMatchDraft((current) => ({
       ...current,
       rivalId,
@@ -1932,30 +1954,23 @@ function CoordinatorPanel({
     }));
   };
   const goToNextTeam = () => {
-    if (!nextCoach) return;
-    if (tab !== "agenda" || !showMatchCreator) {
-      setCoachFilter(nextCoach.id);
-      setShowTeamPicker(false);
-      return;
-    }
+    if (!nextMatchCoach) return;
     const nextDate = matchDraft.date || selectedAgendaDate;
-    setCoachFilter(nextCoach.id);
-    setShowTeamPicker(false);
-    setPendingMatchCreation(false);
+    setMatchCoachId(nextMatchCoach.id);
     setMatchDraft(emptyCoordinatorMatch(nextDate));
     setShowMatchCreator(true);
     setMatchMessage("");
     setTab("agenda");
   };
   const saveCoordinatorMatch = async () => {
-    if (!selectedCoach || !matchDraft.date || !matchDraft.startTime || !matchDraft.rivalName.trim() || (matchDraft.matchType !== "amistoso" && !matchDraft.rivalId) || !matchDraft.field) {
+    if (!matchCoach || !matchDraft.date || !matchDraft.startTime || !matchDraft.rivalName.trim() || (matchDraft.matchType !== "amistoso" && !matchDraft.rivalId) || !matchDraft.field) {
       setMatchMessage("Completa fecha, hora, rival y campo.");
       return;
     }
     setMatchSaving(true);
     try {
       if (editingMatch) await clubApi.updateCoordinatorMatch(editingMatch.accountId, editingMatch.eventId, matchDraft);
-      else await clubApi.assignCoordinatorMatch(selectedCoach.id, matchDraft);
+      else await clubApi.assignCoordinatorMatch(matchCoach.id, matchDraft);
       await onRefresh();
       const date = new Date(`${matchDraft.date}T12:00:00`);
       const savedDate = matchDraft.date;
@@ -1963,7 +1978,7 @@ function CoordinatorPanel({
       setSelectedAgendaDate(savedDate);
       setMatchDraft(emptyCoordinatorMatch(savedDate));
       setShowMatchCreator(!editingMatch);
-      setMatchMessage(editingMatch ? `Partido de ${selectedCoach.teamLabel} actualizado.` : `Partido añadido a la agenda de ${selectedCoach.teamLabel}. Puedes pasar al siguiente equipo.`);
+      setMatchMessage(editingMatch ? `Partido de ${matchCoach.teamLabel} actualizado.` : `Partido añadido a la agenda de ${matchCoach.teamLabel}. Puedes pasar al siguiente equipo.`);
       setEditingMatch(null);
     } catch (error) {
       setMatchMessage(error instanceof Error ? error.message : "No se pudo añadir el partido.");
@@ -1972,7 +1987,7 @@ function CoordinatorPanel({
     }
   };
   const editCoordinatorMatch = (match: (typeof agendaMatches)[number]) => {
-    setCoachFilter(match.coach.id);
+    setMatchCoachId(match.coach.id);
     setSelectedAgendaDate(match.date);
     setMatchDraft({
       date: match.date, startTime: match.startTime, callupTime: match.callupTime || "", callupPlace: match.callupPlace || "",
@@ -2291,7 +2306,7 @@ function CoordinatorPanel({
         </div>
         {tab === "agenda" && (
           <>
-          {!(showTeamPicker && pendingMatchCreation) && <section className="coordinator-match-command">
+          <section className="coordinator-match-command">
             <div>
               <span><ShieldCheck size={15} /> ORGANIZACIÓN DE LA AGENDA</span>
               <strong>{selectedCoach ? `Agenda de ${selectedCoach.teamLabel}` : "Añade una actividad a un equipo"}</strong>
@@ -2299,9 +2314,9 @@ function CoordinatorPanel({
             </div>
             <div className="coordinator-activity-actions">
               <button type="button" className={showMatchCreator ? "active" : ""} onClick={openMatchCreator}><Plus size={17} /> Añadir partido</button>
-              <button type="button" className={showTrainingCreator ? "active training" : "training"} onClick={() => { setAgendaView("trainings"); setShowMatchCreator(false); setPendingMatchCreation(false); setShowTeamPicker(false); setMatchMessage(""); setShowTrainingCreator(true); }}><Plus size={17} /> Añadir entrenamiento</button>
+              <button type="button" className={showTrainingCreator ? "active training" : "training"} onClick={() => { setAgendaView("trainings"); setShowMatchCreator(false); setShowTeamPicker(false); setMatchMessage(""); setShowTrainingCreator(true); }}><Plus size={17} /> Añadir entrenamiento</button>
             </div>
-          </section>}
+          </section>
           {matchMessage && <div className="coordinator-match-message" role="status">{matchMessage}</div>}
           {showMatchCreator && (
             <section className="coordinator-match-form">
@@ -2309,10 +2324,10 @@ function CoordinatorPanel({
                 <div>
                   <span>{editingMatch ? "EDITAR PARTIDO DE" : "PARTIDO PARA"}</span>
                   <div className="coordinator-match-team-heading">
-                    <h3>{selectedCoach?.teamLabel || "Selecciona equipo"}</h3>
-                    {nextCoach && <button type="button" className="next-team-button" onClick={goToNextTeam}>Siguiente equipo <ChevronRight size={17} /></button>}
+                    <h3>{matchCoach?.teamLabel || "Selecciona equipo"}</h3>
+                    {nextMatchCoach && <button type="button" className="next-team-button" onClick={goToNextTeam}>Siguiente equipo <ChevronRight size={17} /></button>}
                   </div>
-                  <small>{selectedCoach?.name || "Elige el equipo que recibirá el partido"}</small>
+                  <small>{matchCoach?.name || "Elige el equipo que recibirá el partido"}</small>
                 </div>
                 <button type="button" aria-label="Cerrar formulario" onClick={() => { setShowMatchCreator(false); setEditingMatch(null); }}><X size={18} /></button>
               </header>
@@ -2325,12 +2340,12 @@ function CoordinatorPanel({
               </div>
               <div className="coordinator-match-home-away">
                 <button type="button" className={matchDraft.home ? "active" : ""} onClick={() => setMatchDraft((current) => ({ ...current, home: true, field: "", callupTime: !current.callupTime || current.callupTime === subtractMatchMinutes(current.startTime, current.home ? 60 : 90) ? subtractMatchMinutes(current.startTime, 60) : current.callupTime }))}><Home size={17} /> En casa</button>
-                <button type="button" className={!matchDraft.home ? "active" : ""} onClick={() => { const rival = selectedCoachData?.rivals.find((item) => item.id === matchDraft.rivalId); setMatchDraft((current) => ({ ...current, home: false, field: rival?.campo || current.field, callupTime: !current.callupTime || current.callupTime === subtractMatchMinutes(current.startTime, current.home ? 60 : 90) ? subtractMatchMinutes(current.startTime, 90) : current.callupTime })); }}><Plane size={17} /> Fuera</button>
+                <button type="button" className={!matchDraft.home ? "active" : ""} onClick={() => { const rival = matchCoachData?.rivals.find((item) => item.id === matchDraft.rivalId); setMatchDraft((current) => ({ ...current, home: false, field: rival?.campo || current.field, callupTime: !current.callupTime || current.callupTime === subtractMatchMinutes(current.startTime, current.home ? 60 : 90) ? subtractMatchMinutes(current.startTime, 90) : current.callupTime })); }}><Plane size={17} /> Fuera</button>
               </div>
               <div className="coordinator-match-grid">
-                <label><span>Equipo</span><select value={coachFilter} disabled={Boolean(editingMatch)} onChange={(event) => { setCoachFilter(event.target.value); setMatchDraft((current) => ({ ...current, rivalId: "", rivalName: "", field: "" })); }}><option value="">Selecciona equipo</option>{coaches.map((coach) => <option key={coach.id} value={coach.id}>{coach.teamLabel} · {coach.name}</option>)}</select></label>
+                <label><span>Equipo</span><select value={matchCoachId} disabled={Boolean(editingMatch)} onChange={(event) => { setMatchCoachId(event.target.value); setMatchDraft((current) => ({ ...current, rivalId: "", rivalName: "", field: "" })); }}><option value="">Selecciona equipo</option>{coaches.map((coach) => <option value={coach.id} key={coach.id}>{coach.teamLabel} · {coach.name}</option>)}</select></label>
                 <label><span>Fecha</span><input type="date" value={matchDraft.date} onChange={(event) => setMatchDraft((current) => ({ ...current, date: event.target.value }))} /></label>
-                <label><span>Rival</span>{matchDraft.matchType === "amistoso" ? <input value={matchDraft.rivalName} onChange={(event) => setMatchDraft((current) => ({ ...current, rivalId: "", rivalName: event.target.value }))} placeholder="Escribe el rival" /> : <select value={matchDraft.rivalId} disabled={!selectedCoachData} onChange={(event) => updateCoordinatorRival(event.target.value)}><option value="">Selecciona rival</option>{(selectedCoachData?.rivals || []).map((rival) => <option key={rival.id} value={rival.id}>{rival.nombre}</option>)}</select>}</label>
+                <label><span>Rival</span>{matchDraft.matchType === "amistoso" ? <input value={matchDraft.rivalName} onChange={(event) => setMatchDraft((current) => ({ ...current, rivalId: "", rivalName: event.target.value }))} placeholder="Escribe el rival" /> : <select value={matchDraft.rivalId} disabled={!matchCoachData} onChange={(event) => updateCoordinatorRival(event.target.value)}><option value="">Selecciona rival</option>{(matchCoachData?.rivals || []).map((rival) => <option key={rival.id} value={rival.id}>{rival.nombre}</option>)}</select>}</label>
                 <div className="coordinator-time-field"><span>Hora del partido</span><QuickTimeInput value={matchDraft.startTime} onChange={(startTime) => setMatchDraft((current) => ({ ...current, startTime, callupTime: !current.callupTime || current.callupTime === subtractMatchMinutes(current.startTime, current.home ? 60 : 90) ? subtractMatchMinutes(startTime, current.home ? 60 : 90) : current.callupTime }))} /></div>
                 {matchDraft.home ? (
                   <label><span>Campo</span><select value={matchDraft.field} onChange={(event) => setMatchDraft((current) => ({ ...current, field: event.target.value }))}><option value="">Selecciona campo</option>{HOME_FIELDS.map((field) => <option key={field}>{field}</option>)}</select></label>
@@ -2341,7 +2356,7 @@ function CoordinatorPanel({
                 {matchDraft.home && <label><span>Vestuario</span><select value={matchDraft.homeLockerRoom || "Local 1"} onChange={(event) => { const homeLockerRoom = event.target.value; setMatchDraft((current) => ({ ...current, homeLockerRoom, awayLockerRoom: DEFAULT_AWAY_LOCKER_ROOM[homeLockerRoom] })) }}>{HOME_LOCKER_ROOMS.map((lockerRoom) => <option key={lockerRoom}>{lockerRoom}</option>)}</select></label>}
                 {matchDraft.home && <label><span>Vestuario visitante</span><select value={matchDraft.awayLockerRoom || "Visitante 1"} onChange={(event) => setMatchDraft((current) => ({ ...current, awayLockerRoom: event.target.value }))}>{AWAY_LOCKER_ROOMS.map((lockerRoom) => <option key={lockerRoom}>{lockerRoom}</option>)}</select></label>}
               </div>
-              {selectedCoachData && !selectedCoachData.rivals.length && matchDraft.matchType !== "amistoso" && <p className="coordinator-no-rivals">Este equipo todavía no tiene rivales guardados.</p>}
+              {matchCoachData && !matchCoachData.rivals.length && matchDraft.matchType !== "amistoso" && <p className="coordinator-no-rivals">Este equipo todavía no tiene rivales guardados.</p>}
               <div className="match-observations-group">
                 <label className="coordinator-match-notes"><span>Observaciones</span><textarea rows={2} value={matchDraft.notes} onChange={(event) => setMatchDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Escribe cualquier indicación para el entrenador" /></label>
                 <label className={`white-kit-toggle${matchDraft.playInWhite ? " active" : ""}`}>
@@ -2352,7 +2367,7 @@ function CoordinatorPanel({
               </div>
               <footer>
                 <button type="button" className="secondary-button" onClick={() => { setShowMatchCreator(false); setEditingMatch(null); }}>Cancelar</button>
-                <button type="button" className="primary-button" disabled={matchSaving || (matchDraft.matchType !== "amistoso" && !selectedCoachData?.rivals.length)} onClick={() => void saveCoordinatorMatch()}><Save size={17} /> {matchSaving ? "Guardando…" : editingMatch ? "Guardar cambios" : "Guardar en su agenda"}</button>
+                <button type="button" className="primary-button" disabled={matchSaving || !matchCoach || (matchDraft.matchType !== "amistoso" && !matchCoachData?.rivals.length)} onClick={() => void saveCoordinatorMatch()}><Save size={17} /> {matchSaving ? "Guardando…" : editingMatch ? "Guardar cambios" : "Guardar en su agenda"}</button>
               </footer>
             </section>
           )}

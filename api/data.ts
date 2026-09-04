@@ -1,4 +1,4 @@
-import { ApiRequest, ApiResponse, fail, getSession, getSql, jsonBody, methodNotAllowed } from './_lib/server.js';
+import { ApiRequest, ApiResponse, fail, getSession, getSessionImpersonator, getSql, jsonBody, methodNotAllowed } from './_lib/server.js';
 const AREAS = ['team','stats','journeys','rivals','boards','agenda'];
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {
@@ -27,12 +27,18 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     if (session.role !== 'entrenador' || !AREAS.includes(area)) { res.status(403).json({error:'No autorizado.'}); return }
     const sql = getSql();
     if (area === 'agenda') {
+      const impersonator = await getSessionImpersonator(req);
+      if (impersonator?.role !== 'superadmin') { res.status(403).json({error:'La preparación de ejercicios todavía no está disponible.'}); return }
       const currentRows = await sql`SELECT data FROM club_stores WHERE account_id=${session.id} AND area='agenda' LIMIT 1`;
       const current = Array.isArray(currentRows[0]?.data) ? currentRows[0].data as Array<Record<string, unknown>> : [];
-      const incoming = Array.isArray(data) ? data as Array<Record<string, unknown>> : [];
-      const protectedMatches = current.filter((event) => event.assignedByCoordinator === true);
-      const protectedIds = new Set(protectedMatches.map((event) => String(event.id)));
-      data = [...incoming.filter((event) => !protectedIds.has(String(event.id))), ...protectedMatches];
+      const update = data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : {};
+      const eventId = String(update.eventId || '');
+      const sessionData = update.session;
+      const target = current.find((event) => String(event.id) === eventId);
+      if (!eventId || !sessionData || typeof sessionData !== 'object' || !target || target.type !== 'training' || target.assignedByCoordinator !== true || (target.exceptionStatus && target.exceptionStatus !== 'scheduled')) {
+        res.status(403).json({error:'Solo puedes preparar ejercicios en un entrenamiento vigente asignado por coordinación.'}); return;
+      }
+      data = current.map((event) => String(event.id) === eventId ? { ...event, session: sessionData } : event);
     }
     await sql`INSERT INTO club_stores (account_id,area,data) VALUES (${session.id},${area},${JSON.stringify(data)}::jsonb)
       ON CONFLICT (account_id,area) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()`;
