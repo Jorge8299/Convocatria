@@ -138,6 +138,45 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       res.status(201).json({ event }); return;
     }
 
+    if (req.method === 'DELETE') {
+      if (session.role !== 'coordinador') { res.status(403).json({ error: 'Solo coordinación puede eliminar actividades.' }); return }
+      const body = jsonBody<{ accountId?: string; eventId?: string; eventType?: string; deleteScope?: string }>(req);
+      const deleteSeries = body.deleteScope === 'series';
+      if (!body.accountId || !body.eventId || !['training', 'match'].includes(body.eventType || '') || !['occurrence', 'series'].includes(body.deleteScope || 'occurrence') || (deleteSeries && body.eventType !== 'training')) {
+        res.status(400).json({ error: 'Actividad no válida.' }); return;
+      }
+      const rows = await sql`UPDATE club_stores AS store
+        SET data=COALESCE((
+          SELECT jsonb_agg(item)
+          FROM jsonb_array_elements(store.data) AS item
+          WHERE NOT (
+            item->>'assignedByCoordinator'='true'
+            AND (
+              (${deleteSeries}=FALSE AND item->>'id'=${body.eventId} AND item->>'type'=${body.eventType!})
+              OR (${deleteSeries}=TRUE AND item->>'type'='training' AND COALESCE(item->>'seriesId'=(
+                SELECT target->>'seriesId'
+                FROM jsonb_array_elements(store.data) AS target
+                WHERE target->>'id'=${body.eventId}
+                  AND target->>'type'='training'
+                  AND target->>'assignedByCoordinator'='true'
+                LIMIT 1
+              ),FALSE))
+            )
+          )
+        ),'[]'::jsonb),updated_at=NOW()
+        WHERE account_id=${body.accountId} AND area='agenda'
+          AND EXISTS (
+            SELECT 1 FROM jsonb_array_elements(store.data) AS item
+            WHERE item->>'id'=${body.eventId}
+              AND item->>'type'=${body.eventType!}
+              AND item->>'assignedByCoordinator'='true'
+              AND (${deleteSeries}=FALSE OR NULLIF(item->>'seriesId','') IS NOT NULL)
+          )
+        RETURNING account_id`;
+      if (!rows[0]) { res.status(404).json({ error: 'No se encontró la actividad creada por coordinación.' }); return }
+      res.status(200).json({ ok: true }); return;
+    }
+
     if (req.method === 'PATCH') {
       const body = jsonBody<{ action?: string; accountId?: string; eventId?: string; changes?: Record<string, unknown>; selections?: Array<{ accountId?: string; eventId?: string }>; exceptionStatus?: string; match?: MatchInput; coordinatorStatus?: string }>(req);
       if (session.role === 'coordinador' && body.action === 'batchTrainingStatus') {

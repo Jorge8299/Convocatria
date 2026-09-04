@@ -347,6 +347,33 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
     else stores.push({ account_id: accountId, area: "agenda", data: newEvents });
     localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
     return { event: newEvents[0], events: newEvents } as T;
+  } else if (url.pathname === "/api/coordinator-agenda" && method === "DELETE") {
+    if (session?.role !== "coordinador")
+      throw new Error("Solo coordinación puede eliminar actividades.");
+    const accountId = String(body.accountId || "");
+    const eventId = String(body.eventId || "");
+    const eventType = String(body.eventType || "");
+    const deleteScope = String(body.deleteScope || "occurrence");
+    const agendaStore = stores.find(
+      (store) => store.account_id === accountId && store.area === "agenda",
+    );
+    if (!agendaStore) throw new Error("No se encontró la actividad.");
+    const events = agendaStore.data as Array<Record<string, unknown>>;
+    const target = events.find(
+      (event) => event.id === eventId && event.type === eventType && event.assignedByCoordinator === true,
+    );
+    if (!target) throw new Error("No se encontró la actividad creada por coordinación.");
+    if (deleteScope === "series" && (eventType !== "training" || !target.seriesId))
+      throw new Error("No se encontró la serie de entrenamientos.");
+    agendaStore.data = events.filter(
+      (event) => !(event.assignedByCoordinator === true && (
+        deleteScope === "series"
+          ? event.type === "training" && event.seriesId === target.seriesId
+          : event.id === eventId && event.type === eventType
+      )),
+    );
+    localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
+    return { ok: true } as T;
   } else if (url.pathname === "/api/coordinator-agenda" && method === "PATCH") {
     if (session?.role === "coordinador" && body.action === "batchTrainingStatus") {
       const selections = body.selections as unknown as CoordinatorTrainingSelection[];
@@ -488,6 +515,11 @@ export const clubApi = {
     request<{ events: Array<{ id: string }> }>("/api/coordinator-agenda", {
       method: "POST",
       body: JSON.stringify({ accountId, training }),
+    }),
+  deleteCoordinatorAgendaEvent: (accountId: string, eventId: string, eventType: "training" | "match", deleteScope: "occurrence" | "series" = "occurrence") =>
+    request<{ ok: true }>("/api/coordinator-agenda", {
+      method: "DELETE",
+      body: JSON.stringify({ accountId, eventId, eventType, deleteScope }),
     }),
   updateCoordinatorTrainingOccurrence: (accountId: string, eventId: string, changes: CoordinatorTrainingExceptionInput) =>
     request<{ ok: true }>("/api/coordinator-agenda", {

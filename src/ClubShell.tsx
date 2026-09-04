@@ -1997,6 +1997,23 @@ function CoordinatorPanel({
       setMatchSaving(false);
     }
   };
+  const deleteCoordinatorMatch = async (match: (typeof agendaMatches)[number]) => {
+    if (!window.confirm(`¿Eliminar el partido de ${match.coach.teamLabel} contra ${match.rivalName}? Esta acción no se puede deshacer.`)) return;
+    setMatchSaving(true);
+    try {
+      await clubApi.deleteCoordinatorAgendaEvent(match.coach.id, match.id, "match");
+      await onRefresh();
+      if (editingMatch?.eventId === match.id) {
+        setEditingMatch(null);
+        setShowMatchCreator(false);
+      }
+      setMatchMessage(`Partido de ${match.coach.teamLabel} eliminado.`);
+    } catch (error) {
+      setMatchMessage(error instanceof Error ? error.message : "No se pudo eliminar el partido.");
+    } finally {
+      setMatchSaving(false);
+    }
+  };
   const exportMatchQuadrantPdf = async () => {
     const monthStart = coordinatorIsoDate(agendaCursor.getFullYear(), agendaCursor.getMonth(), 1);
     const monthEnd = coordinatorIsoDate(agendaCursor.getFullYear(), agendaCursor.getMonth() + 1, 0);
@@ -2537,6 +2554,7 @@ function CoordinatorPanel({
                             {match.coordinatorStatus === "cancelled"
                               ? <button type="button" disabled={matchSaving} onClick={() => void changeCoordinatorMatchStatus(match, "scheduled")}><Calendar size={14} /> Restaurar</button>
                               : <button type="button" className="danger" disabled={matchSaving} onClick={() => void changeCoordinatorMatchStatus(match, "cancelled")}><X size={14} /> Cancelar partido</button>}
+                            <button type="button" className="danger" disabled={matchSaving} onClick={() => void deleteCoordinatorMatch(match)}><Trash2 size={14} /> Eliminar partido</button>
                           </div>
                         )}
                         {stats && (

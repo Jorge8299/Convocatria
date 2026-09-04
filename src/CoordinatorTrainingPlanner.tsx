@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { CalendarCheck, ChevronLeft, ChevronRight, Clock, Download, Dumbbell, MapPin, Plus, Save, TriangleAlert, X } from "lucide-react";
+import { CalendarCheck, ChevronLeft, ChevronRight, Clock, Download, Dumbbell, MapPin, Plus, Save, Trash2, TriangleAlert, X } from "lucide-react";
 import type { ClubAccount } from "./clubTypes";
 import type { StoreRow, CoordinatorTrainingSlotInput, CoordinatorTrainingExceptionInput } from "./api";
 import { clubApi, getStored } from "./api";
@@ -120,6 +120,11 @@ export function CoordinatorTrainingPlanner({
     getStored<AgendaEvent[]>(stores, coach.id, "agenda", [])
       .filter((event): event is TrainingAgendaEvent => event.type === "training" && event.assignedByCoordinator === true)
       .map((event) => ({ ...event, coach }))), [coaches, stores]);
+  const editingSeries = editing?.seriesId
+    ? allTrainings
+        .filter((event) => event.coach.id === editing.coach.id && event.seriesId === editing.seriesId)
+        .sort((left, right) => left.date.localeCompare(right.date))
+    : [];
   const visibleTrainings = allTrainings.filter((event) =>
     (selectedCoachId === "all" || event.coach.id === selectedCoachId) &&
     event.date >= isoDate(weekDays[0]) && event.date <= isoDate(weekDays[6]) &&
@@ -178,6 +183,31 @@ export function CoordinatorTrainingPlanner({
       setMessage("Excepción guardada únicamente para ese día.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudo guardar la excepción.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteTraining = async (deleteScope: "occurrence" | "series") => {
+    if (!editing) return;
+    const deleteWholeSeries = deleteScope === "series";
+    const firstDate = editingSeries[0]?.date;
+    const lastDate = editingSeries[editingSeries.length - 1]?.date;
+    const confirmation = deleteWholeSeries
+      ? `¿Eliminar los ${editingSeries.length} entrenamientos de esta serie de ${editing.coach.teamLabel}, desde ${firstDate} hasta ${lastDate}? Esta acción no se puede deshacer.`
+      : `¿Eliminar el entrenamiento de ${editing.coach.teamLabel} de este día? Esta acción no se puede deshacer.`;
+    if (!window.confirm(confirmation)) return;
+    setBusy(true);
+    try {
+      await clubApi.deleteCoordinatorAgendaEvent(editing.coach.id, editing.id, "training", deleteScope);
+      await onRefresh();
+      setEditing(null);
+      setEditDraft(null);
+      setMessage(deleteWholeSeries
+        ? `${editingSeries.length} entrenamientos de ${editing.coach.teamLabel} eliminados de la serie.`
+        : `Entrenamiento de ${editing.coach.teamLabel} eliminado únicamente de ese día.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo eliminar el entrenamiento.");
     } finally {
       setBusy(false);
     }
@@ -405,7 +435,7 @@ export function CoordinatorTrainingPlanner({
             <div className="training-exception-fields"><label><span>Empieza</span><input type="time" value={editDraft.startTime} onChange={(event) => setEditDraft({ ...editDraft, startTime: event.target.value })} /></label><label><span>Termina</span><input type="time" value={editDraft.endTime} onChange={(event) => setEditDraft({ ...editDraft, endTime: event.target.value })} /></label><label><span>Campo</span><select value={editDraft.fieldId} onChange={(event) => setEditDraft({ ...editDraft, fieldId: event.target.value as TrainingFieldId, zoneIds: [] })}>{TRAINING_FIELDS.map((field) => <option value={field.id} key={field.id}>{field.label}</option>)}</select></label></div>
             <FieldZoneMap fieldId={editDraft.fieldId} selectedZoneIds={editDraft.zoneIds} onChange={(zoneIds) => setEditDraft({ ...editDraft, zoneIds })} />
             <label className="training-slot-notes"><span>Motivo u observaciones</span><textarea rows={2} value={editDraft.notes} onChange={(event) => setEditDraft({ ...editDraft, notes: event.target.value })} placeholder="Ej. Festivo local" /></label>
-            <footer><button type="button" className="secondary-button" onClick={() => setEditing(null)}>Cancelar</button><button type="button" className="primary-button" disabled={busy || !editDraft.zoneIds.length} onClick={() => void saveException()}><Save size={16} /> Guardar solo este día</button></footer>
+            <footer><button type="button" className="danger" disabled={busy} onClick={() => void deleteTraining("occurrence")}><Trash2 size={16} /> Eliminar solo este día</button>{editingSeries.length > 1 && <button type="button" className="danger" disabled={busy} onClick={() => void deleteTraining("series")}><Trash2 size={16} /> Eliminar toda la serie ({editingSeries.length})</button>}<button type="button" className="secondary-button" onClick={() => setEditing(null)}>Cancelar</button><button type="button" className="primary-button" disabled={busy || !editDraft.zoneIds.length} onClick={() => void saveException()}><Save size={16} /> Guardar solo este día</button></footer>
           </section>
         </div>
       )}
