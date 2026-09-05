@@ -27,6 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { CoachApp } from "./App";
+import { disablePush } from "./pushNotifications";
 import type { AgendaEvent, MatchAgendaEvent } from "./AgendaView";
 import {
   ClubAccount,
@@ -310,6 +311,7 @@ export default function ClubShell() {
   const accounts = bootstrap.accounts;
   const session = bootstrap.session;
   const logout = async () => {
+    await disablePush().catch(() => {});
     await clubApi.logout();
     localStorage.removeItem(LAST_ACCOUNT_KEY);
     await refresh();
@@ -320,6 +322,7 @@ export default function ClubShell() {
         accounts={accounts.filter((account) => account.active)}
         onLogin={async (id, pin) => {
           try {
+            await disablePush().catch(() => {});
             await clubApi.login(id || undefined, pin);
             await refresh();
           } catch (error) {

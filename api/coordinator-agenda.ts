@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { notifyMatch } from './_lib/push.js';
 import { ApiRequest, ApiResponse, fail, getSession, getSql, jsonBody, methodNotAllowed } from './_lib/server.js';
 
 const MATCH_TYPES = new Set(['liga', 'amistoso', 'torneo']);
@@ -135,6 +136,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         VALUES (${body.accountId},'agenda',jsonb_build_array(${JSON.stringify(event)}::jsonb))
         ON CONFLICT (account_id,area) DO UPDATE
         SET data=COALESCE(club_stores.data,'[]'::jsonb) || EXCLUDED.data,updated_at=NOW()`;
+      await notifyMatch(body.accountId, session.name, event);
       res.status(201).json({ event }); return;
     }
 

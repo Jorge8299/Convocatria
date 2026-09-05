@@ -9,6 +9,7 @@ import type { ClubAccount, FootballStage, TrainingYear } from './clubTypes';
 import { clubApi, getStored, StoreArea, StoreRow } from './api';
 import { randomFootballPhrase } from './motivational';
 import { AgendaEvent, AgendaView, MatchAgendaEvent, TrainingAgendaEvent } from './AgendaView';
+import { PushNotificationControl } from './PushNotificationControl';
 
 type View = 'inicio' | 'agenda' | 'equipo' | 'convocatoria' | 'pizarra' | 'estadisticas' | 'guardados' | 'jugador';
 type BoardMode = 'libre' | 'partido';
@@ -65,7 +66,8 @@ function syncLinkedPlayers(team: TeamData, accountId: string, accounts: ClubAcco
 }
 
 export function CoachApp({ account, accounts, stores, canPreviewTrainingPlanner, onDataChange, onLogout }: { account: ClubAccount; accounts: ClubAccount[]; stores: StoreRow[]; canPreviewTrainingPlanner: boolean; onDataChange: (area:StoreArea,data:unknown) => Promise<unknown>; onLogout: () => void }) {
-  const [view, setView] = useState<View>('inicio');
+  const [view, setView] = useState<View>(() => new URLSearchParams(location.search).get('agendaAccount') === account.id && new URLSearchParams(location.search).has('agendaEvent') ? 'agenda' : 'inicio');
+  const [notificationEventId] = useState(() => new URLSearchParams(location.search).get('agendaAccount') === account.id ? new URLSearchParams(location.search).get('agendaEvent') : null);
   const [viewHistory, setViewHistory] = useState<View[]>([]);
   const [boardMode, setBoardMode] = useState<BoardMode | null>(null);
   const [boardExpanded, setBoardExpanded] = useState(false);
@@ -218,9 +220,10 @@ export function CoachApp({ account, accounts, stores, canPreviewTrainingPlanner,
         <div className="page-heading-copy"><span className="eyebrow">{titles[view][0]} · {account.teamLabel}</span><h1>{titles[view][1]}</h1><p>{titles[view][2]}</p></div>
         {view === 'convocatoria' && <div className="heading-actions"><button className="icon-button" onClick={() => setShowRivals(true)} aria-label="Editar rivales"><Settings2 size={20} /></button></div>}
       </header>
+      {view === 'inicio' && !canPreviewTrainingPlanner && <PushNotificationControl accountId={account.id} />}
       <AnimatePresence mode="wait"><motion.div key={`${view}-${boardMode || ''}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: .18 }}>
         {view === 'inicio' && <HomeView phrase={phrase} onAgenda={() => goToView('agenda')} onTeam={() => goToView('equipo')} onSaved={() => goToView('guardados')} />}
-        {view === 'agenda' && <AgendaView events={agendaEvents} matches={stats} footballStage={account.footballStage} categoryLabel={`${account.footballStage ? FOOTBALL_STAGE_LABEL[account.footballStage] : 'Categoría pendiente'}${account.trainingYear ? ` · ${TRAINING_YEAR_LABEL[account.trainingYear]}` : ''}`} defaultPlayerCount={team.players.filter((player) => player.active).length} trainingPlannerEnabled={canPreviewTrainingPlanner} onSaveTraining={saveAgendaTraining} onOpenCallup={openAgendaCallup} onOpenBoard={openAgendaBoard} onOpenStats={(event) => { const completed = stats.some((match) => match.date === event.date && match.rival === event.rivalName && match.home === event.home); if (completed) { setSavedTab('estadisticas'); goToView('guardados') } else { setSelectedAgendaMatch(event); goToView('estadisticas') } }} />}
+        {view === 'agenda' && <AgendaView initialEventId={notificationEventId} events={agendaEvents} matches={stats} footballStage={account.footballStage} categoryLabel={`${account.footballStage ? FOOTBALL_STAGE_LABEL[account.footballStage] : 'Categoría pendiente'}${account.trainingYear ? ` · ${TRAINING_YEAR_LABEL[account.trainingYear]}` : ''}`} defaultPlayerCount={team.players.filter((player) => player.active).length} trainingPlannerEnabled={canPreviewTrainingPlanner} onSaveTraining={saveAgendaTraining} onOpenCallup={openAgendaCallup} onOpenBoard={openAgendaBoard} onOpenStats={(event) => { const completed = stats.some((match) => match.date === event.date && match.rival === event.rivalName && match.home === event.home); if (completed) { setSavedTab('estadisticas'); goToView('guardados') } else { setSelectedAgendaMatch(event); goToView('estadisticas') } }} />}
         {view === 'equipo' && <TeamView team={team} setTeam={setTeam} account={account} accounts={accounts} stores={stores} onPlayer={(id) => { setSelectedPlayerId(id); goToView('jugador') }} />}
         {view === 'convocatoria' && <ConvocatoriaView form={form} setForm={setForm} rivales={rivales} rivalName={rivalName} fieldName={fieldName} message={message} copySuccess={copySuccess} onCopy={copyMessage} onWhatsApp={() => open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank')} onSave={saveJourney} onMatchTime={updateTime} onHomeAway={updateHome} />}
         {view === 'pizarra' && <BoardView mode={boardMode} expanded={boardExpanded} accountId={account.id} boards={boards} team={team} matchContext={agendaBoardMatch} onChoose={setBoardMode} onBack={() => { setBoardExpanded(false); if (agendaBoardMatch) { setAgendaBoardMatch(null); setBoardMode(null); goBack() } else setBoardMode(null) }} />}

@@ -107,6 +107,10 @@ export function hashPin(pin: string) {
 }
 
 const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
+export function sessionTokenHash(req: ApiRequest) {
+  const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+  return token ? tokenHash(token) : null;
+}
 const parseCookies = (header: string | string[] | undefined) => Object.fromEntries((Array.isArray(header) ? header.join(';') : header || '').split(';').map((part) => part.trim().split('=').map(decodeURIComponent)).filter((pair) => pair.length === 2));
 
 export async function getSession(req: ApiRequest): Promise<AccountRow | null> {

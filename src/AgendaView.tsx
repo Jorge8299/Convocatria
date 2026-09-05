@@ -264,6 +264,7 @@ export function AgendaView({
   footballStage,
   defaultPlayerCount,
   trainingPlannerEnabled,
+  initialEventId,
 }: {
   events: AgendaEvent[];
   matches: MatchSummary[];
@@ -275,14 +276,16 @@ export function AgendaView({
   footballStage: FootballStage | null;
   defaultPlayerCount: number;
   trainingPlannerEnabled: boolean;
+  initialEventId?: string | null;
 }) {
   const today = new Date();
   const todayIso = isoDate(today.getFullYear(), today.getMonth(), today.getDate());
+  const initialEvent = events.find((event) => event.id === initialEventId && event.assignedByCoordinator === true);
   const [cursor, setCursor] = useState(
-    () => new Date(today.getFullYear(), today.getMonth(), 1),
+    () => initialEvent ? new Date(`${initialEvent.date}T12:00:00`) : new Date(today.getFullYear(), today.getMonth(), 1),
   );
-  const [selectedDate, setSelectedDate] = useState(todayIso);
-  const [draft, setDraft] = useState<AgendaEvent | null>(null);
+  const [selectedDate, setSelectedDate] = useState(initialEvent?.date || todayIso);
+  const [draft, setDraft] = useState<AgendaEvent | null>(() => initialEvent?.type === 'match' ? { ...initialEvent } : null);
   const [zonePreview, setZonePreview] = useState<TrainingAgendaEvent | null>(null);
   const [trainingView, setTrainingView] = useState<"summary" | "planner">("planner");
   const [trainingSaving, setTrainingSaving] = useState(false);
