@@ -460,7 +460,7 @@ function LoginScreen({
   onLogin: (id: string, pin: string) => Promise<string | void>;
 }) {
   const visibleAccounts = accounts.filter(
-    (account) => account.role !== "superadmin",
+    (account) => !["admin", "superadmin"].includes(account.role),
   );
   const legacySnapshot = useMemo(() => buildLegacySnapshot(), []);
   const [selectedId, setSelectedId] = useState(() => {
@@ -584,7 +584,7 @@ function LoginScreen({
           <KeyRound size={18} /> Entrar
         </button>
         <small>Acceso privado para entrenadores y coordinación.</small>
-        <small>Administrador: selecciona tu nombre e introduce tu PIN.</small>
+        <small>Administrador: deja el usuario sin seleccionar e introduce tu PIN.</small>
         {!IS_LOCAL_DEMO &&
           visibleAccounts.length === 0 &&
           legacySnapshot.accounts.length > 1 &&
