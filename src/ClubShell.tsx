@@ -1038,6 +1038,15 @@ function AdminPanel({
             <button type="button" disabled={clearingAgendas} onClick={() => void clearAllAgendas()}><Trash2 size={17} /> {clearingAgendas ? "Borrando…" : "Borrar todas las agendas"}</button>
           </section>
         )}
+        {platformMode && (
+          <section className="superadmin-audit">
+            <div className="superadmin-audit-heading">
+              <div><span><ShieldCheck size={17} /> OPERATIVA DEL CLUB</span><h2>Acceder a las funciones del club</h2></div>
+              <small>Entra como administrador, coordinador o entrenador para gestionarlas.</small>
+            </div>
+          </section>
+        )}
+        {!platformMode && <>
         <section className="form-card admin-create-section">
           <div className="form-card-header">
             <div>
@@ -1469,6 +1478,7 @@ function AdminPanel({
             </div>
           )}
         </section>
+        </>}
         {!IS_LOCAL_DEMO &&
           accounts.filter((item) => !["admin", "superadmin"].includes(item.role)).length === 0 &&
           legacySnapshot.accounts.length > 1 && (
