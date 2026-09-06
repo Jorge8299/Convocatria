@@ -6,9 +6,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const session = await getSession(req);
     const impersonator = session ? await getSessionImpersonator(req) : null;
     const sql = getSql();
-    const accountRows = await accessibleAccounts(session, sql);
+    const requestedSlug=String(req.query?.club || 'ud-oliva');
+    const requestedClub=(await sql`SELECT * FROM clubs WHERE slug=${requestedSlug} AND activo=TRUE LIMIT 1`)[0];
+    if(!session && !requestedClub){res.status(404).json({error:'Club no encontrado.'});return}
+    const accountRows = session ? await accessibleAccounts(session, sql) : await sql`SELECT * FROM club_accounts WHERE active=TRUE AND club_id=${requestedClub.id} ORDER BY created_at`;
     const accounts = accountRows.map((row) => publicAccount(mapAccount(row)));
-    if (!session) { res.status(200).json({ accounts, session: null, impersonator: null }); return }
+    if (!session) { res.status(200).json({ accounts,clubs:[requestedClub], session: null, impersonator: null }); return }
     const auditLogs = session.role === 'superadmin'
       ? await sql`SELECT id,account_id,account_name,account_role,logged_at FROM club_login_audit ORDER BY logged_at DESC LIMIT 100`
       : [];

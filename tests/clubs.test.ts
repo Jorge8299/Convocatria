@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 import { ensureClubSchema } from '../api/_lib/clubs.ts';
-import { validClubEdit } from '../src/clubs.ts';
+import { slugifyClub, validClubEdit } from '../src/clubs.ts';
 import { accessibleAccounts, accessibleStores } from '../api/_lib/club-access.ts';
 
 test('additive migration preserves accounts, credentials, teams and every store; isolation rejects foreign owners', async()=>{
@@ -49,5 +49,6 @@ test('additive migration preserves accounts, credentials, teams and every store;
 });
 test('club editing validates supported logos and one primary colour',()=>{
  assert.equal(validClubEdit({nombre:'UD Oliva',logo:'/escudo-ud-oliva.jpg',color_principal:'#0b2344'}),true);
- assert.equal(validClubEdit({nombre:'UD Oliva',logo:'javascript:alert(1)',color_principal:'#0b2344'}),false);
+  assert.equal(validClubEdit({nombre:'UD Oliva',logo:'javascript:alert(1)',color_principal:'#0b2344'}),false);
+  assert.equal(slugifyClub('  C.F. Gandía  '),'c-f-gandia');
 });

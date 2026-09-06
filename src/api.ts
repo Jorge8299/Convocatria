@@ -1,5 +1,5 @@
 import type { ClubAccount, FootballStage, TrainingYear } from "./clubTypes";
-import { INITIAL_CLUB, OLIVA_CLUB_ID, validClubEdit, type Club } from './clubs';
+import { INITIAL_CLUB, OLIVA_CLUB_ID, slugifyClub, validClubEdit, type Club } from './clubs';
 import { prepareBoard, validBoard, type TacticalBoard } from './tactical/model';
 
 export type StoreArea = "team" | "stats" | "journeys" | "rivals" | "boards" | "agenda";
@@ -66,6 +66,7 @@ export interface BootstrapPayload {
   stores?: StoreRow[];
   auditLogs?: LoginAuditEntry[];
 }
+export const currentClubSlug = () => location.pathname.split('/').filter(Boolean)[0] || OLIVA_CLUB_ID;
 export interface ImportedRival {
   id?: string;
   nombre: string;
@@ -234,9 +235,11 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
   }
 
   if (url.pathname === "/api/bootstrap") {
+    const requestedClub=clubs.find(c=>c.slug===(url.searchParams.get('club') || OLIVA_CLUB_ID));
+    if(!session && !requestedClub) throw new Error('Club no encontrado.');
     return {
-      accounts: accounts.filter(a=>!session || session.role==='superadmin' || a.club_id===session.club_id).map(publicLocalAccount),
-      clubs: clubs.filter(c=>session?.role==='superadmin' || c.id===session?.club_id),
+      accounts: accounts.filter(a=>session ? session.role==='superadmin' || a.club_id===session.club_id : a.club_id===requestedClub?.id).map(publicLocalAccount),
+      clubs: session ? clubs.filter(c=>session.role==='superadmin' || c.id===session.club_id) : [requestedClub!],
       session: session ? publicLocalAccount(session) : null,
       impersonator: impersonator ? publicLocalAccount(impersonator) : null,
       stores: stores.filter(s=>session && (session.role==='superadmin' || s.club_id===session.club_id)),
@@ -244,6 +247,14 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
   }
   if (url.pathname === '/api/clubs') {
     if (session?.role!=='superadmin') throw new Error('Acceso restringido.');
+    if(method==='POST') {
+      const slug=slugifyClub(String(body.nombre || ''));
+      if(!slug || clubs.some(c=>c.slug===slug) || !validClubEdit(body) || !/^\d{4}$/.test(String(body.admin_pin || ''))) throw new Error('Revisa los datos del club y el administrador.');
+      const now=new Date().toISOString(); const created={id:slug,nombre:String(body.nombre).trim(),slug,logo:String(body.logo),color_principal:String(body.color_principal),activo:true,created_at:now,updated_at:now};
+      clubs.push(created); accounts.push({id:crypto.randomUUID(),club_id:slug,name:String(body.admin_name),role:'admin',teamLabel:'Administración',footballStage:null,trainingYear:null,pin:String(body.admin_pin),active:true,createdAt:now});
+      localStorage.setItem('convo_clubs_v1',JSON.stringify(clubs)); localStorage.setItem(LOCAL_ACCOUNTS_KEY,JSON.stringify(accounts));
+      return {club:created,admin:{name:body.admin_name},access_path:`/${slug}`} as T;
+    }
     if(method==='PATCH') {
       if(!validClubEdit(body) || !clubs.some(c=>c.id===body.id)) throw new Error('Club no válido.');
       clubs=clubs.map(c=>c.id===body.id?{...c,nombre:String(body.nombre).trim(),logo:String(body.logo),color_principal:String(body.color_principal),updated_at:new Date().toISOString()}:c);
@@ -548,14 +559,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const clubApi = {
   clubs: () => request<{clubs:Club[]}>('/api/clubs'),
   updateClub: (club: Club) => request<{clubs:Club[]}>('/api/clubs',{method:'PATCH',body:JSON.stringify({id:club.id,nombre:club.nombre,logo:club.logo,color_principal:club.color_principal})}),
+  createClub: (input:{nombre:string;logo:string;color_principal:string;admin_name:string;admin_pin:string}) => request<{club:Club;admin:{id?:string;name:string};access_path:string}>('/api/clubs',{method:'POST',body:JSON.stringify(input)}),
   saveTacticalBoard: (board: TacticalBoard) => request<{ ok: boolean; board: TacticalBoard }>('/api/data', {
     method: 'PUT', body: JSON.stringify({ area: 'boards', data: { operation: 'saveTacticalBoard', board } }),
   }),
-  bootstrap: () => request<BootstrapPayload>("/api/bootstrap"),
+  bootstrap: () => request<BootstrapPayload>(`/api/bootstrap?club=${encodeURIComponent(currentClubSlug())}`),
   login: (accountId: string | undefined, pin: string) =>
     request<{ account: ClubAccount }>("/api/login", {
       method: "POST",
-      body: JSON.stringify({ accountId, pin }),
+      body: JSON.stringify({ accountId, pin, clubSlug: currentClubSlug() }),
     }),
   logout: () => request<{ ok: boolean }>("/api/logout", { method: "POST" }),
   impersonate: (accountId: string) =>

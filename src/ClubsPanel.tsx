@@ -1,23 +1,18 @@
 import { useEffect, useState } from 'react';
 import { clubApi } from './api';
-import { validClubEdit, type Club } from './clubs';
-
-export function ClubsPanel() {
-  const [clubs,setClubs] = useState<Club[]>([]);
-  const [draft,setDraft] = useState<Club|null>(null);
-  const [message,setMessage] = useState('');
-  const [busy,setBusy] = useState(false);
-  useEffect(() => { let active=true; clubApi.clubs().then(result=>{if(active)setClubs(result.clubs)}).catch(()=>{if(active)setMessage('No se pudieron cargar los clubes.')}); return ()=>{active=false} },[]);
-  const save = async () => {
-    if (!draft || !validClubEdit(draft)) { setMessage('Revisa el nombre, el escudo y el color.'); return }
-    setBusy(true); setMessage('');
-    try { const result=await clubApi.updateClub(draft); setClubs(result.clubs); setDraft(null); setMessage('Club guardado.'); }
-    catch(error) { setMessage(error instanceof Error?error.message:'No se pudo guardar.'); }
-    finally { setBusy(false); }
-  };
-  return <section className="superadmin-audit" aria-label="Clubes"><div className="superadmin-audit-heading"><h2>Clubes</h2><button type="button" disabled title="Disponible en una próxima fase">Añadir club</button></div>
-    {message && <p role="status">{message}</p>}
-    {clubs.map(club=><article key={club.id} style={{display:'flex',alignItems:'center',gap:16,padding:16,flexWrap:'wrap'}}><img src={club.logo} alt={`Escudo de ${club.nombre}`} style={{width:56,height:56,objectFit:'contain'}} /><div><strong>{club.nombre}</strong><p>{club.activo?'Activo':'Inactivo'}</p></div><span style={{background:club.color_principal,width:24,height:24,borderRadius:6,border:'1px solid #ccc'}} aria-label={`Color ${club.color_principal}`} /><span>{club.color_principal}</span><button type="button" onClick={()=>{setDraft({...club});setMessage('')}}>Editar club</button></article>)}
-    {draft && <form onSubmit={event=>{event.preventDefault();void save()}} style={{display:'grid',gap:12,padding:16}}><label>Nombre<input aria-label="Nombre del club" value={draft.nombre} maxLength={120} onChange={e=>setDraft({...draft,nombre:e.target.value})} required /></label><label>Escudo (URL)<input aria-label="Escudo del club" value={draft.logo} onChange={e=>setDraft({...draft,logo:e.target.value})} /></label><label>Subir escudo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>350000){setMessage('El escudo debe ocupar menos de 350 KB.');return}const reader=new FileReader();reader.onload=()=>setDraft(current=>current?{...current,logo:String(reader.result)}:current);reader.readAsDataURL(file)}} /></label><label>Color principal<input aria-label="Color principal" type="color" value={draft.color_principal} onChange={e=>setDraft({...draft,color_principal:e.target.value})} /></label><div><button disabled={busy} type="submit">{busy?'Guardando…':'Guardar club'}</button><button type="button" disabled={busy} onClick={()=>setDraft(null)}>Cancelar</button></div></form>}
-  </section>;
+import { slugifyClub, validClubEdit, type Club } from './clubs';
+const EMPTY={nombre:'',logo:'',color_principal:'#0b2344',admin_name:'',admin_pin:''};
+export function ClubsPanel(){
+ const [clubs,setClubs]=useState<Club[]>([]),[draft,setDraft]=useState<Club|null>(null),[creating,setCreating]=useState(false),[newClub,setNewClub]=useState(EMPTY),[created,setCreated]=useState<{name:string;path:string}|null>(null),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
+ const load=()=>clubApi.clubs().then(r=>setClubs(r.clubs)); useEffect(()=>{void load().catch(()=>setMessage('No se pudieron cargar los clubes.'))},[]);
+ const readLogo=(file?:File)=>{if(!file)return;if(file.size>350000){setMessage('El escudo debe ocupar menos de 350 KB.');return}const r=new FileReader();r.onload=()=>creating?setNewClub(c=>({...c,logo:String(r.result)})):setDraft(c=>c?{...c,logo:String(r.result)}:c);r.readAsDataURL(file)};
+ const save=async()=>{if(!draft||!validClubEdit(draft)){setMessage('Revisa el nombre, el escudo y el color.');return}setBusy(true);try{await clubApi.updateClub(draft);await load();setDraft(null);setMessage('Club guardado.')}catch(e){setMessage(e instanceof Error?e.message:'No se pudo guardar.')}finally{setBusy(false)}};
+ const create=async()=>{setBusy(true);setMessage('');try{const r=await clubApi.createClub(newClub);await load();setCreated({name:r.club.nombre,path:r.access_path});setCreating(false);setNewClub(EMPTY)}catch(e){setMessage(e instanceof Error?e.message:'No se pudo crear el club.')}finally{setBusy(false)}};
+ const url=(path:string)=>`${location.origin}${path}`;
+ return <section className="superadmin-audit clubs-panel" aria-label="Clubes"><div className="superadmin-audit-heading"><div><span>CLUBES</span><h2>Clubes de Convo</h2></div><button onClick={()=>{setCreating(true);setDraft(null);setCreated(null);setMessage('')}}>Añadir club</button></div>
+ {message&&<p role="status">{message}</p>}{created&&<div className="club-created"><strong>{created.name} creado correctamente</strong><code>{url(created.path)}</code><div><button onClick={()=>void navigator.clipboard.writeText(url(created.path))}>Copiar enlace</button><a href={created.path} target="_blank">Abrir club</a></div></div>}
+ <div className="club-list">{clubs.map(c=><article key={c.id}><img src={c.logo} alt={`Escudo de ${c.nombre}`} /><div><strong>{c.nombre}</strong><small>{c.activo?'Activo':'Inactivo'} · /{c.slug}</small></div><span className="club-color" style={{background:c.color_principal}}/><button onClick={()=>{setDraft({...c});setCreating(false);setCreated(null)}}>Editar club</button><button onClick={()=>void navigator.clipboard.writeText(url(`/${c.slug}`))}>Copiar enlace</button></article>)}</div>
+ {creating&&<form onSubmit={e=>{e.preventDefault();void create()}}><h3>Nuevo club</h3><label>Nombre<input value={newClub.nombre} onChange={e=>setNewClub({...newClub,nombre:e.target.value})} required/></label><small>Enlace: /{slugifyClub(newClub.nombre)||'nombre-del-club'}</small><label>Escudo (URL)<input value={newClub.logo} onChange={e=>setNewClub({...newClub,logo:e.target.value})} required/></label><label>Subir escudo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>readLogo(e.target.files?.[0])}/></label><label>Color principal<input type="color" value={newClub.color_principal} onChange={e=>setNewClub({...newClub,color_principal:e.target.value})}/></label><label>Nombre del administrador<input value={newClub.admin_name} onChange={e=>setNewClub({...newClub,admin_name:e.target.value})} required/></label><label>PIN inicial<input type="password" inputMode="numeric" maxLength={4} pattern="[0-9]{4}" value={newClub.admin_pin} onChange={e=>setNewClub({...newClub,admin_pin:e.target.value.replace(/\D/g,'').slice(0,4)})} required/></label><div><button disabled={busy}>Crear club</button><button type="button" onClick={()=>setCreating(false)}>Cancelar</button></div></form>}
+ {draft&&<form onSubmit={e=>{e.preventDefault();void save()}}><h3>Editar club</h3><label>Nombre<input value={draft.nombre} maxLength={120} onChange={e=>setDraft({...draft,nombre:e.target.value})} required/></label><label>Escudo (URL)<input value={draft.logo} onChange={e=>setDraft({...draft,logo:e.target.value})}/></label><label>Subir escudo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>readLogo(e.target.files?.[0])}/></label><label>Color principal<input type="color" value={draft.color_principal} onChange={e=>setDraft({...draft,color_principal:e.target.value})}/></label><div><button disabled={busy}>Guardar club</button><button type="button" onClick={()=>setDraft(null)}>Cancelar</button></div></form>}
+ </section>;
 }

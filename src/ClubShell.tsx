@@ -1,5 +1,5 @@
 import { ClubContext, useClub } from './ClubContext';
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { ClubsPanel } from './ClubsPanel';
 import {
   BarChart3,
@@ -293,6 +293,8 @@ export default function ClubShell() {
   useEffect(() => {
     void refresh();
   }, []);
+  const presentedClub=bootstrap?.clubs?.find(c=>c.id===bootstrap.session?.club_id) || bootstrap?.clubs?.[0] || null;
+  useEffect(()=>{document.title=presentedClub?`CONVO · ${presentedClub.nombre}`:'CONVO'},[presentedClub?.nombre]);
   const content = (() => {
   if (!bootstrap)
     return (
@@ -322,6 +324,7 @@ export default function ClubShell() {
   if (!session)
     return (
       <LoginScreen
+        club={bootstrap.clubs?.[0] || null}
         accounts={accounts.filter((account) => account.active)}
         onLogin={async (id, pin) => {
           try {
@@ -411,8 +414,7 @@ export default function ClubShell() {
     </>
   );
   })();
-  const club = bootstrap?.clubs?.find(c=>c.id===bootstrap.session?.club_id) || null;
-  return <ClubContext.Provider value={club}>{content}</ClubContext.Provider>;
+  return <ClubContext.Provider value={presentedClub}>{content}</ClubContext.Provider>;
 }
 
 function ImpersonationBanner({
@@ -449,9 +451,11 @@ function ImpersonationBanner({
 }
 
 function LoginScreen({
+  club,
   accounts,
   onLogin,
 }: {
+  club: import('./clubs').Club | null;
   accounts: ClubAccount[];
   onLogin: (id: string, pin: string) => Promise<string | void>;
 }) {
@@ -516,13 +520,13 @@ function LoginScreen({
     }
   };
   return (
-    <main className="login-page">
+    <main className="login-page" style={{'--club-primary':club?.color_principal || '#0b2344'} as CSSProperties}>
       <LocalDemoBanner />
       <section className="login-card">
         <div className="login-crest">
-          <img src="/escudo-ud-oliva.jpg" alt="Escudo de U.D. Oliva" />
+          <img src={club?.logo || '/escudo-ud-oliva.jpg'} alt={`Escudo de ${club?.nombre || 'club'}`} />
         </div>
-        <span className="eyebrow">U.D. OLIVA · ÁREA TÉCNICA</span>
+        <span className="eyebrow">{(club?.nombre || 'Club').toUpperCase()} · ÁREA TÉCNICA</span>
         <h1>Hola, míster</h1>
         <p>
           Selecciona tu nombre. Este dispositivo lo recordará para las próximas

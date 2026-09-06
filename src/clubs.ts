@@ -21,3 +21,6 @@ export function validClubEdit(value: unknown): boolean {
     (/^\/(?!\/)[\w./-]+$/.test(c.logo) || /^https:\/\/[^\s]+$/.test(c.logo) || /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(c.logo)) &&
     typeof c.color_principal === 'string' && /^#[0-9a-f]{6}$/i.test(c.color_principal);
 }
+export function slugifyClub(name: string) {
+  return name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60);
+}
