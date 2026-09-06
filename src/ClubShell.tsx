@@ -993,17 +993,18 @@ function AdminPanel({
         subtitle={platformMode ? "Control total de la aplicación" : club?.nombre || "Club"}
         onLogout={onLogout}
       />
+      {platformMode && <nav className="superadmin-nav" aria-label="Navegación de superadmin"><a href="#superadmin-resumen">Resumen</a><a href="#superadmin-clubes">Clubes</a><a href="#superadmin-seguridad">Seguridad y accesos</a><a href="#superadmin-mantenimiento">Mantenimiento</a></nav>}
       <main className="role-content admin-content">
-        {platformMode && <ClubsPanel />}
+        {platformMode && <div id="superadmin-clubes"><ClubsPanel /></div>}
         {platformMode && (
-          <section className="superadmin-intro">
+          <section id="superadmin-resumen" className="superadmin-intro">
             <span><ShieldCheck size={20} /> NIVEL SUPERADMIN</span>
             <h2>Control y revisión de todas las cuentas</h2>
             <p>Entra como administrador, coordinador o entrenador para comprobar exactamente lo que ve cada perfil. El acceso del administrador del club permanece separado.</p>
           </section>
         )}
         {platformMode && (
-          <section className="superadmin-audit">
+          <section id="superadmin-seguridad" className="superadmin-audit">
             <div className="superadmin-audit-heading">
               <div>
                 <span><LogIn size={17} /> AUDITORÍA DE ACCESOS</span>
@@ -1029,7 +1030,7 @@ function AdminPanel({
           </section>
         )}
         {platformMode && (
-          <section className="superadmin-danger-zone">
+          <section id="superadmin-mantenimiento" className="superadmin-danger-zone">
             <div>
               <span>VACIAR AGENDAS</span>
               <strong>Eliminar todos los partidos y entrenamientos</strong>
