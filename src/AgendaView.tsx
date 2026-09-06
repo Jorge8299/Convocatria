@@ -1,6 +1,9 @@
 import { useMemo, useRef, useState } from "react";
 import type { FootballStage } from "./clubTypes";
 import { TrainingBoard, type TrainingBoardAction, type TrainingBoardPiece } from "./TrainingBoard";
+import { TacticalWorkspace } from "./tactical/TacticalWorkspace";
+import type { ClubAccount } from "./clubTypes";
+import type { TacticalBoard } from "./tactical/model";
 import { downloadTrainingPdf } from "./trainingPdf";
 import {
   BarChart3,
@@ -265,6 +268,10 @@ export function AgendaView({
   defaultPlayerCount,
   trainingPlannerEnabled,
   initialEventId,
+  tacticalAccount,
+  tacticalTeam,
+  tacticalDocuments,
+  onTacticalSaved,
 }: {
   events: AgendaEvent[];
   matches: MatchSummary[];
@@ -277,6 +284,10 @@ export function AgendaView({
   defaultPlayerCount: number;
   trainingPlannerEnabled: boolean;
   initialEventId?: string | null;
+  tacticalAccount?: ClubAccount;
+  tacticalTeam?: { name: string; players: Array<{ id: string; name: string; number: string; role: 'jugador'|'portero'; active: boolean }> };
+  tacticalDocuments?: Record<string, TacticalBoard>;
+  onTacticalSaved?: (board: TacticalBoard) => void;
 }) {
   const today = new Date();
   const todayIso = isoDate(today.getFullYear(), today.getMonth(), today.getDate());
@@ -662,6 +673,7 @@ export function AgendaView({
               <small>{fieldZoneLabel(draft.fieldId, draft.zoneIds)} · {draft.recurrenceLabel || "Horario habitual"}</small>
             </div>
             {draft.notes && <p className="assigned-match-notes">{draft.notes}</p>}
+            {tacticalAccount && tacticalTeam && tacticalDocuments && onTacticalSaved && <div className="training-tactical-section"><div className="training-session-heading"><div><span className="eyebrow">PREPARACIÓN TÁCTICA</span><h3>Pizarra de esta sesión</h3></div></div><TacticalWorkspace account={tacticalAccount} team={tacticalTeam} documents={tacticalDocuments} context={{ kind: 'training', id: draft.id, label: `${draft.date} · ${draft.startTime}` }} onSaved={onTacticalSaved} onLegacy={() => undefined} /></div>}
             {draft.fieldId && draft.zoneIds?.length ? <button type="button" className="agenda-zone-button large" onClick={() => setZonePreview(draft)}><MapPin size={17} /> Ver zona del campo</button> : null}
             {trainingMessage && <div className="training-save-message" role="status">{trainingMessage}</div>}
             <div className="training-session-heading">
