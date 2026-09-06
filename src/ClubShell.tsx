@@ -643,6 +643,7 @@ function AdminPanel({
   onLogout: () => void;
 }) {
   const club = useClub();
+  const [superadminSection, setSuperadminSection] = useState<'overview'|'clubs'|'access'|'security'|'status'|'tools'>('overview');
   const [draft, setDraft] = useState({
     name: "",
     role: "entrenador" as ClubRole,
@@ -993,17 +994,24 @@ function AdminPanel({
         subtitle={platformMode ? "Control total de la aplicación" : club?.nombre || "Club"}
         onLogout={onLogout}
       />
-      {platformMode && <nav className="superadmin-nav" aria-label="Navegación de superadmin"><a href="#superadmin-resumen">Resumen</a><a href="#superadmin-clubes">Clubes</a><a href="#superadmin-seguridad">Seguridad y accesos</a><a href="#superadmin-mantenimiento">Mantenimiento</a></nav>}
+      {platformMode && <nav className="superadmin-nav" aria-label="Navegación de superadmin">
+        <button className={superadminSection==='overview'?'active':''} onClick={()=>setSuperadminSection('overview')}>Resumen</button>
+        <button className={superadminSection==='clubs'?'active':''} onClick={()=>setSuperadminSection('clubs')}>Clubes</button>
+        <button className={superadminSection==='access'?'active':''} onClick={()=>setSuperadminSection('access')}>Administradores y accesos</button>
+        <button className={superadminSection==='security'?'active':''} onClick={()=>setSuperadminSection('security')}>Seguridad</button>
+        <button className={superadminSection==='status'?'active':''} onClick={()=>setSuperadminSection('status')}>Estado de la plataforma</button>
+        <button className={superadminSection==='tools'?'active':''} onClick={()=>setSuperadminSection('tools')}>Herramientas técnicas</button>
+      </nav>}
       <main className="role-content admin-content">
-        {platformMode && <div id="superadmin-clubes"><ClubsPanel /></div>}
-        {platformMode && (
+        {platformMode && superadminSection==='clubs' && <ClubsPanel />}
+        {platformMode && superadminSection==='overview' && (
           <section id="superadmin-resumen" className="superadmin-intro">
             <span><ShieldCheck size={20} /> NIVEL SUPERADMIN</span>
             <h2>Control y revisión de todas las cuentas</h2>
             <p>Entra como administrador, coordinador o entrenador para comprobar exactamente lo que ve cada perfil. El acceso del administrador del club permanece separado.</p>
           </section>
         )}
-        {platformMode && (
+        {platformMode && superadminSection==='security' && (
           <section id="superadmin-seguridad" className="superadmin-audit">
             <div className="superadmin-audit-heading">
               <div>
@@ -1029,7 +1037,7 @@ function AdminPanel({
             </div>
           </section>
         )}
-        {platformMode && (
+        {platformMode && superadminSection==='tools' && (
           <section id="superadmin-mantenimiento" className="superadmin-danger-zone">
             <div>
               <span>VACIAR AGENDAS</span>
@@ -1039,12 +1047,18 @@ function AdminPanel({
             <button type="button" disabled={clearingAgendas} onClick={() => void clearAllAgendas()}><Trash2 size={17} /> {clearingAgendas ? "Borrando…" : "Borrar todas las agendas"}</button>
           </section>
         )}
-        {platformMode && (
+        {platformMode && superadminSection==='access' && (
           <section className="superadmin-audit">
             <div className="superadmin-audit-heading">
               <div><span><ShieldCheck size={17} /> OPERATIVA DEL CLUB</span><h2>Acceder a las funciones del club</h2></div>
               <small>Entra como administrador, coordinador o entrenador para gestionarlas.</small>
             </div>
+          </section>
+        )}
+        {platformMode && superadminSection==='status' && (
+          <section className="superadmin-audit">
+            <div className="superadmin-audit-heading"><div><span>ESTADO DE LA PLATAFORMA</span><h2>Supervisión técnica</h2></div><small>Preparado para una próxima fase</small></div>
+            <div className="superadmin-coming-soon"><button disabled>Salud del sistema</button><button disabled>Registro de errores</button><button disabled>Notificaciones del sistema</button></div>
           </section>
         )}
         {!platformMode && <>
@@ -1514,14 +1528,14 @@ function AdminPanel({
             <Check size={16} /> {message}
           </div>
         )}
-        <section className="admin-accounts-section">
+        {(!platformMode || superadminSection==='access') && <section className="admin-accounts-section">
           <div className="section-heading">
-            <span className="eyebrow">GESTIÓN DEL CLUB</span>
+            <span className="eyebrow">{platformMode ? 'ADMINISTRADORES Y ACCESOS' : 'GESTIÓN DEL CLUB'}</span>
             <h2>
               {managedAccounts.length}{" "}
               equipos y accesos
             </h2>
-            <p>Edita el entrenador, la categoría y el nombre del equipo, o elimínalo por completo.</p>
+            <p>{platformMode ? 'Revisa las cuentas y entra como cada perfil para comprobar su experiencia.' : 'Edita el entrenador, la categoría y el nombre del equipo, o elimínalo por completo.'}</p>
           </div>
           <div className="account-list">
             {managedAccounts.map((item) => (
@@ -1695,7 +1709,7 @@ function AdminPanel({
               </div>
             )}
           </div>
-        </section>
+        </section>}
       </main>
     </div>
   );
