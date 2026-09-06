@@ -585,7 +585,6 @@ function LoginScreen({
         </button>
         <small>Acceso privado para entrenadores y coordinación.</small>
         <small>Administrador: selecciona tu nombre e introduce tu PIN.</small>
-        {location.pathname === '/' && <small>Superadmin: deja el usuario sin seleccionar.</small>}
         {!IS_LOCAL_DEMO &&
           visibleAccounts.length === 0 &&
           legacySnapshot.accounts.length > 1 &&
