@@ -1,6 +1,7 @@
 import { ClubContext, useClub } from './ClubContext';
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { ClubsPanel } from './ClubsPanel';
+import { EconomyPanel } from './EconomyPanel';
 import {
   BarChart3,
   Calendar,
@@ -647,7 +648,7 @@ function AdminPanel({
   onLogout: () => void;
 }) {
   const club = useClub();
-  const [superadminSection, setSuperadminSection] = useState<'overview'|'clubs'|'access'|'security'|'status'|'tools'>('overview');
+  const [superadminSection, setSuperadminSection] = useState<'overview'|'clubs'|'access'|'security'|'status'|'tools'|'economy'>('overview');
   const [draft, setDraft] = useState({
     name: "",
     role: "entrenador" as ClubRole,
@@ -999,6 +1000,7 @@ function AdminPanel({
         onLogout={onLogout}
       />
       {platformMode && <nav className="superadmin-nav" aria-label="Navegación de superadmin">
+        <button className={superadminSection==='economy'?'active':''} onClick={()=>setSuperadminSection('economy')}>Gestión económica</button>
         <button className={superadminSection==='overview'?'active':''} onClick={()=>setSuperadminSection('overview')}>Resumen</button>
         <button className={superadminSection==='clubs'?'active':''} onClick={()=>setSuperadminSection('clubs')}>Clubes</button>
         <button className={superadminSection==='access'?'active':''} onClick={()=>setSuperadminSection('access')}>Administradores y accesos</button>
@@ -1007,6 +1009,8 @@ function AdminPanel({
         <button className={superadminSection==='tools'?'active':''} onClick={()=>setSuperadminSection('tools')}>Herramientas técnicas</button>
       </nav>}
       <main className="role-content admin-content">
+        {platformMode && superadminSection==='economy' && <EconomyPanel global />}
+        {!platformMode && <details><summary>Gestión económica</summary><EconomyPanel global={false}/></details>}
         {platformMode && superadminSection==='clubs' && <ClubsPanel />}
         {platformMode && superadminSection==='overview' && (
           <section id="superadmin-resumen" className="superadmin-intro">

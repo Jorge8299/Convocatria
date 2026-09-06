@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import { economy } from './_lib/economy.js';
 import { getSession, getSql, hashPin, jsonBody, fail, type ApiRequest, type ApiResponse } from './_lib/server.js';
 import { slugifyClub, validClubEdit } from '../src/clubs.js';
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {
     const session = await getSession(req);
+    if(req.query?.section==='economy'){await economy(req,res,session);return}
     if (session?.role !== 'superadmin') { res.status(403).json({error:'Solo el superadmin puede gestionar clubes.'}); return }
     const sql = getSql();
     if (req.method === 'POST') {
