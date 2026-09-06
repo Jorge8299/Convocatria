@@ -236,13 +236,15 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
 
   if (url.pathname === "/api/bootstrap") {
     const requestedClub=clubs.find(c=>c.slug===(url.searchParams.get('club') || OLIVA_CLUB_ID));
-    if(!session && !requestedClub) throw new Error('Club no encontrado.');
+    if(!requestedClub) throw new Error('Club no encontrado.');
+    const clubSession=url.searchParams.get('clubAccess')==='1'
+      ? (session?.club_id===requestedClub.id ? session : null) : session;
     return {
-      accounts: accounts.filter(a=>session ? session.role==='superadmin' || a.club_id===session.club_id : a.club_id===requestedClub?.id).map(publicLocalAccount),
-      clubs: session ? clubs.filter(c=>session.role==='superadmin' || c.id===session.club_id) : [requestedClub!],
-      session: session ? publicLocalAccount(session) : null,
-      impersonator: impersonator ? publicLocalAccount(impersonator) : null,
-      stores: stores.filter(s=>session && (session.role==='superadmin' || s.club_id===session.club_id)),
+      accounts: accounts.filter(a=>clubSession ? clubSession.role==='superadmin' || a.club_id===clubSession.club_id : a.active && a.club_id===requestedClub.id).map(publicLocalAccount),
+      clubs: clubSession ? clubs.filter(c=>clubSession.role==='superadmin' || c.id===clubSession.club_id) : [requestedClub],
+      session: clubSession ? publicLocalAccount(clubSession) : null,
+      impersonator: clubSession && impersonator ? publicLocalAccount(impersonator) : null,
+      stores: stores.filter(s=>clubSession && (clubSession.role==='superadmin' || s.club_id===clubSession.club_id)),
     } as T;
   }
   if (url.pathname === '/api/clubs') {
@@ -263,10 +265,12 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
     return {clubs} as T;
   }
   if (url.pathname === "/api/login" && method === "POST") {
+    const loginClub=clubs.find(c=>c.activo && c.slug===(body.clubSlug || OLIVA_CLUB_ID));
+    if(!loginClub) throw new Error('Club no encontrado.');
     const account = body.accountId
-      ? accounts.find((item) => item.id === body.accountId)
+      ? accounts.find((item) => item.active && item.id === body.accountId && item.club_id===loginClub.id)
       : accounts.find(
-          (item) => ["admin", "superadmin"].includes(item.role) && item.pin === body.pin,
+          (item) => item.active && (item.role==='superadmin' || (item.role==='admin' && item.club_id===loginClub.id)) && item.pin === body.pin,
         );
     if (!account || account.pin !== body.pin)
       throw new Error("El PIN no es correcto.");
@@ -563,7 +567,7 @@ export const clubApi = {
   saveTacticalBoard: (board: TacticalBoard) => request<{ ok: boolean; board: TacticalBoard }>('/api/data', {
     method: 'PUT', body: JSON.stringify({ area: 'boards', data: { operation: 'saveTacticalBoard', board } }),
   }),
-  bootstrap: () => request<BootstrapPayload>(`/api/bootstrap?club=${encodeURIComponent(currentClubSlug())}`),
+  bootstrap: () => request<BootstrapPayload>(`/api/bootstrap?club=${encodeURIComponent(currentClubSlug())}&clubAccess=${location.pathname.split('/').filter(Boolean).length ? '1' : '0'}`),
   login: (accountId: string | undefined, pin: string) =>
     request<{ account: ClubAccount }>("/api/login", {
       method: "POST",

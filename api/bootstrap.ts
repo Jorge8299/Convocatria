@@ -3,12 +3,17 @@ import { ApiRequest, ApiResponse, fail, getSession, getSessionImpersonator, getS
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {
-    const session = await getSession(req);
-    const impersonator = session ? await getSessionImpersonator(req) : null;
+    const savedSession = await getSession(req);
     const sql = getSql();
     const requestedSlug=String(req.query?.club || 'ud-oliva');
     const requestedClub=(await sql`SELECT * FROM clubs WHERE slug=${requestedSlug} AND activo=TRUE LIMIT 1`)[0];
-    if(!session && !requestedClub){res.status(404).json({error:'Club no encontrado.'});return}
+    if(!requestedClub){res.status(404).json({error:'Club no encontrado.'});return}
+    // A club link must not reuse a global session or an account from another club.
+    // Keep the global session available at the platform's root URL.
+    const session = req.query?.clubAccess === '1'
+      ? (savedSession?.club_id === requestedClub.id ? savedSession : null)
+      : savedSession;
+    const impersonator = session ? await getSessionImpersonator(req) : null;
     const accountRows = session ? await accessibleAccounts(session, sql) : await sql`SELECT * FROM club_accounts WHERE active=TRUE AND club_id=${requestedClub.id} ORDER BY created_at`;
     const accounts = accountRows.map((row) => publicAccount(mapAccount(row)));
     if (!session) { res.status(200).json({ accounts,clubs:[requestedClub], session: null, impersonator: null }); return }
