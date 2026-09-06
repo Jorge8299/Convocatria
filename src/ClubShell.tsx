@@ -375,6 +375,7 @@ export default function ClubShell() {
       <>
         {impersonationBanner}
         <AdminPanel
+          canPreviewEconomy={bootstrap.impersonator?.role === "superadmin"}
           account={session}
           accounts={accounts}
           stores={bootstrap.stores || []}
@@ -629,6 +630,7 @@ function LoginScreen({
 function AdminPanel({
   account,
   platformMode = false,
+  canPreviewEconomy = false,
   accounts,
   stores,
   auditLogs = [],
@@ -639,6 +641,7 @@ function AdminPanel({
 }: {
   account: ClubAccount;
   platformMode?: boolean;
+  canPreviewEconomy?: boolean;
   accounts: ClubAccount[];
   stores: StoreRow[];
   auditLogs?: LoginAuditEntry[];
@@ -1010,7 +1013,7 @@ function AdminPanel({
       </nav>}
       <main className="role-content admin-content">
         {platformMode && superadminSection==='economy' && <EconomyPanel global />}
-        {!platformMode && <details><summary>Gestión económica</summary><EconomyPanel global={false}/></details>}
+        {!platformMode && canPreviewEconomy && <details><summary>Gestión económica</summary><EconomyPanel global={false}/></details>}
         {platformMode && superadminSection==='clubs' && <ClubsPanel />}
         {platformMode && superadminSection==='overview' && (
           <section id="superadmin-resumen" className="superadmin-intro">

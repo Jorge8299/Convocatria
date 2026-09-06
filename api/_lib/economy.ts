@@ -1,9 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { getSql, jsonBody, type AccountRow, type ApiRequest, type ApiResponse } from './server.js';
+import { getSql, getSessionImpersonator, jsonBody, type AccountRow, type ApiRequest, type ApiResponse } from './server.js';
 
 export async function economy(req: ApiRequest, res: ApiResponse, session: AccountRow | null) {
   res.setHeader('Cache-Control','private, no-store');
   if (!session || !['admin','superadmin'].includes(session.role)) {res.status(403).json({error:'Acceso restringido.'});return}
+  // Development access follows the existing server-authenticated impersonation session.
+  if (session.role === 'admin' && (await getSessionImpersonator(req))?.role !== 'superadmin') {
+    res.status(403).json({error:'Acceso restringido.'});
+    return;
+  }
   const sql=getSql();
   await sql`CREATE TABLE IF NOT EXISTS economy_settings (scope TEXT PRIMARY KEY, rate INTEGER NOT NULL CHECK(rate BETWEEN 0 AND 10000), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`;
   await sql`CREATE TABLE IF NOT EXISTS economy_campaigns (id TEXT PRIMARY KEY, club_id TEXT NOT NULL REFERENCES clubs(id), name TEXT NOT NULL, total_cents INTEGER NOT NULL CHECK(total_cents>0), installments JSONB NOT NULL, fee_bps INTEGER NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`;
