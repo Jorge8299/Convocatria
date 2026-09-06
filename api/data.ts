@@ -1,5 +1,7 @@
 import { ApiRequest, ApiResponse, fail, getSession, getSessionImpersonator, getSql, jsonBody, methodNotAllowed } from './_lib/server.js';
 const AREAS = ['team','stats','journeys','rivals','boards','agenda'];
+import { validBoard } from '../src/tactical/model.js';
+import { saveLegacyBoards, saveTacticalBoard } from './_lib/tactical-store.js';
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {
     const session = await getSession(req);
@@ -26,6 +28,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     let data = requestedData;
     if (session.role !== 'entrenador' || !AREAS.includes(area)) { res.status(403).json({error:'No autorizado.'}); return }
     const sql = getSql();
+    if (area === 'boards' && (data as { operation?: string })?.operation === 'saveTacticalBoard') {
+      const board = (data as { board?: unknown }).board;
+      if (!validBoard(board) || board.ownerAccountId !== session.id) { res.status(400).json({error:'La pizarra no es válida para esta cuenta.'}); return }
+      const saved = await saveTacticalBoard(session.id, session.name, board, sql);
+      if (!saved) { res.status(409).json({error:'Esta pizarra ha cambiado en otro dispositivo. Conservamos tu borrador: vuelve a la biblioteca y abre la versión actual antes de guardar.'}); return }
+      res.status(200).json({ok:true,board:saved}); return;
+    }
     if (area === 'agenda') {
       const impersonator = await getSessionImpersonator(req);
       if (impersonator?.role !== 'superadmin') { res.status(403).json({error:'La preparación de ejercicios todavía no está disponible.'}); return }
@@ -39,6 +48,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         res.status(403).json({error:'Solo puedes preparar ejercicios en un entrenamiento vigente asignado por coordinación.'}); return;
       }
       data = current.map((event) => String(event.id) === eventId ? { ...event, session: sessionData } : event);
+    }
+    if (area === 'boards') {
+      // Old iframe saves must never overwrite documents belonging to the new editor.
+      await saveLegacyBoards(session.id, data, sql);
+      res.status(200).json({ok:true}); return;
     }
     await sql`INSERT INTO club_stores (account_id,area,data) VALUES (${session.id},${area},${JSON.stringify(data)}::jsonb)
       ON CONFLICT (account_id,area) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()`;

@@ -1,4 +1,5 @@
 import type { ClubAccount, FootballStage, TrainingYear } from "./clubTypes";
+import { prepareBoard, validBoard, type TacticalBoard } from './tactical/model';
 
 export type StoreArea = "team" | "stats" | "journeys" | "rivals" | "boards" | "agenda";
 export interface CoordinatorMatchInput {
@@ -315,6 +316,24 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
   } else if (url.pathname === "/api/data" && method === "PUT") {
     if (!session) throw new Error("Inicia sesión de nuevo.");
     const area = body.area as StoreArea;
+    if (area === 'boards') {
+      if (session.role !== 'entrenador') throw new Error('No autorizado.');
+      const current = stores.find(store => store.account_id === session.id && store.area === 'boards')?.data as Record<string, unknown> || {};
+      const tacticalById = current.tacticalById as Record<string, TacticalBoard> || {};
+      const boardData = body.data && typeof body.data === 'object' && !Array.isArray(body.data) ? body.data as Record<string, unknown> : {};
+      if (boardData.operation === 'saveTacticalBoard') {
+        const input = boardData.board;
+        if (!validBoard(input) || input.ownerAccountId !== session.id) throw new Error('Pizarra no válida.');
+        if ((tacticalById[input.id]?.revision || 0) !== input.revision) throw new Error('Esta pizarra ha cambiado en otro dispositivo. Vuelve a abrir la versión actual.');
+        const board = { ...prepareBoard(input), author: session.name, revision: input.revision + 1 };
+        const next = { ...current, tacticalById: { ...tacticalById, [board.id]: board } };
+        stores = stores.filter(store => !(store.account_id === session.id && store.area === 'boards'));
+        stores.push({ account_id: session.id, area: 'boards', data: next });
+        localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
+        return { ok: true, board } as T;
+      }
+      body.data = { ...boardData, tacticalById };
+    }
     if (area === "agenda") {
       if (impersonator?.role !== "superadmin")
         throw new Error("La preparación de ejercicios todavía no está disponible.");
@@ -505,6 +524,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const clubApi = {
+  saveTacticalBoard: (board: TacticalBoard) => request<{ ok: boolean; board: TacticalBoard }>('/api/data', {
+    method: 'PUT', body: JSON.stringify({ area: 'boards', data: { operation: 'saveTacticalBoard', board } }),
+  }),
   bootstrap: () => request<BootstrapPayload>("/api/bootstrap"),
   login: (accountId: string | undefined, pin: string) =>
     request<{ account: ClubAccount }>("/api/login", {

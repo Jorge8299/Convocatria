@@ -10,6 +10,8 @@ import { clubApi, getStored, StoreArea, StoreRow } from './api';
 import { randomFootballPhrase } from './motivational';
 import { AgendaEvent, AgendaView, MatchAgendaEvent, TrainingAgendaEvent } from './AgendaView';
 import { PushNotificationControl } from './PushNotificationControl';
+import { TacticalWorkspace } from './tactical/TacticalWorkspace';
+import type { TacticalBoard } from './tactical/model';
 
 type View = 'inicio' | 'agenda' | 'equipo' | 'convocatoria' | 'pizarra' | 'estadisticas' | 'guardados' | 'jugador';
 type BoardMode = 'libre' | 'partido';
@@ -29,7 +31,7 @@ interface Player { id: string; name: string; number: string; role: 'jugador' | '
 interface PlayerStat { playerId: string; goals: number; assists: number; rating: number; notes: string }
 interface MatchStat { id: string; date: string; rival: string; home: boolean; ourScore: number; rivalScore: number; notes: string; players: PlayerStat[]; updatedAt?: string }
 interface TeamData { name: string; season: string; players: Player[] }
-interface BoardState { lineups?: BoardLineup[]; [key:string]: unknown }
+interface BoardState { tacticalById?: Record<string, TacticalBoard>; lineups?: BoardLineup[]; [key:string]: unknown }
 
 const CAMPOS_CASA = ['El Morer', 'Campo C', 'Polideportivo'];
 const LUGARES_CITACION = ['El Morer', 'Parking del LIDL'];
@@ -52,6 +54,7 @@ const formatDate = (value: string) => value
 const navItems: Array<{ id: View; label: string; icon: React.ElementType }> = [
   { id: 'agenda', label: 'Agenda', icon: Calendar },
   { id: 'equipo', label: 'Equipo', icon: Users },
+  { id: 'pizarra', label: 'Pizarra', icon: PencilRuler },
   { id: 'guardados', label: 'Guardados', icon: Archive },
 ];
 
@@ -69,6 +72,8 @@ export function CoachApp({ account, accounts, stores, canPreviewTrainingPlanner,
   const [view, setView] = useState<View>(() => new URLSearchParams(location.search).get('agendaAccount') === account.id && new URLSearchParams(location.search).has('agendaEvent') ? 'agenda' : 'inicio');
   const [notificationEventId] = useState(() => new URLSearchParams(location.search).get('agendaAccount') === account.id ? new URLSearchParams(location.search).get('agendaEvent') : null);
   const [viewHistory, setViewHistory] = useState<View[]>([]);
+  const [legacyBoard, setLegacyBoard] = useState(false);
+  const [tacticalId, setTacticalId] = useState<string | null>(null);
   const [boardMode, setBoardMode] = useState<BoardMode | null>(null);
   const [boardExpanded, setBoardExpanded] = useState(false);
   const [savedTab, setSavedTab] = useState<SavedTab>('equipo');
@@ -91,11 +96,11 @@ export function CoachApp({ account, accounts, stores, canPreviewTrainingPlanner,
   useEffect(() => queueSave('journeys',journeys), [journeys]);
   useEffect(() => queueSave('team',team), [team]);
   useEffect(() => queueSave('stats',stats), [stats]);
-  useEffect(() => queueSave('boards',boards), [boards]);
+
   useEffect(() => {
     const listener = (event: MessageEvent) => {
       if (event.origin === location.origin && event.data?.type === 'convo-pizarra-expanded') setBoardExpanded(Boolean(event.data.expanded));
-      if (event.origin === location.origin && event.data?.type === 'convo-pizarra-data') setBoards(event.data.data as BoardState);
+      if (event.origin === location.origin && event.data?.type === 'convo-pizarra-data') { setBoards(current => ({ ...event.data.data as BoardState, tacticalById: current.tacticalById })); queueSave('boards', event.data.data); }
     };
     addEventListener('message', listener); return () => removeEventListener('message', listener);
   }, []);
@@ -131,6 +136,7 @@ export function CoachApp({ account, accounts, stores, canPreviewTrainingPlanner,
   const updateTime = (hora: string) => setForm((f) => ({ ...f, hora, citaciones: f.citaciones.map((c, i) => i ? c : { ...c, hora: citationTime(hora, f.esCasa) }) }));
   const updateHome = (esCasa: boolean) => setForm((f) => ({ ...f, esCasa, citaciones: f.citaciones.map((c, i) => i ? c : { ...c, hora: citationTime(f.hora, esCasa) }) }));
   const goToView = (nextView: View) => {
+    if (nextView === 'pizarra') { setLegacyBoard(false); setTacticalId(null); }
     if (nextView === view) return;
     setViewHistory((history) => [...history, view]);
     setView(nextView);
@@ -206,15 +212,15 @@ export function CoachApp({ account, accounts, stores, canPreviewTrainingPlanner,
     agenda: ['TEMPORADA', 'Agenda', 'Entrenamientos y partidos asignados por coordinación.'],
     equipo: ['TU EQUIPO', 'Equipo y plantilla', 'Configura una vez los jugadores que utilizarás en toda la app.'],
     convocatoria: ['ANTES DEL PARTIDO', 'Citación', 'Completa los datos del partido y comparte el mensaje con el equipo.'],
-    pizarra: ['HERRAMIENTA DE CAMPO', 'Pizarra Fútbol 8', 'Tu plantilla disponible para preparar cualquier alineación.'],
+    pizarra: ['HERRAMIENTA DE CAMPO', 'Pizarra táctica', 'Prepara el juego con tu equipo, sobre tu propio campo.'],
     estadisticas: ['DESPUÉS DEL PARTIDO', 'Registrar estadísticas', 'Resultado, goles, asistencias y valoración de cada jugador.'],
     guardados: ['TU ARCHIVO', 'Guardados', 'Plantilla, convocatorias, pizarras y estadísticas en un solo lugar.'],
     jugador: ['PERFIL DEL JUGADOR', 'Estadísticas individuales', 'Evolución y partidos registrados.'],
   };
   return <div className="app-shell">
-    <aside className="desktop-sidebar"><Brand account={account} onHome={goHome} /><nav className="side-nav">{navItems.map((n) => { const Icon = n.icon; return <button key={n.id} className={view === n.id ? 'active' : ''} onClick={() => goToView(n.id)}><Icon size={19} /><span>{n.label}</span></button> })}</nav><div className="storage-note">{!canPreviewTrainingPlanner && <PushNotificationControl accountId={account.id} />}<span>{account.teamLabel}</span><strong>{account.name}</strong><small>Sesión privada del entrenador.</small><button className="sidebar-logout" onClick={onLogout}><LogOut size={14} /> Cambiar usuario</button></div></aside>
+    <aside className="desktop-sidebar"><Brand account={account} onHome={goHome} /><nav className="side-nav">{navItems.map((n) => { const Icon = n.icon; return <button key={n.id} className={view === n.id ? 'active' : ''} onClick={() => n.id === 'pizarra' ? openBoard('libre') : goToView(n.id)}><Icon size={19} /><span>{n.label}</span></button> })}</nav><div className="storage-note">{!canPreviewTrainingPlanner && <PushNotificationControl accountId={account.id} />}<span>{account.teamLabel}</span><strong>{account.name}</strong><small>Sesión privada del entrenador.</small><button className="sidebar-logout" onClick={onLogout}><LogOut size={14} /> Cambiar usuario</button></div></aside>
     <header className="mobile-header"><Brand account={account} onHome={goHome} /><div className="mobile-account-actions">{!canPreviewTrainingPlanner && <PushNotificationControl accountId={account.id} />}<button className="mobile-logout" onClick={onLogout} aria-label="Cambiar usuario"><LogOut size={18} /></button></div></header>
-    <main className={`content content-${view}${view === 'pizarra' && boardMode ? ' content-wide' : ''}`}>
+    <main className={`content content-${view}${view === 'pizarra' ? ' content-wide' : ''}`}>
       <header className={`page-heading${view !== 'inicio' ? ' has-home-back' : ''}`}>
         {view !== 'inicio' && <button className="icon-button page-home-back" onClick={goBack} aria-label="Volver a la pantalla anterior"><ArrowLeft size={20} /></button>}
         <div className="page-heading-copy"><span className="eyebrow">{titles[view][0]} · {account.teamLabel}</span><h1>{titles[view][1]}</h1><p>{titles[view][2]}</p></div>
@@ -222,13 +228,14 @@ export function CoachApp({ account, accounts, stores, canPreviewTrainingPlanner,
       </header>
 
       <AnimatePresence mode="wait"><motion.div key={`${view}-${boardMode || ''}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: .18 }}>
-        {view === 'inicio' && <HomeView phrase={phrase} onAgenda={() => goToView('agenda')} onTeam={() => goToView('equipo')} onSaved={() => goToView('guardados')} />}
+        {view === 'inicio' && <HomeView onBoard={() => openBoard('libre')} phrase={phrase} onAgenda={() => goToView('agenda')} onTeam={() => goToView('equipo')} onSaved={() => goToView('guardados')} />}
         {view === 'agenda' && <AgendaView initialEventId={notificationEventId} events={agendaEvents} matches={stats} footballStage={account.footballStage} categoryLabel={`${account.footballStage ? FOOTBALL_STAGE_LABEL[account.footballStage] : 'Categoría pendiente'}${account.trainingYear ? ` · ${TRAINING_YEAR_LABEL[account.trainingYear]}` : ''}`} defaultPlayerCount={team.players.filter((player) => player.active).length} trainingPlannerEnabled={canPreviewTrainingPlanner} onSaveTraining={saveAgendaTraining} onOpenCallup={openAgendaCallup} onOpenBoard={openAgendaBoard} onOpenStats={(event) => { const completed = stats.some((match) => match.date === event.date && match.rival === event.rivalName && match.home === event.home); if (completed) { setSavedTab('estadisticas'); goToView('guardados') } else { setSelectedAgendaMatch(event); goToView('estadisticas') } }} />}
         {view === 'equipo' && <TeamView team={team} setTeam={setTeam} account={account} accounts={accounts} stores={stores} onPlayer={(id) => { setSelectedPlayerId(id); goToView('jugador') }} />}
         {view === 'convocatoria' && <ConvocatoriaView form={form} setForm={setForm} rivales={rivales} rivalName={rivalName} fieldName={fieldName} message={message} copySuccess={copySuccess} onCopy={copyMessage} onWhatsApp={() => open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank')} onSave={saveJourney} onMatchTime={updateTime} onHomeAway={updateHome} />}
-        {view === 'pizarra' && <BoardView mode={boardMode} expanded={boardExpanded} accountId={account.id} boards={boards} team={team} matchContext={agendaBoardMatch} onChoose={setBoardMode} onBack={() => { setBoardExpanded(false); if (agendaBoardMatch) { setAgendaBoardMatch(null); setBoardMode(null); goBack() } else setBoardMode(null) }} />}
+        {view === 'pizarra' && !legacyBoard && <TacticalWorkspace account={account} team={team} documents={boards.tacticalById || {}} initialId={tacticalId} context={agendaBoardMatch ? {kind:'match',id:agendaBoardMatch.id,label:agendaBoardMatch.rivalName + ' · ' + agendaBoardMatch.date} : undefined} onSaved={board => setBoards(current => ({ ...current, tacticalById: { ...current.tacticalById, [board.id]: board } }))} onLegacy={() => { setLegacyBoard(true); setBoardMode('libre'); }} />}
+        {view === 'pizarra' && legacyBoard && <BoardView mode={boardMode} expanded={boardExpanded} accountId={account.id} boards={boards} team={team} matchContext={agendaBoardMatch} onChoose={setBoardMode} onBack={() => { setLegacyBoard(false); setBoardExpanded(false); if (agendaBoardMatch) { setAgendaBoardMatch(null); setBoardMode(null); goBack() } else setBoardMode(null) }} />}
         {view === 'estadisticas' && <StatsView team={team} rivales={rivales} initialMatch={selectedAgendaMatch} onSave={(match) => { setStats((list) => [match, ...list]); setSelectedAgendaMatch(null); setSavedTab('estadisticas'); goToView('guardados') }} />}
-        {view === 'guardados' && <SavedView tab={savedTab} setTab={setSavedTab} team={team} rivales={rivales} journeys={journeys} stats={stats} boards={boards} onTeam={() => goToView('equipo')} onOpenBoard={() => openBoard('libre')} onLoadJourney={(j) => { setForm(cloneData(j.data)); goToView('convocatoria') }} onDeleteJourney={(id) => setJourneys((list) => list.filter((j) => j.id !== id))} onDeleteStat={(id) => setStats((list) => list.filter((m) => m.id !== id))} onUpdateStat={(match) => setStats((list) => list.map((item) => item.id === match.id ? match : item))} onOpenPlayer={(id) => { setSelectedPlayerId(id); goToView('jugador') }} />}
+        {view === 'guardados' && <SavedView tab={savedTab} setTab={setSavedTab} team={team} rivales={rivales} journeys={journeys} stats={stats} boards={boards} onTeam={() => goToView('equipo')} onOpenBoard={() => { openBoard('libre'); setLegacyBoard(true); }} onOpenTactical={(id) => { openBoard('libre'); setTacticalId(id); }} onLoadJourney={(j) => { setForm(cloneData(j.data)); goToView('convocatoria') }} onDeleteJourney={(id) => setJourneys((list) => list.filter((j) => j.id !== id))} onDeleteStat={(id) => setStats((list) => list.filter((m) => m.id !== id))} onUpdateStat={(match) => setStats((list) => list.map((item) => item.id === match.id ? match : item))} onOpenPlayer={(id) => { setSelectedPlayerId(id); goToView('jugador') }} />}
         {view === 'jugador' && selectedPlayerId && <PlayerProfile player={team.players.find((p) => p.id === selectedPlayerId)} stats={stats} onBack={goBack} />}
       </motion.div></AnimatePresence>
     </main>
@@ -238,7 +245,7 @@ export function CoachApp({ account, accounts, stores, canPreviewTrainingPlanner,
 
 function Crest({ className = '' }: { className?: string }) { return <span className={`crest ${className}`}><img src={CREST_PATH} alt="Escudo de U.D. Oliva" /></span> }
 function Brand({ account, onHome }: { account: ClubAccount; onHome: () => void }) { return <button type="button" className="brand brand-home" onClick={onHome} aria-label="Ir a la página de inicio"><Crest className="brand-crest" /><span className="brand-copy"><strong>CONVO</strong><small>{account.name} · {account.teamLabel}</small></span></button> }
-function HomeView({ phrase, onAgenda, onTeam, onSaved }: { phrase: string; onAgenda: () => void; onTeam: () => void; onSaved: () => void }) { return <div className="home-layout"><section className="hero-card quote-card"><div className="quote-copy"><span className="hero-label">FRASE DEL DÍA</span><h2>“{phrase}”</h2><p>Una idea para empezar la sesión con el equipo en mente.</p></div><Crest className="hero-crest" /></section><section><div className="section-heading"><span className="eyebrow">¿QUÉ NECESITAS HACER?</span><h2>Accesos rápidos</h2></div><div className="action-grid"><ActionCard icon={Calendar} tone="blue" title="Agenda" text="Consulta los entrenamientos y partidos asignados." onClick={onAgenda} /><ActionCard icon={Users} tone="violet" title="Equipo" text="Edita la plantilla y los jugadores B." onClick={onTeam} /><ActionCard icon={Archive} tone="green" title="Guardados" text="Consulta convocatorias, pizarras y estadísticas." onClick={onSaved} /></div></section></div> }
+function HomeView({ phrase, onAgenda, onTeam, onSaved, onBoard }: { onBoard: () => void; phrase: string; onAgenda: () => void; onTeam: () => void; onSaved: () => void }) { return <div className="home-layout"><section className="hero-card quote-card"><div className="quote-copy"><span className="hero-label">FRASE DEL DÍA</span><h2>“{phrase}”</h2><p>Una idea para empezar la sesión con el equipo en mente.</p></div><Crest className="hero-crest" /></section><section><div className="section-heading"><span className="eyebrow">¿QUÉ NECESITAS HACER?</span><h2>Accesos rápidos</h2></div><div className="action-grid"><ActionCard icon={PencilRuler} tone="green" title="Pizarra táctica" text="Coloca, mueve y guarda las ideas de tu equipo." onClick={onBoard} /><ActionCard icon={Calendar} tone="blue" title="Agenda" text="Consulta los entrenamientos y partidos asignados." onClick={onAgenda} /><ActionCard icon={Users} tone="violet" title="Equipo" text="Edita la plantilla y los jugadores B." onClick={onTeam} /><ActionCard icon={Archive} tone="green" title="Guardados" text="Consulta convocatorias, pizarras y estadísticas." onClick={onSaved} /></div></section></div> }
 function ActionCard({ icon: Icon, tone, title, text, onClick }: { icon: React.ElementType; tone: string; title: string; text: string; onClick: () => void }) { return <button className="action-card" onClick={onClick}><span className={`action-icon ${tone}`}><Icon size={22} /></span><span><strong>{title}</strong><small>{text}</small></span><ChevronRight size={19} /></button> }
 
 function TeamView({ team, setTeam, account, accounts, stores, onPlayer }: { team: TeamData; setTeam: React.Dispatch<React.SetStateAction<TeamData>>; account: ClubAccount; accounts: ClubAccount[]; stores:StoreRow[]; onPlayer: (id: string) => void }) {
@@ -350,12 +357,12 @@ function StatsLibrary({ team, rivales, stats, onDeleteStat, onUpdateStat, onOpen
   </div>;
 }
 
-function SavedView({ tab, setTab, team, rivales, journeys, stats, boards, onTeam, onOpenBoard, onLoadJourney, onDeleteJourney, onDeleteStat, onUpdateStat, onOpenPlayer }: { tab: SavedTab; setTab: React.Dispatch<React.SetStateAction<SavedTab>>; team: TeamData; rivales: Rival[]; journeys: SavedJourney[]; stats: MatchStat[]; boards:BoardState; onTeam: () => void; onOpenBoard: () => void; onLoadJourney: (j: SavedJourney) => void; onDeleteJourney: (id: string) => void; onDeleteStat: (id: string) => void; onUpdateStat: (match: MatchStat) => void; onOpenPlayer: (id: string) => void }) {
+function SavedView({ tab, setTab, team, rivales, journeys, stats, boards, onTeam, onOpenBoard, onOpenTactical, onLoadJourney, onDeleteJourney, onDeleteStat, onUpdateStat, onOpenPlayer }: { tab: SavedTab; setTab: React.Dispatch<React.SetStateAction<SavedTab>>; team: TeamData; rivales: Rival[]; journeys: SavedJourney[]; stats: MatchStat[]; boards:BoardState; onOpenTactical: (id: string) => void; onTeam: () => void; onOpenBoard: () => void; onLoadJourney: (j: SavedJourney) => void; onDeleteJourney: (id: string) => void; onDeleteStat: (id: string) => void; onUpdateStat: (match: MatchStat) => void; onOpenPlayer: (id: string) => void }) {
   const savedBoards = boards.lineups || [];
   return <div className="saved-layout"><div className="saved-tabs"><button className={tab === 'equipo' ? 'active' : ''} onClick={() => setTab('equipo')}>Equipo</button><button className={tab === 'convocatorias' ? 'active' : ''} onClick={() => setTab('convocatorias')}>Convocatorias</button><button className={tab === 'pizarras' ? 'active' : ''} onClick={() => setTab('pizarras')}>Pizarras</button><button className={tab === 'estadisticas' ? 'active' : ''} onClick={() => setTab('estadisticas')}>Estadísticas</button></div>
     {tab === 'equipo' && <div className="saved-grid"><button className="library-summary" onClick={onTeam}><Users size={24} /><span><strong>{team.name}</strong><small>{team.players.filter((p) => p.group === 'plantilla').length} jugadores · {team.players.filter((p) => p.group === 'b').length} jugadores B</small></span><ChevronRight /></button>{team.players.map((player) => <button className="library-player" key={player.id} onClick={() => onOpenPlayer(player.id)}><span className="player-avatar">{player.number || player.name.slice(0,2).toUpperCase()}</span><span><strong>{player.name}</strong><small>{player.group === 'b' ? 'Jugador B' : player.role === 'portero' ? 'Portero' : 'Plantilla'}</small></span><ChevronRight size={17} /></button>)}</div>}
     {tab === 'convocatorias' && <div className="journey-list">{journeys.map((journey) => <article key={journey.id}><div className="date-block"><strong>{journey.data.fecha ? new Date(`${journey.data.fecha}T12:00:00`).getDate() : '—'}</strong><span>{journey.data.fecha ? new Intl.DateTimeFormat('es-ES',{month:'short'}).format(new Date(`${journey.data.fecha}T12:00:00`)) : 'fecha'}</span></div><div><span className="journey-type">{journey.data.tipoPartido}</span><h2>{journey.data.rivalManual || 'Convocatoria guardada'}</h2><p>{journey.data.hora || '--:--'}</p></div><div className="journey-actions"><button onClick={() => onLoadJourney(journey)}>Ver</button><button onClick={() => open(`https://api.whatsapp.com/send?text=${encodeURIComponent(journey.message)}`,'_blank')}><Send size={16} /></button><button onClick={() => onDeleteJourney(journey.id)}><Trash2 size={16} /></button></div></article>)}{!journeys.length && <InlineEmpty text="No hay convocatorias guardadas." />}</div>}
-    {tab === 'pizarras' && <div className="journey-list">{savedBoards.map((board) => <article key={board.id}><div className="date-block"><PencilRuler size={22} /></div><div><span className="journey-type">Pizarra</span><h2>{board.name}</h2><p>{board.positions?.filter((p) => p.onField).length || 0} jugadores en campo</p></div><div className="journey-actions"><button onClick={onOpenBoard}>Ver</button><button onClick={() => { const names = board.positions?.filter((p) => p.onField).map((position) => team.players.find((player) => player.id === position.id)?.name).filter(Boolean).join(', ') || 'Sin jugadores'; open(`https://api.whatsapp.com/send?text=${encodeURIComponent(`*${board.name}*\n${names}`)}`,'_blank') }}><Send size={16} /></button></div></article>)}{!savedBoards.length && <InlineEmpty text="No hay pizarras guardadas." />}</div>}
+    {tab === 'pizarras' && <div className="journey-list">{Object.values(boards.tacticalById || {}).map(board => <article key={board.id}><div className="date-block"><PencilRuler size={22} /></div><div><span className="journey-type">Pizarra táctica · {board.fieldType}</span><h2>{board.name}</h2><p>{board.playerCount} jugadores · {board.team}</p></div><div className="journey-actions"><button onClick={() => onOpenTactical(board.id)}>Ver</button></div></article>)}{savedBoards.map((board) => <article key={board.id}><div className="date-block"><PencilRuler size={22} /></div><div><span className="journey-type">Pizarra</span><h2>{board.name}</h2><p>{board.positions?.filter((p) => p.onField).length || 0} jugadores en campo</p></div><div className="journey-actions"><button onClick={onOpenBoard}>Ver</button><button onClick={() => { const names = board.positions?.filter((p) => p.onField).map((position) => team.players.find((player) => player.id === position.id)?.name).filter(Boolean).join(', ') || 'Sin jugadores'; open(`https://api.whatsapp.com/send?text=${encodeURIComponent(`*${board.name}*\n${names}`)}`,'_blank') }}><Send size={16} /></button></div></article>)}{!savedBoards.length && !Object.keys(boards.tacticalById || {}).length && <InlineEmpty text="No hay pizarras guardadas." />}</div>}
     {tab === 'estadisticas' && <StatsLibrary team={team} rivales={rivales} stats={stats} onDeleteStat={onDeleteStat} onUpdateStat={onUpdateStat} onOpenPlayer={onOpenPlayer} />}
   </div>;
 }
