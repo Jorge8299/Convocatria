@@ -1,4 +1,6 @@
+import { ClubContext, useClub } from './ClubContext';
 import { useEffect, useMemo, useState } from "react";
+import { ClubsPanel } from './ClubsPanel';
 import {
   BarChart3,
   Calendar,
@@ -291,6 +293,7 @@ export default function ClubShell() {
   useEffect(() => {
     void refresh();
   }, []);
+  const content = (() => {
   if (!bootstrap)
     return (
       <main className="login-page">
@@ -407,6 +410,9 @@ export default function ClubShell() {
       />
     </>
   );
+  })();
+  const club = bootstrap?.clubs?.find(c=>c.id===bootstrap.session?.club_id) || null;
+  return <ClubContext.Provider value={club}>{content}</ClubContext.Provider>;
 }
 
 function ImpersonationBanner({
@@ -636,6 +642,7 @@ function AdminPanel({
   onImpersonate?: (accountId: string) => Promise<void>;
   onLogout: () => void;
 }) {
+  const club = useClub();
   const [draft, setDraft] = useState({
     name: "",
     role: "entrenador" as ClubRole,
@@ -674,7 +681,7 @@ function AdminPanel({
   const [overviewDeletingId, setOverviewDeletingId] = useState("");
   const overviewCoach = coaches.find((coach) => coach.id === overviewCoachId);
   const overviewTeam = getStored<StoredTeam>(stores, overviewCoachId, "team", {
-    name: "U.D. Oliva",
+    name: club?.nombre || "Club",
     season: "",
     players: [],
   });
@@ -983,10 +990,11 @@ function AdminPanel({
       <LocalDemoBanner />
       <RoleHeader
         title={platformMode ? "Superadministración" : "Administración"}
-        subtitle={platformMode ? "Control total de la aplicación" : "U.D. Oliva"}
+        subtitle={platformMode ? "Control total de la aplicación" : club?.nombre || "Club"}
         onLogout={onLogout}
       />
       <main className="role-content admin-content">
+        {platformMode && <ClubsPanel />}
         {platformMode && (
           <section className="superadmin-intro">
             <span><ShieldCheck size={20} /> NIVEL SUPERADMIN</span>
@@ -2788,11 +2796,12 @@ function RoleHeader({
   subtitle: string;
   onLogout: () => void;
 }) {
+  const club = useClub();
   return (
     <header className="role-header">
       <div className="role-brand">
         <div className="role-brand-crest">
-          <img src="/escudo-ud-oliva.jpg" alt="Escudo U.D. Oliva" />
+          <img src={club?.logo || '/escudo-ud-oliva.jpg'} alt={`Escudo de ${club?.nombre || 'club'}`} />
         </div>
         <div>
           <span>{subtitle}</span>

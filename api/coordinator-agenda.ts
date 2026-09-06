@@ -3,12 +3,6 @@ import { notifyMatch } from './_lib/push.js';
 import { ApiRequest, ApiResponse, fail, getSession, getSql, jsonBody, methodNotAllowed } from './_lib/server.js';
 
 const MATCH_TYPES = new Set(['liga', 'amistoso', 'torneo']);
-const HOME_FIELDS = new Set(['El Morer', 'Campo C', 'Polideportivo']);
-const TRAINING_FIELDS: Record<string, { name: string; zones: Set<string> }> = {
-  'campo-c': { name: 'Campo C', zones: new Set(['c-1', 'c-2']) },
-  'el-morer': { name: 'El Morer', zones: new Set(['m-1', 'm-2', 'm-3', 'm-4']) },
-  polideportivo: { name: 'Polideportivo', zones: new Set(['p-1', 'p-2', 'p-3', 'p-4']) },
-};
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
@@ -49,12 +43,15 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const session = await getSession(req);
     if (!session) { res.status(401).json({ error: 'Sesión caducada.' }); return }
     const sql = getSql();
+    const clubFields = await sql`SELECT id,nombre,zones FROM club_fields WHERE club_id=${session.club_id}`;
+    const TRAINING_FIELDS = Object.fromEntries(clubFields.map(f => [String(f.id), {name:String(f.nombre),zones:new Set(f.zones as string[])}]));
+    const HOME_FIELDS = new Set(clubFields.map(f => String(f.nombre)));
 
     if (req.method === 'POST') {
       if (session.role !== 'coordinador') { res.status(403).json({ error: 'Solo coordinación puede asignar actividades.' }); return }
       const body = jsonBody<{ accountId?: string; match?: MatchInput; training?: TrainingInput }>(req);
       if (!body.accountId) { res.status(400).json({ error: 'Selecciona un equipo.' }); return }
-      const targets = await sql`SELECT id FROM club_accounts WHERE id=${body.accountId} AND role='entrenador' AND active=TRUE LIMIT 1`;
+      const targets = await sql`SELECT id FROM club_accounts WHERE id=${body.accountId} AND club_id=${session.club_id} AND role='entrenador' AND active=TRUE LIMIT 1`;
       if (!targets[0]) { res.status(404).json({ error: 'El entrenador seleccionado no está disponible.' }); return }
 
       if (body.training) {
@@ -166,7 +163,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
             )
           )
         ),'[]'::jsonb),updated_at=NOW()
-        WHERE account_id=${body.accountId} AND area='agenda'
+        WHERE account_id=${body.accountId} AND club_id=${session.club_id} AND area='agenda'
           AND EXISTS (
             SELECT 1 FROM jsonb_array_elements(store.data) AS item
             WHERE item->>'id'=${body.eventId}
@@ -190,7 +187,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         for (const selection of selections) {
           const rows = await sql`UPDATE club_stores
             SET data=(SELECT jsonb_agg(CASE WHEN item->>'id'=${selection.eventId!} AND item->>'type'='training' AND item->>'assignedByCoordinator'='true' THEN item || jsonb_build_object('exceptionStatus',${body.exceptionStatus!}::text) ELSE item END) FROM jsonb_array_elements(data) AS item),updated_at=NOW()
-            WHERE account_id=${selection.accountId!} AND area='agenda'
+            WHERE account_id=${selection.accountId!} AND club_id=${session.club_id} AND area='agenda'
               AND EXISTS (SELECT 1 FROM jsonb_array_elements(data) AS item WHERE item->>'id'=${selection.eventId!} AND item->>'type'='training' AND item->>'assignedByCoordinator'='true')
             RETURNING account_id`;
           if (rows[0]) updated += 1;
@@ -221,7 +218,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         if (!Object.keys(changes).length) { res.status(400).json({ error: 'No hay cambios para guardar.' }); return }
         const rows = await sql`UPDATE club_stores
           SET data=(SELECT jsonb_agg(CASE WHEN item->>'id'=${body.eventId} AND item->>'type'='match' AND item->>'assignedByCoordinator'='true' THEN item || ${JSON.stringify(changes)}::jsonb ELSE item END) FROM jsonb_array_elements(data) AS item),updated_at=NOW()
-          WHERE account_id=${body.accountId} AND area='agenda'
+          WHERE account_id=${body.accountId} AND club_id=${session.club_id} AND area='agenda'
             AND EXISTS (SELECT 1 FROM jsonb_array_elements(data) AS item WHERE item->>'id'=${body.eventId} AND item->>'type'='match' AND item->>'assignedByCoordinator'='true')
           RETURNING account_id`;
         if (!rows[0]) { res.status(404).json({ error: 'No se encontró el partido.' }); return }
@@ -243,7 +240,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         };
         const rows = await sql`UPDATE club_stores
           SET data=(SELECT jsonb_agg(CASE WHEN item->>'id'=${body.eventId} AND item->>'type'='training' THEN item || ${JSON.stringify(updated)}::jsonb ELSE item END) FROM jsonb_array_elements(data) AS item),updated_at=NOW()
-          WHERE account_id=${body.accountId} AND area='agenda'
+          WHERE account_id=${body.accountId} AND club_id=${session.club_id} AND area='agenda'
             AND EXISTS (SELECT 1 FROM jsonb_array_elements(data) AS item WHERE item->>'id'=${body.eventId} AND item->>'type'='training')
           RETURNING account_id`;
         if (!rows[0]) { res.status(404).json({ error: 'No se encontró el entrenamiento.' }); return }
@@ -261,7 +258,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
               ELSE item END
           ) FROM jsonb_array_elements(data) AS item
         ),updated_at=NOW()
-        WHERE account_id=${session.id} AND area='agenda'
+        WHERE account_id=${session.id} AND club_id=${session.club_id} AND area='agenda'
           AND EXISTS (SELECT 1 FROM jsonb_array_elements(data) AS item WHERE item->>'id'=${eventId} AND item->>'assignedByCoordinator'='true')
         RETURNING account_id`;
       if (!rows[0]) { res.status(404).json({ error: 'No se encontró el partido asignado.' }); return }

@@ -4,6 +4,7 @@ export type TrainingYear = 'primero' | 'segundo' | 'mixto';
 
 export interface ClubAccount {
   id: string;
+  club_id?: string | null;
   name: string;
   role: ClubRole;
   teamLabel: string;

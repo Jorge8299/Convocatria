@@ -15,8 +15,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     if (!admins.some((row) => mapAccount(row).pinHash === hashPin(body.pin || ''))) { res.status(401).json({error:'PIN de administración incorrecto.'}); return }
     for (const account of body.accounts || []) {
       if (!['entrenador','coordinador','admin'].includes(account.role)) continue;
-      await sql`INSERT INTO club_accounts (id,name,role,team_label,football_stage,training_year,pin_hash,active,created_at)
-        VALUES (${account.id},${account.name},${account.role},${account.teamLabel || ''},${account.footballStage || null},${account.trainingYear || null},${account.pinHash},${account.active},${account.createdAt})
+      await sql`INSERT INTO club_accounts (id,name,role,team_label,football_stage,training_year,pin_hash,active,created_at,club_id)
+        VALUES (${account.id},${account.name},${account.role},${account.teamLabel || ''},${account.footballStage || null},${account.trainingYear || null},${account.pinHash},${account.active},${account.createdAt},'ud-oliva')
         ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name,role=EXCLUDED.role,team_label=EXCLUDED.team_label,football_stage=EXCLUDED.football_stage,training_year=EXCLUDED.training_year,pin_hash=EXCLUDED.pin_hash,active=EXCLUDED.active`;
     }
     for (const store of body.stores || []) {

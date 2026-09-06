@@ -33,7 +33,7 @@ const fieldPattern =
 const teamPattern =
   /\b(c\.?\s*f\.?\s*b?\.?|c\.?\s*d\.?|u\.?\s*d\.?|u\.?\s*e\.?|f\.?\s*c\.?|a\.?\s*d\.?|atl[eé]tic|atl[eé]tico|escola|academia|sporting|racing|club de f[uú]tbol|f[uú]tbol base)\b/i;
 
-function detectFfcvRivals(lines: string[]): ImportedRival[] {
+function detectFfcvRivals(lines: string[], ownClub: (value: string) => boolean): ImportedRival[] {
   const participants = lines
     .map((line) => line.match(/^\d+\.-\s*(.+?)\s*\(\d+\)\s*$/)?.[1])
     .filter((name): name is string => Boolean(name))
@@ -66,7 +66,7 @@ function detectFfcvRivals(lines: string[]): ImportedRival[] {
   }
 
   return participants
-    .filter((club) => !isOliva(club))
+    .filter((club) => !ownClub(club))
     .map((club) => ({ nombre: club, campo: fields.get(normalize(club)) || "" }))
     .filter((rival) => rival.campo);
 }
@@ -102,12 +102,13 @@ async function extractText(fileName: string, mimeType: string, base64: string) {
   );
 }
 
-export function detectRivals(text: string): ImportedRival[] {
+export function detectRivals(text: string, clubName = 'UD Oliva'): ImportedRival[] {
+  const ownClub = (value:string) => normalize(clubName)==='udoliva' ? isOliva(value) : normalize(value).includes(normalize(clubName));
   const lines = text
     .split(/\r?\n/)
     .map(clean)
     .filter((line) => line.length >= 3 && line.length <= 220);
-  const ffcvRivals = detectFfcvRivals(lines);
+  const ffcvRivals = detectFfcvRivals(lines, ownClub);
   if (ffcvRivals.length) return ffcvRivals;
   const fields = lines
     .map((line, index) =>
@@ -130,7 +131,7 @@ export function detectRivals(text: string): ImportedRival[] {
       if (
         teamPattern.test(withoutNoise) &&
         !fieldPattern.test(withoutNoise) &&
-        !isOliva(withoutNoise) &&
+        !ownClub(withoutNoise) &&
         !/clasificaci[oó]n|calendario|competici[oó]n/i.test(withoutNoise)
       )
         candidates.push({ index, name: withoutNoise });
@@ -186,7 +187,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           });
         return;
       }
-      const rivals = detectRivals(text);
+      const sql = getSql();
+      const target = body.accountId ? await sql`SELECT club_id FROM club_accounts WHERE id=${body.accountId} AND (${session.role === 'superadmin'} OR club_id=${session.club_id})` : [];
+      const clubId = body.accountId ? target[0]?.club_id : session.club_id || 'ud-oliva';
+      if (!clubId) { res.status(403).json({error:'Equipo no autorizado.'}); return }
+      const ownClub = await sql`SELECT nombre FROM clubs WHERE id=${clubId}`;
+      const rivals = detectRivals(text, String(ownClub[0]?.nombre || ''));
       if (!rivals.length) {
         res
           .status(422)
@@ -217,7 +223,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       }
       const sql = getSql();
       const coachRows =
-        await sql`SELECT id FROM club_accounts WHERE id=${body.accountId} AND role='entrenador' AND active=TRUE LIMIT 1`;
+        await sql`SELECT id FROM club_accounts WHERE id=${body.accountId} AND (${session.role === 'superadmin'} OR club_id=${session.club_id}) AND role='entrenador' AND active=TRUE LIMIT 1`;
       if (!coachRows.length) {
         res
           .status(404)
@@ -256,7 +262,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       }
       const sql = getSql();
       const coaches =
-        await sql`SELECT id FROM club_accounts WHERE id=${body.accountId} AND role='entrenador' LIMIT 1`;
+        await sql`SELECT id FROM club_accounts WHERE id=${body.accountId} AND (${session.role === 'superadmin'} OR club_id=${session.club_id}) AND role='entrenador' LIMIT 1`;
       if (!coaches[0]) {
         res.status(404).json({ error: "El entrenador seleccionado ya no está disponible." });
         return;
@@ -281,7 +287,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       }
       const sql = getSql();
       const coaches =
-        await sql`SELECT id FROM club_accounts WHERE id=${body.accountId} AND role='entrenador' LIMIT 1`;
+        await sql`SELECT id FROM club_accounts WHERE id=${body.accountId} AND (${session.role === 'superadmin'} OR club_id=${session.club_id}) AND role='entrenador' LIMIT 1`;
       if (!coaches[0]) {
         res.status(404).json({ error: "El entrenador seleccionado ya no está disponible." });
         return;

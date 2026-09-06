@@ -1,3 +1,4 @@
+import { useClub } from './ClubContext';
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
@@ -36,13 +37,13 @@ const CAMPOS_CASA = ['El Morer', 'Campo C', 'Polideportivo'];
 const LUGARES_CITACION = ['El Morer', 'Parking del LIDL'];
 const uid = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const cloneData = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
-const TEAM_NAME = 'U.D. OLIVA';
+const TEAM_NAME = 'Equipo';
 const CREST_PATH = '/escudo-ud-oliva.jpg';
 const DEFAULT_TEAM: TeamData = { name: TEAM_NAME, season: '2026/27', players: [] };
 const FOOTBALL_STAGE_LABEL: Record<FootballStage, string> = { querubin: 'Querubín', prebenjamin: 'Prebenjamín', benjamin: 'Benjamín', alevin: 'Alevín' };
 const TRAINING_YEAR_LABEL: Record<TrainingYear, string> = { primero: 'Primer año', segundo: 'Segundo año', mixto: 'Primer y segundo año' };
-const makeInitialForm = (): Convocatoria => ({
-  equipoPropio: 'U.D. OLIVA', tipoPartido: 'liga', rivalId: '', rivalManual: '', esCasa: true,
+const makeInitialForm = (clubName = 'Convo'): Convocatoria => ({
+  equipoPropio: clubName, tipoPartido: 'liga', rivalId: '', rivalManual: '', esCasa: true,
   fecha: '', hora: '', campoPropio: '', campoRival: '', campoManual: '',
   citaciones: [{ id: uid(), hora: '', lugar: '', lugarPersonalizado: '' }],
   partidosTorneo: [{ id: uid(), rival: '', hora: '' }], observaciones: '', playInWhite: false, addCierre: true, addCorazon: true,
@@ -67,6 +68,7 @@ function syncLinkedPlayers(team: TeamData, accountId: string, accounts: ClubAcco
 }
 
 export function CoachApp({ account, accounts, stores, canPreviewTrainingPlanner, onDataChange, onLogout }: { account: ClubAccount; accounts: ClubAccount[]; stores: StoreRow[]; canPreviewTrainingPlanner: boolean; onDataChange: (area:StoreArea,data:unknown) => Promise<unknown>; onLogout: () => void }) {
+  const club = useClub();
   const [view, setView] = useState<View>(() => new URLSearchParams(location.search).get('agendaAccount') === account.id && new URLSearchParams(location.search).has('agendaEvent') ? 'agenda' : 'inicio');
   const [notificationEventId] = useState(() => new URLSearchParams(location.search).get('agendaAccount') === account.id ? new URLSearchParams(location.search).get('agendaEvent') : null);
   const [viewHistory, setViewHistory] = useState<View[]>([]);
@@ -75,7 +77,7 @@ export function CoachApp({ account, accounts, stores, canPreviewTrainingPlanner,
   const [boardMode, setBoardMode] = useState<BoardMode | null>(null);
   const [boardExpanded, setBoardExpanded] = useState(false);
   const [savedTab, setSavedTab] = useState<SavedTab>('equipo');
-  const [form, setForm] = useState<Convocatoria>(makeInitialForm);
+  const [form, setForm] = useState<Convocatoria>(() => makeInitialForm(club?.nombre));
   const [copySuccess, setCopySuccess] = useState(false);
   const [showRivals, setShowRivals] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
@@ -84,7 +86,7 @@ export function CoachApp({ account, accounts, stores, canPreviewTrainingPlanner,
   const [phrase] = useState(randomFootballPhrase);
   const [rivales, setRivales] = useState<Rival[]>(() => getStored(stores, account.id, 'rivals', []));
   const [journeys, setJourneys] = useState<SavedJourney[]>(() => getStored(stores, account.id, 'journeys', []));
-  const [team, setTeam] = useState<TeamData>(() => syncLinkedPlayers({ ...getStored(stores, account.id, 'team', DEFAULT_TEAM), name: TEAM_NAME }, account.id, accounts, stores));
+  const [team, setTeam] = useState<TeamData>(() => syncLinkedPlayers(getStored(stores, account.id, 'team', { ...DEFAULT_TEAM, name: club?.nombre || account.teamLabel }), account.id, accounts, stores));
   const [stats, setStats] = useState<MatchStat[]>(() => getStored(stores, account.id, 'stats', []));
   const [boards, setBoards] = useState<BoardState>(() => getStored(stores, account.id, 'boards', {lineups:[]}));
   const [agendaEvents, setAgendaEvents] = useState<AgendaEvent[]>(() => getStored(stores, account.id, 'agenda', []));
@@ -147,7 +149,7 @@ export function CoachApp({ account, accounts, stores, canPreviewTrainingPlanner,
     setView('inicio');
   };
   const openAgendaCallup = (event: MatchAgendaEvent) => {
-    const initial = makeInitialForm();
+    const initial = makeInitialForm(club?.nombre);
     const isLeague = event.matchType === 'liga';
     setForm({
       ...initial,
@@ -238,7 +240,7 @@ export function CoachApp({ account, accounts, stores, canPreviewTrainingPlanner,
   </div>;
 }
 
-function Crest({ className = '' }: { className?: string }) { return <span className={`crest ${className}`}><img src={CREST_PATH} alt="Escudo de U.D. Oliva" /></span> }
+function Crest({ className = '' }: { className?: string }) { const club=useClub(); return <span className={`crest ${className}`}><img src={club?.logo || CREST_PATH} alt={`Escudo de ${club?.nombre || 'club'}`} /></span> }
 function Brand({ account, onHome }: { account: ClubAccount; onHome: () => void }) { return <button type="button" className="brand brand-home" onClick={onHome} aria-label="Ir a la página de inicio"><Crest className="brand-crest" /><span className="brand-copy"><strong>CONVO</strong><small>{account.name} · {account.teamLabel}</small></span></button> }
 function HomeView({ phrase, onAgenda, onTeam, onSaved }: { phrase: string; onAgenda: () => void; onTeam: () => void; onSaved: () => void }) { return <div className="home-layout"><section className="hero-card quote-card"><div className="quote-copy"><span className="hero-label">FRASE DEL DÍA</span><h2>“{phrase}”</h2><p>Una idea para empezar la sesión con el equipo en mente.</p></div><Crest className="hero-crest" /></section><section><div className="section-heading"><span className="eyebrow">¿QUÉ NECESITAS HACER?</span><h2>Accesos rápidos</h2></div><div className="action-grid"><ActionCard icon={Calendar} tone="blue" title="Agenda" text="Consulta los entrenamientos y partidos asignados." onClick={onAgenda} /><ActionCard icon={Users} tone="violet" title="Equipo" text="Edita la plantilla y los jugadores B." onClick={onTeam} /><ActionCard icon={Archive} tone="green" title="Guardados" text="Consulta convocatorias, pizarras y estadísticas." onClick={onSaved} /></div></section></div> }
 function ActionCard({ icon: Icon, tone, title, text, onClick }: { icon: React.ElementType; tone: string; title: string; text: string; onClick: () => void }) { return <button className="action-card" onClick={onClick}><span className={`action-icon ${tone}`}><Icon size={22} /></span><span><strong>{title}</strong><small>{text}</small></span><ChevronRight size={19} /></button> }
@@ -264,7 +266,7 @@ function TeamView({ team, setTeam, account, accounts, stores, onPlayer }: { team
   const update = (id: string, change: Partial<Player>) => setTeam((current) => ({ ...current, players: current.players.map((player) => player.id === id ? { ...player, ...change } : player) }));
   const remove = (id: string) => setTeam((current) => ({ ...current, players: current.players.filter((player) => player.id !== id) }));
   return <div className="team-layout">
-    <section className="form-card team-identity-card"><div className="form-card-header"><div><span>1</span><h2>Datos del equipo</h2></div><small className="saved-badge"><Check size={14} /> Guardado automático</small></div><div className="form-card-body team-identity"><Crest className="team-crest" /><div><span className="field-label">NOMBRE DEL EQUIPO</span><strong>{TEAM_NAME}</strong><small>{account.teamLabel} · {account.name}</small></div><Field label="Temporada"><input value={team.season} onChange={(event) => setTeam((current) => ({ ...current, season: event.target.value }))} /></Field></div></section>
+    <section className="form-card team-identity-card"><div className="form-card-header"><div><span>1</span><h2>Datos del equipo</h2></div><small className="saved-badge"><Check size={14} /> Guardado automático</small></div><div className="form-card-body team-identity"><Crest className="team-crest" /><div><span className="field-label">NOMBRE DEL EQUIPO</span><strong>{team.name}</strong><small>{account.teamLabel} · {account.name}</small></div><Field label="Temporada"><input value={team.season} onChange={(event) => setTeam((current) => ({ ...current, season: event.target.value }))} /></Field></div></section>
     <section className="form-card"><div className="form-card-header"><div><span>2</span><h2>Añadir a mi plantilla</h2></div></div><div className="form-card-body"><div className="player-add-grid own-player-grid"><input placeholder="Nombre" value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /><input placeholder="Dorsal" value={draft.number} onChange={(event) => setDraft((current) => ({ ...current, number: event.target.value }))} /><select value={draft.role} onChange={(event) => setDraft((current) => ({ ...current, role: event.target.value as Player['role'] }))}><option value="jugador">Jugador</option><option value="portero">Portero</option></select><button className="primary-button" onClick={addPlayer}><UserPlus size={18} /> Añadir</button></div><button className="link-b-button" onClick={() => setShowBPicker((value) => !value)}><Search size={17} /> Buscar jugador B de otro equipo</button>{showBPicker && <div className="b-picker"><div className="field-grid"><Field label="Entrenador de origen"><select value={sourceCoachId} onChange={(event) => setSourceCoachId(event.target.value)}><option value="">Selecciona entrenador</option>{otherCoaches.map((coach) => <option key={coach.id} value={coach.id}>{coach.name} · {coach.teamLabel}</option>)}</select></Field><Field label="Buscar jugador"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nombre del jugador" /></Field></div>{sourceCoachId && <div className="b-player-results">{sourcePlayers.map((player) => <button key={player.id} disabled={team.players.some((item) => item.id === player.id)} onClick={() => linkBPlayer(player)}><span className="player-avatar">{player.number || player.name.slice(0,2).toUpperCase()}</span><span><strong>{player.name}</strong><small>{sourceCoach?.teamLabel} · {player.role === 'portero' ? 'Portero' : 'Jugador'}</small></span><Plus size={17} /></button>)}{!sourcePlayers.length && <div className="inline-empty">No hay jugadores disponibles con esa búsqueda.</div>}</div>}</div>}</div></section>
     {(['plantilla', 'b'] as Player['group'][]).map((group) => <section className="roster-section" key={group}><div className="section-heading"><span className="eyebrow">{group === 'plantilla' ? 'EQUIPO' : 'APOYO'}</span><h2>{group === 'plantilla' ? `Plantilla (${team.players.filter((player) => player.group === group).length})` : `Jugadores B (${team.players.filter((player) => player.group === group).length})`}</h2></div><div className="player-list">{team.players.filter((player) => player.group === group).map((player) => <article className={!player.active ? 'inactive' : ''} key={`${group}-${player.id}`}><div className="player-avatar">{player.number || player.name.slice(0,2).toUpperCase()}</div>{group === 'plantilla' ? <div className="player-edit"><input value={player.name} aria-label={`Nombre de ${player.name}`} onChange={(event) => update(player.id, { name: event.target.value })} /><div><input value={player.number} aria-label={`Dorsal de ${player.name}`} placeholder="#" onChange={(event) => update(player.id, { number: event.target.value })} /><select value={player.role} aria-label={`Posición de ${player.name}`} onChange={(event) => update(player.id, { role: event.target.value as Player['role'] })}><option value="jugador">Jugador</option><option value="portero">Portero</option></select></div></div> : <div className="linked-player-copy"><strong>{player.name}</strong><small>{player.sourceTeamLabel || 'Equipo de origen'} · {player.sourceCoachName || 'Entrenador de origen'}</small><span>Mismo perfil e ID del club</span></div>}<div className="player-actions"><button onClick={() => onPlayer(player.id)}>Ver estadísticas</button><button className={player.active ? '' : 'active-toggle'} onClick={() => update(player.id, { active: !player.active })}>{player.active ? 'Activo' : 'Inactivo'}</button><button className="danger-icon" aria-label={group === 'b' ? `Quitar vínculo de ${player.name}` : `Eliminar ${player.name}`} onClick={() => remove(player.id)}><Trash2 size={17} /></button></div></article>)}{!team.players.some((player) => player.group === group) && <div className="inline-empty">{group === 'plantilla' ? 'Todavía no has añadido jugadores.' : 'No has vinculado jugadores de otros equipos.'}</div>}</div></section>)}
   </div>;
@@ -365,6 +367,7 @@ function SavedView({ tab, setTab, team, rivales, journeys, stats, boards, onTeam
 function InlineEmpty({ text }: { text: string }) { return <div className="inline-empty">{text}</div> }
 
 function PlayerProfile({ player, stats, onBack }: { player?: Player; stats: MatchStat[]; onBack: () => void }) {
+  const TEAM_NAME = useClub()?.nombre || 'Equipo';
   if (!player) return <InlineEmpty text="No se encontró el jugador." />;
   const matches = stats.filter((match) => match.players.some((entry) => entry.playerId === player.id));
   const entries = matches.map((match) => ({ match, entry: match.players.find((item) => item.playerId === player.id)! }));

@@ -38,7 +38,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     if (area === 'agenda') {
       const impersonator = await getSessionImpersonator(req);
       if (impersonator?.role !== 'superadmin') { res.status(403).json({error:'La preparación de ejercicios todavía no está disponible.'}); return }
-      const currentRows = await sql`SELECT data FROM club_stores WHERE account_id=${session.id} AND area='agenda' LIMIT 1`;
+      const currentRows = await sql`SELECT data FROM club_stores WHERE account_id=${session.id} AND club_id=${session.club_id} AND area='agenda' LIMIT 1`;
       const current = Array.isArray(currentRows[0]?.data) ? currentRows[0].data as Array<Record<string, unknown>> : [];
       const update = data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : {};
       const eventId = String(update.eventId || '');

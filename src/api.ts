@@ -1,4 +1,5 @@
 import type { ClubAccount, FootballStage, TrainingYear } from "./clubTypes";
+import { INITIAL_CLUB, OLIVA_CLUB_ID, validClubEdit, type Club } from './clubs';
 import { prepareBoard, validBoard, type TacticalBoard } from './tactical/model';
 
 export type StoreArea = "team" | "stats" | "journeys" | "rivals" | "boards" | "agenda";
@@ -45,6 +46,7 @@ export interface CoordinatorTrainingSelection {
 }
 export interface StoreRow {
   account_id: string;
+  club_id?: string;
   area: StoreArea;
   data: unknown;
 }
@@ -56,6 +58,8 @@ export interface LoginAuditEntry {
   logged_at: string;
 }
 export interface BootstrapPayload {
+  clubs?: Club[];
+  fields?: Array<{club_id:string;id:string;nombre:string;zones:string[]}>;
   accounts: ClubAccount[];
   session: ClubAccount | null;
   impersonator?: ClubAccount | null;
@@ -214,22 +218,38 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
   const url = new URL(path, location.origin);
   const method = init?.method || "GET";
   const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
-  let accounts = readLocalAccounts();
-  let stores = readLocalStores();
+  let accounts = readLocalAccounts().map(a=>({...a,club_id:a.role==='superadmin'?null:a.club_id || OLIVA_CLUB_ID}));
+  let stores: StoreRow[] = readLocalStores().map(s=>({...s,club_id:accounts.find(a=>a.id===s.account_id)?.club_id || OLIVA_CLUB_ID}));
+  let clubs: Club[] = JSON.parse(localStorage.getItem('convo_clubs_v1') || 'null') || [INITIAL_CLUB];
   const sessionId = sessionStorage.getItem(LOCAL_SESSION_KEY);
   const session = accounts.find((account) => account.id === sessionId) || null;
   const impersonatorId = sessionStorage.getItem(LOCAL_IMPERSONATOR_KEY);
   const impersonator = accounts.find(
     (account) => account.id === impersonatorId && account.role === "superadmin",
   ) || null;
+  if (session && session.role !== 'superadmin' && ['/api/coordinator-agenda','/api/calendar-import','/api/accounts'].includes(url.pathname)) {
+    const targets = [body.accountId, method==='PATCH' ? body.id : undefined, method==='DELETE' ? url.searchParams.get('id') : undefined,
+      ...(Array.isArray(body.selections) ? body.selections.map((s:any)=>s.accountId) : [])].filter(Boolean);
+    if (targets.some(id=>!accounts.some(a=>a.id===id && a.club_id===session.club_id))) throw new Error('No puedes acceder a otro club.');
+  }
 
   if (url.pathname === "/api/bootstrap") {
     return {
-      accounts: accounts.map(publicLocalAccount),
+      accounts: accounts.filter(a=>!session || session.role==='superadmin' || a.club_id===session.club_id).map(publicLocalAccount),
+      clubs: clubs.filter(c=>session?.role==='superadmin' || c.id===session?.club_id),
       session: session ? publicLocalAccount(session) : null,
       impersonator: impersonator ? publicLocalAccount(impersonator) : null,
-      stores,
+      stores: stores.filter(s=>session && (session.role==='superadmin' || s.club_id===session.club_id)),
     } as T;
+  }
+  if (url.pathname === '/api/clubs') {
+    if (session?.role!=='superadmin') throw new Error('Acceso restringido.');
+    if(method==='PATCH') {
+      if(!validClubEdit(body) || !clubs.some(c=>c.id===body.id)) throw new Error('Club no válido.');
+      clubs=clubs.map(c=>c.id===body.id?{...c,nombre:String(body.nombre).trim(),logo:String(body.logo),color_principal:String(body.color_principal),updated_at:new Date().toISOString()}:c);
+      localStorage.setItem('convo_clubs_v1',JSON.stringify(clubs));
+    }
+    return {clubs} as T;
   }
   if (url.pathname === "/api/login" && method === "POST") {
     const account = body.accountId
@@ -265,9 +285,11 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
     return { account: publicLocalAccount(impersonator) } as T;
   }
   if (url.pathname === "/api/accounts" && method === "POST") {
+    if (!session || !['admin','superadmin'].includes(session.role)) throw new Error('Acceso restringido.');
     const now = new Date().toISOString();
     accounts.push({
       id: crypto.randomUUID(),
+      club_id: session.role==='superadmin' ? String(body.club_id || OLIVA_CLUB_ID) : session.club_id,
       name: String(body.name || ""),
       role: body.role as "entrenador" | "coordinador" | "admin",
       teamLabel: body.role === "admin" ? "Administración" : String(body.teamLabel || ""),
@@ -505,7 +527,7 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
   }
 
   localStorage.setItem(LOCAL_ACCOUNTS_KEY, JSON.stringify(accounts));
-  return { accounts: accounts.map(publicLocalAccount) } as T;
+  return { accounts: accounts.filter(a=>session?.role==='superadmin' || a.club_id===session?.club_id).map(publicLocalAccount) } as T;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -524,6 +546,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const clubApi = {
+  clubs: () => request<{clubs:Club[]}>('/api/clubs'),
+  updateClub: (club: Club) => request<{clubs:Club[]}>('/api/clubs',{method:'PATCH',body:JSON.stringify({id:club.id,nombre:club.nombre,logo:club.logo,color_principal:club.color_principal})}),
   saveTacticalBoard: (board: TacticalBoard) => request<{ ok: boolean; board: TacticalBoard }>('/api/data', {
     method: 'PUT', body: JSON.stringify({ area: 'boards', data: { operation: 'saveTacticalBoard', board } }),
   }),

@@ -22,6 +22,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         res.status(400).json({ error: 'Datos incompletos.' });
         return;
       }
+      const clubId = session.role === 'superadmin' ? (body as typeof body & {club_id?:string}).club_id || 'ud-oliva' : session.club_id;
+      const club = await sql`SELECT id FROM clubs WHERE id=${clubId} AND activo=TRUE`;
+      if (!club.length) { res.status(400).json({error:'Club no válido.'}); return }
       const id = crypto.randomUUID();
       const teamLabel = body.role === 'entrenador'
         ? body.teamLabel?.trim() || ''
@@ -32,12 +35,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         res.status(400).json({ error: 'Indica el equipo, la etapa y el año del entrenador.' });
         return;
       }
-      await sql`INSERT INTO club_accounts (id,name,role,team_label,football_stage,training_year,pin_hash) VALUES (${id},${body.name.trim()},${body.role},${teamLabel},${footballStage},${trainingYear},${hashPin(body.pin)})`;
+      await sql`INSERT INTO club_accounts (id,name,role,team_label,football_stage,training_year,pin_hash,club_id) VALUES (${id},${body.name.trim()},${body.role},${teamLabel},${footballStage},${trainingYear},${hashPin(body.pin)},${clubId})`;
     } else if (req.method === 'PATCH') {
       const body = jsonBody<{ id: string; name?: string; role?: ManagedRole; teamLabel?: string; footballStage?: FootballStage | null; trainingYear?: TrainingYear | null; pin?: string; active?: boolean }>(req);
       const targetRows = body.id ? await sql`SELECT * FROM club_accounts WHERE id=${body.id} LIMIT 1` : [];
       const target = targetRows[0] ? mapAccount(targetRows[0]) : null;
-      const canManage = target && target.role !== 'superadmin' && (session.role === 'superadmin' || ['entrenador', 'coordinador'].includes(target.role));
+      const canManage = target && (session.role === 'superadmin' || target.club_id === session.club_id) && target.role !== 'superadmin' && (session.role === 'superadmin' || ['entrenador', 'coordinador'].includes(target.role));
       if (!canManage) {
         res.status(400).json({ error: 'Usuario no válido.' });
         return;
@@ -70,7 +73,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const id = String(req.query?.id || '');
       const targetRows = id ? await sql`SELECT * FROM club_accounts WHERE id=${id} LIMIT 1` : [];
       const target = targetRows[0] ? mapAccount(targetRows[0]) : null;
-      const canDelete = target && !['admin', 'superadmin'].includes(target.role) && (session.role === 'superadmin' || ['entrenador', 'coordinador'].includes(target.role));
+      const canDelete = target && (session.role === 'superadmin' || target.club_id === session.club_id) && !['admin', 'superadmin'].includes(target.role) && (session.role === 'superadmin' || ['entrenador', 'coordinador'].includes(target.role));
       if (!canDelete) {
         res.status(400).json({ error: 'Este acceso protegido no se puede eliminar.' });
         return;
@@ -80,7 +83,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return methodNotAllowed(res);
     }
 
-    const rows = await sql`SELECT * FROM club_accounts ORDER BY created_at`;
+    const rows = await sql`SELECT * FROM club_accounts WHERE (${session.role === 'superadmin'} OR club_id=${session.club_id}) ORDER BY created_at`;
     res.status(200).json({ accounts: rows.map((row) => publicAccount(mapAccount(row))) });
   } catch (error) {
     fail(res, error);
