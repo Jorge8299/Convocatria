@@ -562,6 +562,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const clubApi = {
   clubs: () => request<{clubs:Club[]}>('/api/clubs'),
+  deleteClub: (id:string, confirmation:string) => request<{clubs:Club[]}>('/api/clubs',{method:'DELETE',body:JSON.stringify({id,confirmation})}),
   updateClub: (club: Club) => request<{clubs:Club[]}>('/api/clubs',{method:'PATCH',body:JSON.stringify({id:club.id,nombre:club.nombre,logo:club.logo,color_principal:club.color_principal})}),
   createClub: (input:{nombre:string;logo:string;color_principal:string;admin_name:string;admin_pin:string}) => request<{club:Club;admin:{id?:string;name:string};access_path:string}>('/api/clubs',{method:'POST',body:JSON.stringify(input)}),
   saveTacticalBoard: (board: TacticalBoard) => request<{ ok: boolean; board: TacticalBoard }>('/api/data', {

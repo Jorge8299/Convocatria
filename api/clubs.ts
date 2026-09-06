@@ -9,6 +9,24 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     if(req.query?.section==='economy'){await economy(req,res,session);return}
     if (session?.role !== 'superadmin') { res.status(403).json({error:'Solo el superadmin puede gestionar clubes.'}); return }
     const sql = getSql();
+    res.setHeader('Cache-Control', 'private, no-store');
+    if (req.method === 'DELETE') {
+      const body = jsonBody<{id?:string;confirmation?:string}>(req);
+      if (typeof body.id !== 'string' || typeof body.confirmation !== 'string') {
+        res.status(400).json({error:'Escribe el nombre del club para confirmar.'});return;
+      }
+      // Logical deletion: preserve all sporting and economic records, revoke access atomically.
+      const rows = await sql`WITH removed AS (
+        UPDATE clubs SET activo=FALSE,updated_at=NOW()
+        WHERE id=${body.id} AND nombre=${body.confirmation} AND activo=TRUE RETURNING id
+      ), disabled AS (
+        UPDATE club_accounts SET active=FALSE WHERE club_id IN (SELECT id FROM removed) RETURNING id
+      ), revoked AS (
+        DELETE FROM club_sessions WHERE account_id IN (SELECT id FROM disabled) RETURNING token_hash
+      ) SELECT id FROM removed`;
+      if (!rows.length) {res.status(400).json({error:'El nombre no coincide o el club ya no está activo.'});return}
+      res.status(200).json({clubs:await sql`SELECT * FROM clubs WHERE activo=TRUE ORDER BY created_at`});return;
+    }
     if (req.method === 'POST') {
       const body=jsonBody<{nombre:string;logo:string;color_principal:string;admin_name:string;admin_pin:string}>(req);
       const slug=slugifyClub(body.nombre || '');
@@ -26,6 +44,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const rows = await sql`UPDATE clubs SET nombre=${body.nombre.trim()},logo=${body.logo},color_principal=${body.color_principal},updated_at=NOW() WHERE id=${body.id} RETURNING id`;
       if (!rows.length) { res.status(404).json({error:'Club no encontrado.'}); return }
     } else if (req.method !== 'GET') { res.status(405).json({error:'Método no permitido.'}); return }
-    res.status(200).json({clubs:await sql`SELECT * FROM clubs ORDER BY created_at`});
+    res.status(200).json({clubs:await sql`SELECT * FROM clubs WHERE activo=TRUE ORDER BY created_at`});
   } catch(error) { fail(res,error) }
 }

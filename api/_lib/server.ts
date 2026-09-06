@@ -122,7 +122,8 @@ export async function getSession(req: ApiRequest): Promise<AccountRow | null> {
   const sql = sqlClient();
   const rows = await sql`SELECT a.id,a.club_id,a.name,a.role,a.team_label,a.football_stage,a.training_year,a.pin_hash,a.active,a.created_at
     FROM club_sessions s JOIN club_accounts a ON a.id=s.account_id
-    WHERE s.token_hash=${tokenHash(token)} AND s.expires_at>NOW() AND a.active=TRUE LIMIT 1`;
+    WHERE s.token_hash=${tokenHash(token)} AND s.expires_at>NOW() AND a.active=TRUE
+    AND (a.role='superadmin' OR EXISTS (SELECT 1 FROM clubs c WHERE c.id=a.club_id AND c.activo=TRUE)) LIMIT 1`;
   return rows[0] ? mapAccount(rows[0]) : null;
 }
 

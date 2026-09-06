@@ -1,4 +1,4 @@
-const CACHE = 'convo-shell-v14';
+const CACHE = 'convo-shell-v15';
 const SHELL = ['/', '/manifest.webmanifest', '/escudo-ud-oliva.jpg'];
 self.addEventListener('install', (event) => { event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', (event) => { event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith('convo-shell-') && key !== CACHE).map((key) => caches.delete(key))))); self.clients.claim(); });
