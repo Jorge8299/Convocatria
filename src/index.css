@@ -770,4 +770,25 @@ input,select,textarea{min-height:48px;font-size:13px;font-weight:600}textarea{li
 .agenda-grid small.cancelled{border-color:#e6858f;background:repeating-linear-gradient(135deg,#fff1f2 0,#fff1f2 8px,#ffe8eb 8px,#ffe8eb 16px);color:#b30922;box-shadow:inset 0 0 0 1px #dc23443d,0 4px 11px #8b10201c}.agenda-grid small.holiday{border-color:#e4b755;background:repeating-linear-gradient(135deg,#fff8dc 0,#fff8dc 8px,#fff1c2 8px,#fff1c2 16px);color:#8a5900;box-shadow:inset 0 0 0 1px #c78c1d3d,0 4px 11px #8152001c}.agenda-grid small.cancelled .agenda-cell-event-copy b,.agenda-grid small.holiday .agenda-cell-event-copy b{font-weight:950;letter-spacing:.035em}.agenda-grid small.cancelled .agenda-cell-event-copy em,.agenda-grid small.holiday .agenda-cell-event-copy em{text-decoration:line-through;text-decoration-thickness:1px}.agenda-grid small.cancelled .agenda-cell-event-icon,.agenda-grid small.holiday .agenda-cell-event-icon{background:#fff9}
 @media(max-width:620px){.agenda-grid small.cancelled .agenda-cell-event-copy b,.agenda-grid small.holiday .agenda-cell-event-copy b{font-size:5px;letter-spacing:-.04em}}
 
-.push-notification-control{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin:0 0 20px;padding:16px;border:1px solid #dce6f0;border-radius:16px;background:#fff}.push-notification-control>div{flex:1;min-width:200px}.push-notification-control strong{display:flex;align-items:center;gap:8px;color:#173251;font-size:14px}.push-notification-control p{margin:6px 0 0;color:#52677f;font-size:13px;line-height:1.5}.push-notification-control button{min-height:44px;font-size:13px}.push-notification-message{flex-basis:100%}@media(max-width:600px){.push-notification-control button{width:100%;justify-content:center}}
+/* Discreet notification settings beside the account controls. */
+.mobile-account-actions{margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.notification-menu{position:relative}
+.notification-bell{position:relative;display:grid;place-items:center;width:40px;height:40px;border:1px solid transparent;border-radius:12px;background:#edf3fb;color:#29425f;cursor:pointer;transition:background .15s,box-shadow .15s}
+.notification-bell:hover,.notification-bell[aria-expanded=true]{background:#dfeafa;box-shadow:0 3px 10px #17325112}
+.notification-bell:focus-visible,.notification-close:focus-visible{outline:2px solid #3b82f6;outline-offset:3px}
+.notification-enabled-dot{position:absolute;top:7px;right:7px;width:7px;height:7px;border-radius:50%;background:#15966a;border:2px solid #edf3fb;box-sizing:content-box}
+.push-notification-control{position:absolute;right:0;top:calc(100% + 12px);z-index:60;width:300px;max-width:calc(100vw - 32px);padding:18px;border:1px solid #dce6f0;border-radius:18px;background:#fff;color:#173251;box-shadow:0 16px 48px #0b234426;display:grid;gap:12px;text-align:left}
+.push-notification-control header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.push-notification-control header strong{color:#173251;font-size:15px;font-weight:800}
+.notification-close{display:grid;place-items:center;flex-shrink:0;width:28px;height:28px;padding:0;border:0;border-radius:8px;background:#f1f5fa;color:#61758e;cursor:pointer}
+.push-notification-control p{margin:0;color:#52677f;font-size:13px;line-height:1.55}
+.push-notification-control>.primary-button{min-height:44px;width:100%;justify-content:center;font-size:13px}
+.push-notification-control>small{color:#738198;font-size:11px;line-height:1.5}
+.push-notification-control .push-notification-message{padding-top:10px;border-top:1px solid #e8eef5}
+.desktop-sidebar .storage-note>.notification-menu{position:absolute;right:10px;top:10px}
+.desktop-sidebar .storage-note>span,.desktop-sidebar .storage-note>strong{padding-right:36px}
+.desktop-sidebar .notification-bell{background:#ffffff12;color:#d7e4f3}
+.desktop-sidebar .notification-bell:hover,.desktop-sidebar .notification-bell[aria-expanded=true]{background:#ffffff24}
+.desktop-sidebar .notification-enabled-dot{border-color:#183759}
+.desktop-sidebar .push-notification-control{left:auto;right:-10px;top:auto;bottom:calc(100% + 12px);width:224px;max-height:calc(100dvh - 240px);overflow:auto}
+@media(max-width:900px){.mobile-header .brand{min-width:0}.mobile-header .brand-copy{min-width:0}.mobile-account-actions .mobile-logout{margin-left:0}.notification-bell{width:44px;height:44px}.push-notification-control{position:fixed;top:80px;right:16px;max-height:calc(100dvh - 100px);overflow:auto}}

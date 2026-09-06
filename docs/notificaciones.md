@@ -1,6 +1,6 @@
 # Avisos de partidos en el móvil
 
-El entrenador abre Convo con su propia cuenta y pulsa **Activar avisos** en Inicio. En iPhone debe añadir Convo a la pantalla de inicio y abrirla desde ese icono (iOS 16.4 o posterior). En Android necesita un navegador compatible y aceptar el permiso.
+El entrenador abre Convo con su propia cuenta y abre la **campanita** (junto a salir en móvil, junto al perfil en ordenador) y pulsa **Activar avisos**. En iPhone debe añadir Convo a la pantalla de inicio y abrirla desde ese icono (iOS 16.4 o posterior). En Android necesita un navegador compatible y aceptar el permiso.
 
 Cuando coordinación crea un partido manualmente, el servidor envía un aviso a los dispositivos registrados del entrenador asignado. El nombre del coordinador se obtiene de la sesión autenticada. Tocar el aviso abre el partido en la agenda de esa cuenta.
 
