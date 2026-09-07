@@ -353,6 +353,34 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
   } else if (url.pathname === "/api/data" && method === "PUT") {
     if (!session) throw new Error("Inicia sesión de nuevo.");
     const area = body.area as StoreArea;
+    const teamOperation = body.data && typeof body.data === "object" && !Array.isArray(body.data)
+      ? body.data as Record<string, unknown>
+      : {};
+    if (session.role === "admin" && area === "team" && ["addPlayer", "deletePlayer"].includes(String(teamOperation.operation))) {
+      const accountId = String(teamOperation.accountId || "");
+      const coach = accounts.find((account) => account.id === accountId && account.club_id === session.club_id && account.role === "entrenador" && account.active);
+      if (!coach) throw new Error("El equipo seleccionado no es válido.");
+      const storeIndex = stores.findIndex((store) => store.account_id === accountId && store.area === "team");
+      const currentTeam = (storeIndex >= 0 ? stores[storeIndex].data : { name: coach.teamLabel, season: "", players: [] }) as {name:string;season:string;players:Record<string,unknown>[]};
+      const players = Array.isArray(currentTeam.players) ? currentTeam.players : [];
+      if (teamOperation.operation === "addPlayer") {
+        const name = String(teamOperation.name || "").trim();
+        const number = String(teamOperation.number || "").trim();
+        const role = teamOperation.role === "portero" ? "portero" : teamOperation.role === "jugador" ? "jugador" : "";
+        if (!name || name.length > 120 || number.length > 10 || !role) throw new Error("Revisa el nombre, el dorsal y el tipo de jugador.");
+        const player = { id: crypto.randomUUID(), name, number, role, group: "plantilla", active: true, ownerCoachId: coach.id };
+        const next = { ...currentTeam, players: [...players, player] };
+        if (storeIndex >= 0) stores[storeIndex] = { ...stores[storeIndex], data: next };
+        else stores.push({ account_id: accountId, area: "team", data: next, club_id: session.club_id });
+        localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
+        return { ok: true, player } as T;
+      }
+      const playerId = String(teamOperation.playerId || "");
+      if (!players.some((player) => player.id === playerId)) throw new Error("El jugador ya no está en esta plantilla.");
+      stores[storeIndex] = { ...stores[storeIndex], data: { ...currentTeam, players: players.filter((player) => player.id !== playerId) } };
+      localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
+      return { ok: true, player: { id: playerId } } as T;
+    }
     if (area === 'boards') {
       if (session.role !== 'entrenador') throw new Error('No autorizado.');
       const current = stores.find(store => store.account_id === session.id && store.area === 'boards')?.data as Record<string, unknown> || {};
@@ -697,6 +725,16 @@ export const clubApi = {
     request<{ rivals: Required<ImportedRival>[] }>("/api/calendar-import", {
       method: "POST",
       body: JSON.stringify({ action: "replace", accountId, rivals }),
+    }),
+  addAdminPlayer: (accountId: string, player: {name:string;number:string;role:'jugador'|'portero'}) =>
+    request<{ok:true;player:{id:string}}>("/api/data", {
+      method: "PUT",
+      body: JSON.stringify({area:"team",data:{operation:"addPlayer",accountId,...player}}),
+    }),
+  deleteAdminPlayer: (accountId: string, playerId: string) =>
+    request<{ok:true;player:{id:string}}>("/api/data", {
+      method: "PUT",
+      body: JSON.stringify({area:"team",data:{operation:"deletePlayer",accountId,playerId}}),
     }),
   deleteRival: (accountId: string, rivalId: string) =>
     request<{ rivals: Required<ImportedRival>[]; deletedId: string }>(

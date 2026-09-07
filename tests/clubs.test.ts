@@ -4,6 +4,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { ensureClubSchema } from '../api/_lib/clubs.ts';
 import { slugifyClub, validClubEdit } from '../src/clubs.ts';
 import { accessibleAccounts, accessibleStores } from '../api/_lib/club-access.ts';
+import { addAdminPlayer, deleteAdminPlayer } from '../api/_lib/admin-player.ts';
 
 test('additive migration preserves accounts, credentials, teams and every store; isolation rejects foreign owners', async()=>{
  const db=new PGlite();
@@ -51,4 +52,39 @@ test('club editing validates supported logos and one primary colour',()=>{
  assert.equal(validClubEdit({nombre:'UD Oliva',logo:'/escudo-ud-oliva.jpg',color_principal:'#0b2344'}),true);
   assert.equal(validClubEdit({nombre:'UD Oliva',logo:'javascript:alert(1)',color_principal:'#0b2344'}),false);
   assert.equal(slugifyClub('  C.F. Gandía  '),'c-f-gandia');
+});
+
+test('admin adds a player only to an active team in the same club and preserves its roster', async()=>{
+ const db=new PGlite();
+ const sql=(async(strings:TemplateStringsArray,...values:unknown[])=>{
+   return (await db.query(strings.reduce((s,p,i)=>s+(i?`$${i}`:'')+p,''),values)).rows;
+ }) as unknown as Parameters<typeof addAdminPlayer>[2];
+ try {
+  await db.exec(`CREATE TABLE clubs(id TEXT PRIMARY KEY);
+   CREATE TABLE club_accounts(id TEXT PRIMARY KEY,club_id TEXT REFERENCES clubs(id),team_label TEXT,role TEXT,active BOOLEAN);
+   CREATE TABLE club_stores(account_id TEXT,club_id TEXT,area TEXT,data JSONB,updated_at TIMESTAMPTZ DEFAULT NOW(),PRIMARY KEY(account_id,area));
+   INSERT INTO clubs VALUES('club'),('other');
+   INSERT INTO club_accounts VALUES('coach','club','Benjamín A','entrenador',TRUE),('foreign','other','Benjamín B','entrenador',TRUE),('inactive','club','Benjamín C','entrenador',FALSE);
+   INSERT INTO club_stores VALUES('coach','club','team','{"name":"Nombre existente","season":"2026","players":[{"id":"existing","name":"Existente"}]}',NOW());`);
+  const player=await addAdminPlayer('club',{accountId:'coach',name:'  Nuevo jugador  ',number:' 8 ',role:'portero'},sql);
+  assert.equal(player.name,'Nuevo jugador');
+  assert.equal(player.number,'8');
+  assert.equal(player.role,'portero');
+  const team=(await db.query<{data:any}>("SELECT data FROM club_stores WHERE account_id='coach'")).rows[0].data;
+  assert.equal(team.name,'Nombre existente');
+  assert.equal(team.season,'2026');
+  assert.equal(team.players.length,2);
+  assert.equal(team.players[0].id,'existing');
+  assert.equal(team.players[1].ownerCoachId,'coach');
+  await deleteAdminPlayer('club',{accountId:'coach',playerId:player.id},sql);
+  const teamAfterDelete=(await db.query<{data:any}>("SELECT data FROM club_stores WHERE account_id='coach'")).rows[0].data;
+  assert.equal(teamAfterDelete.players.length,1);
+  assert.equal(teamAfterDelete.players[0].id,'existing');
+  assert.equal(teamAfterDelete.name,'Nombre existente');
+  await assert.rejects(deleteAdminPlayer('club',{accountId:'coach',playerId:player.id},sql),/ya no está/);
+  await assert.rejects(deleteAdminPlayer('club',{accountId:'foreign',playerId:'existing'},sql),/equipo/);
+  await assert.rejects(addAdminPlayer('club',{accountId:'foreign',name:'Jugador',number:'',role:'jugador'},sql),/equipo/);
+  await assert.rejects(addAdminPlayer('club',{accountId:'inactive',name:'Jugador',number:'',role:'jugador'},sql),/equipo/);
+  await assert.rejects(addAdminPlayer('club',{accountId:'coach',name:'',number:'',role:'jugador'},sql),/Revisa/);
+ } finally { await db.close() }
 });

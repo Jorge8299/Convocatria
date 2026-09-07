@@ -13,26 +13,25 @@ const sections = [
   { id: 'economy', label: 'Gestión económica', description: 'Gestiona las cuotas y los plazos del club.', icon: Wallet },
 ] as const;
 
-export function AdminNavigation({ section, onSection, canPreviewEconomy, account, onLogout }: {
+export function AdminNavigation({ section, onSection, canPreviewEconomy, onLogout }: {
   section: AdminSection; onSection: (section: AdminSection) => void; canPreviewEconomy: boolean;
-  account: ClubAccount; onLogout: () => void;
+  onLogout: () => void;
 }) {
   const club = useClub();
   const [menuOpen, setMenuOpen] = useState(false);
   const current = sections.find(item => item.id === section)!;
   return <>
     <aside className="admin-sidebar">
-      <div className="admin-brand"><span className="admin-brand-mark">C<span>.</span></span><div><strong>convo</strong><small>ADMINISTRACIÓN DEL CLUB</small></div>
+      <div className="admin-brand">{club?.logo ? <img src={club.logo} alt={`Escudo de ${club.nombre}`}/> : <ShieldCheck size={30}/>}<div><strong>{club?.nombre || 'Mi club'}</strong><small>ADMINISTRACIÓN</small></div>
         <button className="admin-menu-toggle" aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'} aria-expanded={menuOpen} aria-controls="admin-navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={22}/> : <Menu size={22}/>}</button>
       </div>
-      <div className="admin-club-identity">{club?.logo ? <img src={club.logo} alt=""/> : <ShieldCheck size={28}/>}<div><strong>{club?.nombre || 'Mi club'}</strong><small>Espacio de administración</small></div></div>
       <nav id="admin-navigation" className={menuOpen ? 'is-open' : ''} aria-label="Administración del club">
         <span className="admin-nav-caption">GESTIÓN DEL CLUB</span>
         {sections.filter(item => item.id !== 'economy' || canPreviewEconomy).map(({id, label, icon: Icon}) => <button key={id} aria-current={section === id ? 'page' : undefined} onClick={() => { onSection(id); setMenuOpen(false); }}><Icon size={19}/><span>{label}</span>{section === id && <ChevronRight size={15}/>}</button>)}
       </nav>
       <div className="admin-sidebar-footer"><ShieldCheck size={19}/><div><strong>Administración</strong><small>Todo tu club, en un mismo lugar.</small></div></div>
     </aside>
-    <header className="admin-workspace-header"><div><span>Administración <ChevronRight size={12}/> {current.label}</span><h1>{current.label}</h1><p>{current.description}</p></div><div className="admin-session"><span className="admin-user-initial">{account.name.slice(0,1).toUpperCase()}</span><div><strong>{account.name}</strong><small>Administrador</small></div><button onClick={onLogout} aria-label="Cerrar sesión" title="Cerrar sesión"><LogOut size={19}/></button></div></header>
+    <header className="admin-workspace-header"><div><span>Administración <ChevronRight size={12}/> {current.label}</span><h1>{current.label}</h1><p>{current.description}</p></div><div className="admin-session"><strong>Administración</strong><button onClick={onLogout}><LogOut size={17}/> Cerrar sesión</button></div></header>
   </>;
 }
 

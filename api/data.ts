@@ -2,6 +2,7 @@ import { ApiRequest, ApiResponse, fail, getSession, getSessionImpersonator, getS
 const AREAS = ['team','stats','journeys','rivals','boards','agenda'];
 import { validBoard } from '../src/tactical/model.js';
 import { saveLegacyBoards, saveTacticalBoard } from './_lib/tactical-store.js';
+import { addAdminPlayer, deleteAdminPlayer } from './_lib/admin-player.js';
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {
     const session = await getSession(req);
@@ -26,6 +27,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     if (req.method !== 'PUT') return methodNotAllowed(res);
     const { area, data: requestedData } = jsonBody<{area:string;data:unknown}>(req);
     let data = requestedData;
+    if (session.role === 'admin' && area === 'team' && data && typeof data === 'object' && (data as {operation?:string}).operation === 'addPlayer') {
+      const player = await addAdminPlayer(session.club_id, data as {accountId?:unknown;name?:unknown;number?:unknown;role?:unknown}, getSql());
+      res.status(201).json({ok:true,player}); return;
+    }
+    if (session.role === 'admin' && area === 'team' && data && typeof data === 'object' && (data as {operation?:string}).operation === 'deletePlayer') {
+      const player = await deleteAdminPlayer(session.club_id, data as {accountId?:unknown;playerId?:unknown}, getSql());
+      res.status(200).json({ok:true,player}); return;
+    }
     if (session.role !== 'entrenador' || !AREAS.includes(area)) { res.status(403).json({error:'No autorizado.'}); return }
     const sql = getSql();
     if (area === 'boards' && (data as { operation?: string })?.operation === 'saveTacticalBoard') {

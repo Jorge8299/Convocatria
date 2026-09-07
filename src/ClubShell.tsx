@@ -692,6 +692,9 @@ function AdminPanel({
   const [overviewRivals, setOverviewRivals] = useState<StoredRival[]>([]);
   const [overviewSaving, setOverviewSaving] = useState(false);
   const [overviewDeletingId, setOverviewDeletingId] = useState("");
+  const [playerDraft, setPlayerDraft] = useState({name:"",number:"",role:"jugador" as "jugador"|"portero"});
+  const [addingPlayer, setAddingPlayer] = useState(false);
+  const [deletingPlayerId, setDeletingPlayerId] = useState("");
   const overviewCoach = coaches.find((coach) => coach.id === overviewCoachId);
   const overviewTeam = getStored<StoredTeam>(stores, overviewCoachId, "team", {
     name: club?.nombre || "Club",
@@ -706,6 +709,40 @@ function AdminPanel({
       })),
     );
     setMessage("");
+    setPlayerDraft({name:"",number:"",role:"jugador"});
+  };
+  const addPlayerToOverviewTeam = async () => {
+    if (!overviewCoachId || !playerDraft.name.trim()) {
+      setMessage("Escribe el nombre del jugador.");
+      return;
+    }
+    setAddingPlayer(true);
+    setMessage("");
+    try {
+      await clubApi.addAdminPlayer(overviewCoachId, playerDraft);
+      await onRefresh();
+      setPlayerDraft({name:"",number:"",role:"jugador"});
+      setMessage("Jugador añadido a la plantilla.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo añadir el jugador.");
+    } finally {
+      setAddingPlayer(false);
+    }
+  };
+  const deletePlayerFromOverviewTeam = async (player: StoredPlayer) => {
+    if (!overviewCoachId) return;
+    if (!window.confirm(`¿Eliminar a ${player.name || "este jugador"} de la plantilla? Sus estadísticas y partidos anteriores se conservarán.`)) return;
+    setDeletingPlayerId(player.id);
+    setMessage("");
+    try {
+      await clubApi.deleteAdminPlayer(overviewCoachId, player.id);
+      await onRefresh();
+      setMessage("Jugador eliminado de la plantilla.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo eliminar el jugador.");
+    } finally {
+      setDeletingPlayerId("");
+    }
   };
   const saveOverviewRivals = async () => {
     if (!overviewCoachId) return;
@@ -1002,11 +1039,12 @@ function AdminPanel({
     <div className={platformMode ? "role-shell" : "role-shell admin-workspace"}>
       <LocalDemoBanner />
       {platformMode && <RoleHeader
-        title={platformMode ? "Superadministración" : "Administración"}
-        subtitle={platformMode ? "Control total de la aplicación" : club?.nombre || "Club"}
+        title="Convocatria"
+        subtitle="Superadministración"
+        appIdentity
         onLogout={onLogout}
       />}
-      {!platformMode && <AdminNavigation section={adminSection} onSection={setAdminSection} canPreviewEconomy={canPreviewEconomy} account={account} onLogout={onLogout}/>}
+      {!platformMode && <AdminNavigation section={adminSection} onSection={setAdminSection} canPreviewEconomy={canPreviewEconomy} onLogout={onLogout}/>}
       {platformMode && <nav className="superadmin-nav" aria-label="Navegación de superadmin">
         <button className={superadminSection==='economy'?'active':''} onClick={()=>setSuperadminSection('economy')}>Gestión económica</button>
         <button className={superadminSection==='overview'?'active':''} onClick={()=>setSuperadminSection('overview')}>Resumen</button>
@@ -1215,6 +1253,15 @@ function AdminPanel({
                   </div>
                   <Users size={20} />
                 </div>
+                <form className="admin-player-form" onSubmit={(event)=>{event.preventDefault();void addPlayerToOverviewTeam()}}>
+                  <input aria-label="Nombre del jugador" placeholder="Nombre" maxLength={120} required value={playerDraft.name} onChange={(event)=>setPlayerDraft(current=>({...current,name:event.target.value}))}/>
+                  <input aria-label="Dorsal del jugador" placeholder="Dorsal" maxLength={10} value={playerDraft.number} onChange={(event)=>setPlayerDraft(current=>({...current,number:event.target.value}))}/>
+                  <select aria-label="Tipo de jugador" value={playerDraft.role} onChange={(event)=>setPlayerDraft(current=>({...current,role:event.target.value as "jugador"|"portero"}))}>
+                    <option value="jugador">Jugador</option>
+                    <option value="portero">Portero</option>
+                  </select>
+                  <button className="primary-button" disabled={addingPlayer}><Plus size={16}/>{addingPlayer?"Añadiendo…":"Añadir jugador"}</button>
+                </form>
                 <div className="overview-player-list">
                   {overviewTeam.players.map((player) => (
                     <div key={`${player.group}-${player.id}`}>
@@ -1229,6 +1276,16 @@ function AdminPanel({
                           {!player.active ? " · Inactivo" : ""}
                         </small>
                       </span>
+                      <button
+                        type="button"
+                        className="overview-delete-player"
+                        aria-label={`Eliminar a ${player.name}`}
+                        title={`Eliminar a ${player.name}`}
+                        disabled={deletingPlayerId === player.id}
+                        onClick={() => void deletePlayerFromOverviewTeam(player)}
+                      >
+                        <Trash2 size={15} />
+                      </button>
                     </div>
                   ))}
                   {overviewTeam.players.length === 0 && (
@@ -2841,18 +2898,20 @@ function MetricCard({ label, value }: { label: string; value: number }) {
 function RoleHeader({
   title,
   subtitle,
+  appIdentity = false,
   onLogout,
 }: {
   title: string;
   subtitle: string;
+  appIdentity?: boolean;
   onLogout: () => void;
 }) {
   const club = useClub();
   return (
     <header className="role-header">
       <div className="role-brand">
-        <div className="role-brand-crest">
-          <img src={club?.logo || '/escudo-ud-oliva.jpg'} alt={`Escudo de ${club?.nombre || 'club'}`} />
+        <div className={`role-brand-crest${appIdentity ? " app-identity" : ""}`}>
+          <img src={appIdentity ? '/convocatria.png' : club?.logo || '/escudo-ud-oliva.jpg'} alt={appIdentity ? 'Convocatria' : `Escudo de ${club?.nombre || 'club'}`} />
         </div>
         <div>
           <span>{subtitle}</span>
