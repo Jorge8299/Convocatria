@@ -399,6 +399,7 @@ export default function ClubShell() {
           account={session}
           accounts={accounts}
           stores={bootstrap.stores || []}
+          canViewEnrollments={bootstrap.impersonator?.role === "superadmin"}
           onRefresh={refresh}
           onLogout={logout}
         />
@@ -1005,7 +1006,7 @@ function AdminPanel({
         subtitle={platformMode ? "Control total de la aplicación" : club?.nombre || "Club"}
         onLogout={onLogout}
       />}
-      {!platformMode && <AdminNavigation section={adminSection} onSection={setAdminSection} canPreviewEconomy={true} account={account} onLogout={onLogout}/>}
+      {!platformMode && <AdminNavigation section={adminSection} onSection={setAdminSection} canPreviewEconomy={canPreviewEconomy} account={account} onLogout={onLogout}/>}
       {platformMode && <nav className="superadmin-nav" aria-label="Navegación de superadmin">
         <button className={superadminSection==='economy'?'active':''} onClick={()=>setSuperadminSection('economy')}>Gestión económica</button>
         <button className={superadminSection==='overview'?'active':''} onClick={()=>setSuperadminSection('overview')}>Resumen</button>
@@ -1741,12 +1742,14 @@ function CoordinatorPanel({
   account,
   accounts,
   stores,
+  canViewEnrollments = false,
   onRefresh,
   onLogout,
 }: {
   account: ClubAccount;
   accounts: ClubAccount[];
   stores: StoreRow[];
+  canViewEnrollments?: boolean;
   onRefresh: () => Promise<void>;
   onLogout: () => void;
 }) {
@@ -2274,7 +2277,7 @@ function CoordinatorPanel({
         onLogout={onLogout}
       />
       <main className="role-content coordinator-content">
-        <details className="enrollment-coordinator"><summary>Inscripciones · Jugadores pendientes de equipo</summary><EnrollmentPanel assignmentsOnly onAssigned={onRefresh}/></details>
+        {canViewEnrollments && <details className="enrollment-coordinator"><summary>Inscripciones · Jugadores pendientes de equipo</summary><EnrollmentPanel assignmentsOnly onAssigned={onRefresh}/></details>}
         <section className="hero-card quote-card coordinator-quote">
           <div className="quote-copy">
             <span className="hero-label">FRASE DEL DÍA · COORDINACIÓN</span>
