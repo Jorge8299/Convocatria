@@ -1,6 +1,6 @@
 import type { TrainingBoardAction, TrainingBoardPiece } from "./TrainingBoard";
 import type { PlannedExercise, TrainingBlock, TrainingSession } from "./AgendaView";
-import { getClubCrestDataUrl, getDailyFootballPhrase } from "./pdfBranding";
+import { crestImageFormat, getClubCrestDataUrl, getDailyFootballPhrase } from "./pdfBranding";
 
 export interface TrainingPdfInput {
   categoryLabel: string;
@@ -9,6 +9,7 @@ export interface TrainingPdfInput {
   endTime: string;
   notes: string;
   session: TrainingSession;
+  crest?: string | null;
 }
 
 const PAGE_WIDTH = 210;
@@ -173,7 +174,7 @@ function drawBoard(
 export async function buildTrainingPdf(input: TrainingPdfInput) {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
-  const crestDataUrl = await getClubCrestDataUrl();
+  const crestDataUrl = await getClubCrestDataUrl(input.crest);
   const dailyPhrase = getDailyFootballPhrase(input.date);
   let y = 0;
 
@@ -191,7 +192,7 @@ export async function buildTrainingPdf(input: TrainingPdfInput) {
         doc.setDrawColor(...palette.border);
         doc.setFillColor(...palette.white);
         doc.roundedRect(MARGIN, 9, 22, 22, 3, 3, "FD");
-        doc.addImage(crestDataUrl, "JPEG", MARGIN + 2, 11, 18, 18);
+        doc.addImage(crestDataUrl, crestImageFormat(crestDataUrl), MARGIN + 2, 11, 18, 18);
       }
       doc.setTextColor(...palette.green);
       doc.setFont("helvetica", "bold");

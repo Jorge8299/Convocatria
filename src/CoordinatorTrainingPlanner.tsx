@@ -6,6 +6,7 @@ import { clubApi, getStored } from "./api";
 import type { AgendaEvent, TrainingAgendaEvent } from "./AgendaView";
 import { FieldZoneMap, TRAINING_FIELDS, fieldZoneLabel, type TrainingFieldId } from "./fieldZones";
 import { drawMagicPdfHeader, getClubCrestDataUrl, getDailyFootballPhrase, pdfBrand } from "./pdfBranding";
+import { useClub } from "./ClubContext";
 
 const DAY_LABELS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 const SHORT_DAY_LABELS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
@@ -85,6 +86,7 @@ export function CoordinatorTrainingPlanner({
   hideCommand?: boolean;
 }) {
   const today = new Date();
+  const club = useClub();
   const [week, setWeek] = useState(() => startOfWeek(today));
   const [range, setRange] = useState<TimeRange>("afternoon");
   const [internalFormOpen, setInternalFormOpen] = useState(false);
@@ -285,7 +287,7 @@ export function CoordinatorTrainingPlanner({
         period: periodLabel,
         scope: scopeLabel,
         phrase: getDailyFootballPhrase(isoDate(weekDays[0])),
-        crestDataUrl: await getClubCrestDataUrl(),
+        crestDataUrl: await getClubCrestDataUrl(club?.logo),
         width: PDF_WIDTH,
         margin: PDF_MARGIN,
       });

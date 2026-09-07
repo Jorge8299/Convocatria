@@ -304,7 +304,7 @@ export default function ClubShell() {
       <main className="login-page">
         <section className="login-card">
           <div className="login-crest">
-            <img src="/escudo-ud-oliva.jpg" alt="Escudo U.D. Oliva" />
+            <img src="/convocatria.png" alt="Convocatria" />
           </div>
           <h1>{loadError ? "Sin conexión" : "Cargando…"}</h1>
           <p>{loadError || "Conectando con los datos del club."}</p>
@@ -529,7 +529,7 @@ function LoginScreen({
       <LocalDemoBanner />
       <section className="login-card">
         <div className="login-crest">
-          <img src={club?.logo || '/escudo-ud-oliva.jpg'} alt={`Escudo de ${club?.nombre || 'club'}`} />
+          <img src={club?.logo || '/convocatria.png'} alt={`Escudo de ${club?.nombre || 'club'}`} />
         </div>
         <span className="eyebrow">{(club?.nombre || 'Club').toUpperCase()} · ÁREA TÉCNICA</span>
         <h1>Hola, míster</h1>
@@ -1810,6 +1810,7 @@ function CoordinatorPanel({
   onRefresh: () => Promise<void>;
   onLogout: () => void;
 }) {
+  const club = useClub();
   const coaches = useMemo(
     () =>
       accounts
@@ -1856,7 +1857,7 @@ function CoordinatorPanel({
       coaches.map((coach) => ({
         coach,
         team: getStored<StoredTeam>(stores, coach.id, "team", {
-          name: "U.D. OLIVA",
+          name: coach.teamLabel || club?.nombre || "Equipo",
           season: "",
           players: [],
         }),
@@ -2228,7 +2229,7 @@ function CoordinatorPanel({
         period: `Semana del ${weekTitle}`,
         scope: `${selectedCoach?.teamLabel || "Todo el club"} | Mes: ${monthTitle}`,
         phrase: getDailyFootballPhrase(monthStart),
-        crestDataUrl: await getClubCrestDataUrl(),
+        crestDataUrl: await getClubCrestDataUrl(club?.logo),
         width: pageWidth,
         margin,
         emphasizePhrase: true,
@@ -2342,8 +2343,8 @@ function CoordinatorPanel({
             <p>Una idea para empezar el día con todos los equipos en mente.</p>
           </div>
           <span className="crest hero-crest">
-            <img src="/escudo-ud-oliva.jpg" alt="Escudo de U.D. Oliva" />
-          </span>
+          <img src={club?.logo || '/convocatria.png'} alt={`Escudo de ${club?.nombre || 'club'}`} />
+        </span>
         </section>
         <section
           className={`coordinator-context ${selectedCoach ? "team-context" : "club-context"}`}
@@ -2788,8 +2789,8 @@ function CoordinatorPanel({
                     </span>
                     <h3>
                       {match.home !== false
-                        ? `U.D. OLIVA vs ${match.rival}`
-                        : `${match.rival} vs U.D. OLIVA`}
+                        ? `${club?.nombre || 'Club'} vs ${match.rival}`
+                        : `${match.rival} vs ${club?.nombre || 'Club'}`}
                     </h3>
                     <small>
                       {match.date || "Sin fecha"} · {match.players.length}{" "}
@@ -2911,7 +2912,7 @@ function RoleHeader({
     <header className="role-header">
       <div className="role-brand">
         <div className={`role-brand-crest${appIdentity ? " app-identity" : ""}`}>
-          <img src={appIdentity ? '/convocatria.png' : club?.logo || '/escudo-ud-oliva.jpg'} alt={appIdentity ? 'Convocatria' : `Escudo de ${club?.nombre || 'club'}`} />
+          <img src={appIdentity ? '/convocatria.png' : club?.logo || '/convocatria.png'} alt={appIdentity ? 'Convocatria' : `Escudo de ${club?.nombre || 'club'}`} />
         </div>
         <div>
           <span>{subtitle}</span>

@@ -2,8 +2,7 @@ import { FOOTBALL_PHRASES } from "./motivational";
 
 type JsPdfDoc = import("jspdf").jsPDF;
 
-const CREST_PATH = "/escudo-ud-oliva.jpg";
-let cachedCrestDataUrl: string | null | undefined;
+const crestCache = new Map<string, string | null | undefined>();
 
 export const pdfBrand = {
   navy: [7, 29, 56] as const,
@@ -28,22 +27,29 @@ export const getDailyFootballPhrase = (seed: string) => {
   return FOOTBALL_PHRASES[hash % FOOTBALL_PHRASES.length];
 };
 
-export async function getClubCrestDataUrl() {
-  if (cachedCrestDataUrl !== undefined) return cachedCrestDataUrl;
+export async function getClubCrestDataUrl(crestSource?: string | null) {
+  const key = crestSource || "";
+  if (crestCache.has(key)) return crestCache.get(key);
   try {
-    const response = await fetch(CREST_PATH);
+    if (!crestSource) throw new Error("Sin escudo de club.");
+    const response = await fetch(crestSource);
     if (!response.ok) throw new Error("No se pudo cargar el escudo.");
     const blob = await response.blob();
-    cachedCrestDataUrl = await new Promise<string>((resolve, reject) => {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result || ""));
       reader.onerror = () => reject(reader.error);
       reader.readAsDataURL(blob);
     });
+    crestCache.set(key, dataUrl);
+    return dataUrl;
   } catch {
-    cachedCrestDataUrl = null;
+    crestCache.set(key, null);
+    return null;
   }
-  return cachedCrestDataUrl;
+}
+export function crestImageFormat(crestDataUrl: string) {
+  return crestDataUrl.startsWith("data:image/png") || crestDataUrl.startsWith("data:image/webp") ? "PNG" : "JPEG";
 }
 
 export function drawMagicPdfHeader(
@@ -82,16 +88,11 @@ export function drawMagicPdfHeader(
     doc.setDrawColor(226, 233, 241);
     doc.setFillColor(255, 255, 255);
     doc.roundedRect(crestX, crestY, crestSize, crestSize, 3, 3, "FD");
-    doc.addImage(crestDataUrl, "JPEG", crestX + 1.5, crestY + 1.5, crestSize - 3, crestSize - 3);
+    doc.addImage(crestDataUrl, crestImageFormat(crestDataUrl), crestX + 1.5, crestY + 1.5, crestSize - 3, crestSize - 3);
   } else {
     doc.setDrawColor(226, 233, 241);
     doc.setFillColor(255, 255, 255);
     doc.roundedRect(crestX, crestY, crestSize, crestSize, 3, 3, "FD");
-    doc.setTextColor(...pdfBrand.green);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.8);
-    doc.text("UD", crestX + crestSize / 2, crestY + 8.4, { align: "center" });
-    doc.text("OLIVA", crestX + crestSize / 2, crestY + 12.3, { align: "center" });
   }
 
   const textX = margin + crestSize + 8;

@@ -38,7 +38,7 @@ const LUGARES_CITACION = ['El Morer', 'Parking del LIDL'];
 const uid = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const cloneData = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 const TEAM_NAME = 'Equipo';
-const CREST_PATH = '/escudo-ud-oliva.jpg';
+const CREST_PATH = '/convocatria.png';
 const DEFAULT_TEAM: TeamData = { name: TEAM_NAME, season: '2026/27', players: [] };
 const FOOTBALL_STAGE_LABEL: Record<FootballStage, string> = { querubin: 'Querubín', prebenjamin: 'Prebenjamín', benjamin: 'Benjamín', alevin: 'Alevín' };
 const TRAINING_YEAR_LABEL: Record<TrainingYear, string> = { primero: 'Primer año', segundo: 'Segundo año', mixto: 'Primer y segundo año' };
@@ -207,7 +207,7 @@ export function CoachApp({ account, accounts, stores, canPreviewTrainingPlanner,
   const copyMessage = async () => { await navigator.clipboard.writeText(message); setCopySuccess(true); setTimeout(() => setCopySuccess(false), 1800) };
   const saveJourney = () => { setJourneys((list) => [{ id: uid(), createdAt: new Date().toISOString(), data: cloneData(form), message }, ...list]); setSavedTab('convocatorias'); goToView('guardados') };
   const titles: Record<View, [string, string, string]> = {
-    inicio: ['U.D. OLIVA', 'Hola, míster', 'Todo lo necesario para el próximo partido, sin complicaciones.'],
+    inicio: [(club?.nombre || 'CONVO').toUpperCase(), 'Hola, míster', 'Todo lo necesario para el próximo partido, sin complicaciones.'],
     agenda: ['TEMPORADA', 'Agenda', 'Entrenamientos y partidos asignados por coordinación.'],
     equipo: ['TU EQUIPO', 'Equipo y plantilla', 'Configura una vez los jugadores que utilizarás en toda la app.'],
     convocatoria: ['ANTES DEL PARTIDO', 'Citación', 'Completa los datos del partido y comparte el mensaje con el equipo.'],

@@ -5,6 +5,7 @@ import { TacticalWorkspace } from "./tactical/TacticalWorkspace";
 import type { ClubAccount } from "./clubTypes";
 import type { TacticalBoard } from "./tactical/model";
 import { downloadTrainingPdf } from "./trainingPdf";
+import { useClub } from "./ClubContext";
 import {
   BarChart3,
   BookOpen,
@@ -290,6 +291,7 @@ export function AgendaView({
   onTacticalSaved?: (board: TacticalBoard) => void;
 }) {
   const today = new Date();
+  const club = useClub();
   const todayIso = isoDate(today.getFullYear(), today.getMonth(), today.getDate());
   const initialEvent = events.find((event) => event.id === initialEventId && event.assignedByCoordinator === true);
   const [cursor, setCursor] = useState(
@@ -392,6 +394,7 @@ export function AgendaView({
         endTime: draft.endTime,
         notes: draft.notes,
         session: trainingSession,
+        crest: club?.logo,
       });
     } finally {
       setDownloadingPdf(false);
