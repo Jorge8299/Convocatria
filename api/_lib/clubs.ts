@@ -6,7 +6,7 @@ export async function ensureClubSchema(sql: ReturnType<typeof getSql>) {
   const existing = await sql`SELECT to_regclass('public.convo_migrations') AS registry`;
   if (existing[0]?.registry) {
     const applied = await sql`SELECT id FROM convo_migrations WHERE id='multi-club-v1'`;
-    if (applied.length) return;
+    if (applied.length) { await seedClubFields(sql); return; }
   }
   const commands: ReturnType<typeof sql>[] = [];
   commands.push(sql`SELECT pg_advisory_xact_lock(718203)`);
@@ -16,6 +16,20 @@ export async function ensureClubSchema(sql: ReturnType<typeof getSql>) {
   }) as unknown as typeof sql;
   await migrateClubSchema(collect);
   await sql.transaction(commands);
+  await seedClubFields(sql);
+}
+
+// Every club owns its fields; keep them seeded so coordinators can assign agendas from day one.
+async function seedClubFields(sql: ReturnType<typeof getSql>) {
+  await sql`INSERT INTO club_fields(club_id,id,nombre,zones)
+    SELECT c.id,'campo-c','Campo C','["c-1","c-2"]'::jsonb FROM clubs c
+    WHERE NOT EXISTS(SELECT 1 FROM club_fields f WHERE f.club_id=c.id AND f.id='campo-c')`;
+  await sql`INSERT INTO club_fields(club_id,id,nombre,zones)
+    SELECT c.id,'el-morer','El Morer','["m-1","m-2","m-3","m-4"]'::jsonb FROM clubs c
+    WHERE NOT EXISTS(SELECT 1 FROM club_fields f WHERE f.club_id=c.id AND f.id='el-morer')`;
+  await sql`INSERT INTO club_fields(club_id,id,nombre,zones)
+    SELECT c.id,'polideportivo','Polideportivo','["p-1","p-2","p-3","p-4"]'::jsonb FROM clubs c
+    WHERE NOT EXISTS(SELECT 1 FROM club_fields f WHERE f.club_id=c.id AND f.id='polideportivo')`;
 }
 
 async function migrateClubSchema(sql: ReturnType<typeof getSql>) {

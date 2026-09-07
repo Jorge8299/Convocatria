@@ -44,6 +44,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       await sql.transaction([
         sql`INSERT INTO clubs(id,nombre,slug,logo,color_principal,activo) VALUES(${slug},${body.nombre.trim()},${slug},${body.logo},${body.color_principal},TRUE)`,
         sql`INSERT INTO club_accounts(id,name,role,team_label,pin_hash,active,club_id) VALUES(${adminId},${body.admin_name.trim()},'admin','Administración',${hashPin(body.admin_pin)},TRUE,${slug})`,
+        sql`INSERT INTO club_fields(club_id,id,nombre,zones) VALUES(${slug},'campo-c','Campo C','["c-1","c-2"]')`,
+        sql`INSERT INTO club_fields(club_id,id,nombre,zones) VALUES(${slug},'el-morer','El Morer','["m-1","m-2","m-3","m-4"]')`,
+        sql`INSERT INTO club_fields(club_id,id,nombre,zones) VALUES(${slug},'polideportivo','Polideportivo','["p-1","p-2","p-3","p-4"]')`,
       ]);
       res.status(201).json({club:(await sql`SELECT * FROM clubs WHERE id=${slug}`)[0],admin:{id:adminId,name:body.admin_name.trim()},access_path:`/${slug}`});return;
     } else if (req.method === 'PATCH') {
