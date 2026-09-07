@@ -7,7 +7,10 @@ import {
   getSql,
   jsonBody,
   methodNotAllowed,
+  readBody,
 } from "./_lib/server.js";
+
+export const config = { api: { bodyParser: false } };
 
 interface ImportedRival {
   id?: string;
@@ -163,6 +166,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         .json({ error: "Solo administración puede importar calendarios." });
       return;
     }
+    const raw = await readBody(req);
+    req.body = raw.length ? JSON.parse(raw.toString('utf8')) : {};
     const body = jsonBody<{
       action: "extract" | "save" | "replace" | "delete";
       fileName?: string;

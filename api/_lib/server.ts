@@ -168,6 +168,19 @@ export function loginAttemptKey(req:ApiRequest,accountId:string) { const forward
 export async function isRateLimited(key:string) { const sql=sqlClient(); const rows=await sql`SELECT COUNT(*)::int AS count FROM club_login_attempts WHERE attempt_key=${key} AND attempted_at>NOW()-INTERVAL '15 minutes'`; return Number(rows[0]?.count || 0)>=6 }
 export async function recordFailedLogin(key:string) { const sql=sqlClient(); await sql`INSERT INTO club_login_attempts (attempt_key) VALUES (${key})` }
 export async function clearFailedLogins(key:string) { const sql=sqlClient(); await sql`DELETE FROM club_login_attempts WHERE attempt_key=${key}` }
-export function jsonBody<T>(req: ApiRequest): T { return (typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {}) as T }
+export async function readBody(req: ApiRequest): Promise<Buffer> {
+  if (Buffer.isBuffer(req.body)) return req.body;
+  if (typeof req.body === 'string') return Buffer.from(req.body);
+  if (req.body) return Buffer.from(JSON.stringify(req.body));
+  const chunks: Buffer[] = []; let length = 0;
+  for await (const chunk of req as any) { const bytes = Buffer.from(chunk); length += bytes.length; if (length > 4 * 1024 * 1024) throw new Error('Petición demasiado grande.'); chunks.push(bytes) }
+  return Buffer.concat(chunks);
+}
+
+export function jsonBody<T>(req: ApiRequest): T {
+  const body = req.body;
+  if (Buffer.isBuffer(body)) { const text = body.toString('utf8'); return (text.length ? JSON.parse(text) : {}) as T }
+  return (typeof body === 'string' ? JSON.parse(body) : body || {}) as T
+}
 export function methodNotAllowed(res: ApiResponse) { res.status(405).json({ error: 'Método no permitido' }) }
 export function fail(res: ApiResponse, error: unknown) { console.error(error); res.status(500).json({ error: 'No se pudo completar la operación.' }) }

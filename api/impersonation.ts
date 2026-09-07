@@ -1,4 +1,6 @@
-import { ApiRequest, ApiResponse, createSession, destroySession, fail, getSession, getSessionImpersonator, getSql, jsonBody, mapAccount, methodNotAllowed, publicAccount } from './_lib/server.js';
+import { ApiRequest, ApiResponse, createSession, destroySession, fail, getSession, getSessionImpersonator, getSql, jsonBody, mapAccount, methodNotAllowed, publicAccount, readBody } from './_lib/server.js';
+
+export const config = { api: { bodyParser: false } };
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {
@@ -8,6 +10,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         res.status(403).json({ error: 'Solo el superadmin puede entrar como otro usuario.' });
         return;
       }
+      const raw = await readBody(req);
+      req.body = raw.length ? JSON.parse(raw.toString('utf8')) : {};
       const { accountId } = jsonBody<{ accountId?: string }>(req);
       const sql = getSql();
       const rows = await sql`SELECT * FROM club_accounts WHERE id=${accountId || ''} AND role<>'superadmin' AND active=TRUE LIMIT 1`;

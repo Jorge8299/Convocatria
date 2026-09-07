@@ -1,8 +1,12 @@
-import { ApiRequest, ApiResponse, clearFailedLogins, createSession, fail, getSql, hashPin, isRateLimited, jsonBody, loginAttemptKey, mapAccount, methodNotAllowed, publicAccount, recordFailedLogin, ensureSchema } from './_lib/server.js';
+import { ApiRequest, ApiResponse, clearFailedLogins, createSession, fail, getSql, hashPin, isRateLimited, jsonBody, loginAttemptKey, mapAccount, methodNotAllowed, publicAccount, recordFailedLogin, readBody, ensureSchema } from './_lib/server.js';
+
+export const config = { api: { bodyParser: false } };
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') return methodNotAllowed(res);
   try {
+    const raw = await readBody(req);
+    req.body = raw.length ? JSON.parse(raw.toString('utf8')) : {};
     await ensureSchema();
     const { accountId, pin, clubSlug='ud-oliva' } = jsonBody<{ accountId?: string; pin?: string;clubSlug?:string }>(req);
     if (!/^\d{4}$/.test(pin || '')) { res.status(400).json({ error: 'Introduce un PIN de 4 números.' }); return }

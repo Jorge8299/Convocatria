@@ -1,22 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { economy } from './_lib/economy.js';
 import { deleteClub } from './_lib/delete-club.js';
-import { getSession, getSql, hashPin, jsonBody, fail, type ApiRequest, type ApiResponse } from './_lib/server.js';
+import { getSession, getSql, hashPin, jsonBody, fail, readBody, type ApiRequest, type ApiResponse } from './_lib/server.js';
 import { slugifyClub, validClubEdit } from '../src/clubs.js';
 import { enrollmentApi } from './_lib/enrollment-api.js';
 import { ensureEnrollmentSchema } from './_lib/enrollment-schema.js';
 import { confirmPayment, verifyStripeEvent } from './_lib/enrollment-payments.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 60 };
-
-async function readBody(req: ApiRequest): Promise<Buffer> {
-  if(Buffer.isBuffer(req.body))return req.body;
-  if(typeof req.body==='string')return Buffer.from(req.body);
-  if(req.body)return Buffer.from(JSON.stringify(req.body));
-  const chunks:Buffer[]=[];let length=0;
-  for await(const chunk of req as any){const bytes=Buffer.from(chunk);length+=bytes.length;if(length>4*1024*1024)throw new Error('Petición demasiado grande.');chunks.push(bytes)}
-  return Buffer.concat(chunks);
-}
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {

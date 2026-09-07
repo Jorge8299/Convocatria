@@ -1,4 +1,6 @@
-import { ApiRequest, ApiResponse, ensureSchema, fail, getSql, hashPin, jsonBody, mapAccount } from './_lib/server.js';
+import { ApiRequest, ApiResponse, ensureSchema, fail, getSql, hashPin, jsonBody, mapAccount, readBody } from './_lib/server.js';
+
+export const config = { api: { bodyParser: false } };
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -6,6 +8,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method === 'OPTIONS') { res.status(204).end(); return }
   if (req.method !== 'POST') { res.status(405).json({error:'Método no permitido'}); return }
   try {
+    const raw = await readBody(req);
+    req.body = raw.length ? JSON.parse(raw.toString('utf8')) : {};
     await ensureSchema();
     const body = jsonBody<{pin:string;accounts:Array<{id:string;name:string;role:string;teamLabel:string;footballStage?:string|null;trainingYear?:string|null;pinHash:string;active:boolean;createdAt:string}>;stores:Array<{accountId:string;area:string;data:unknown}>}>(req);
     const sql = getSql();

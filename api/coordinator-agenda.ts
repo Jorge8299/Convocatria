@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { notifyMatch } from './_lib/push.js';
-import { ApiRequest, ApiResponse, fail, getSession, getSql, jsonBody, methodNotAllowed } from './_lib/server.js';
+import { ApiRequest, ApiResponse, fail, getSession, getSql, jsonBody, methodNotAllowed, readBody } from './_lib/server.js';
+
+export const config = { api: { bodyParser: false } };
 
 const MATCH_TYPES = new Set(['liga', 'amistoso', 'torneo']);
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -42,6 +44,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {
     const session = await getSession(req);
     if (!session) { res.status(401).json({ error: 'Sesión caducada.' }); return }
+    const raw = await readBody(req);
+    req.body = raw.length ? JSON.parse(raw.toString('utf8')) : {};
     const sql = getSql();
     const clubFields = await sql`SELECT id,nombre,zones FROM club_fields WHERE club_id=${session.club_id}`;
     const TRAINING_FIELDS = Object.fromEntries(clubFields.map(f => [String(f.id), {name:String(f.nombre),zones:new Set(f.zones as string[])}]));

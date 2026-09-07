@@ -1,8 +1,10 @@
-import { ApiRequest, ApiResponse, ClubRole, fail, FootballStage, getSession, getSql, hashPin, jsonBody, mapAccount, methodNotAllowed, publicAccount, TrainingYear } from './_lib/server.js';
+import { ApiRequest, ApiResponse, ClubRole, fail, FootballStage, getSession, getSql, hashPin, jsonBody, mapAccount, methodNotAllowed, publicAccount, readBody, TrainingYear } from './_lib/server.js';
 
 const footballStages: FootballStage[] = ['querubin', 'prebenjamin', 'benjamin', 'alevin'];
 const trainingYears: TrainingYear[] = ['primero', 'segundo', 'mixto'];
 type ManagedRole = 'entrenador' | 'coordinador' | 'admin';
+
+export const config = { api: { bodyParser: false } };
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {
@@ -11,6 +13,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       res.status(403).json({ error: 'Acceso restringido.' });
       return;
     }
+    const raw = await readBody(req);
+    req.body = raw.length ? JSON.parse(raw.toString('utf8')) : {};
     const sql = getSql();
     const allowedRoles: ClubRole[] = session.role === 'superadmin'
       ? ['entrenador', 'coordinador', 'admin']
