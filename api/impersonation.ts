@@ -1,4 +1,4 @@
-import { ApiRequest, ApiResponse, createSession, destroySession, fail, getSession, getSessionImpersonator, getSql, jsonBody, mapAccount, methodNotAllowed, publicAccount, readBody } from './_lib/server.js';
+import { ApiRequest, ApiResponse, createSession, destroySession, fail, getSession, getSessionImpersonator, getSql, jsonBody, mapAccount, methodNotAllowed, publicAccount, readBody, setJsonBody } from './_lib/server.js';
 
 export const config = { api: { bodyParser: false } };
 
@@ -11,7 +11,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         return;
       }
       const raw = await readBody(req);
-      req.body = raw.length ? JSON.parse(raw.toString('utf8')) : {};
+      setJsonBody(req, raw);
       const { accountId } = jsonBody<{ accountId?: string }>(req);
       const sql = getSql();
       const rows = await sql`SELECT * FROM club_accounts WHERE id=${accountId || ''} AND role<>'superadmin' AND active=TRUE LIMIT 1`;

@@ -169,12 +169,15 @@ export async function isRateLimited(key:string) { const sql=sqlClient(); const r
 export async function recordFailedLogin(key:string) { const sql=sqlClient(); await sql`INSERT INTO club_login_attempts (attempt_key) VALUES (${key})` }
 export async function clearFailedLogins(key:string) { const sql=sqlClient(); await sql`DELETE FROM club_login_attempts WHERE attempt_key=${key}` }
 export async function readBody(req: ApiRequest): Promise<Buffer> {
-  if (Buffer.isBuffer(req.body)) return req.body;
-  if (typeof req.body === 'string') return Buffer.from(req.body);
-  if (req.body) return Buffer.from(JSON.stringify(req.body));
   const chunks: Buffer[] = []; let length = 0;
   for await (const chunk of req as any) { const bytes = Buffer.from(chunk); length += bytes.length; if (length > 4 * 1024 * 1024) throw new Error('Petición demasiado grande.'); chunks.push(bytes) }
   return Buffer.concat(chunks);
+}
+export function setJsonBody(req: ApiRequest, raw: Buffer) {
+  const text = raw.toString('utf8');
+  let parsed: unknown = {};
+  if (text) { try { parsed = JSON.parse(text) } catch (error) { parsed = undefined } }
+  Object.defineProperty(req, 'body', { value: parsed, configurable: true, enumerable: true, writable: true });
 }
 
 export function jsonBody<T>(req: ApiRequest): T {

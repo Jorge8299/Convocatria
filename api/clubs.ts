@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { economy } from './_lib/economy.js';
 import { deleteClub } from './_lib/delete-club.js';
-import { getSession, getSql, hashPin, jsonBody, fail, readBody, type ApiRequest, type ApiResponse } from './_lib/server.js';
+import { getSession, getSql, hashPin, jsonBody, fail, readBody, setJsonBody, type ApiRequest, type ApiResponse } from './_lib/server.js';
 import { slugifyClub, validClubEdit } from '../src/clubs.js';
 import { enrollmentApi } from './_lib/enrollment-api.js';
 import { ensureEnrollmentSchema } from './_lib/enrollment-schema.js';
@@ -20,7 +20,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       if(['checkout.session.completed','checkout.session.async_payment_succeeded'].includes(event.type))await confirmPayment(event.data.object,event.account||'');
       res.status(200).json({received:true});return;
     }
-    try{req.body=raw.length?JSON.parse(raw.toString('utf8')):{}}catch{res.status(400).json({error:'Petición no válida.'});return}
+    setJsonBody(req, raw);
     const session = await getSession(req);
     if(req.query?.section==='enrollment'){await enrollmentApi(req,res,session);return}
     if(req.query?.section==='economy'){await economy(req,res,session);return}

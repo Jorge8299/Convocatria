@@ -1,4 +1,4 @@
-import { ApiRequest, ApiResponse, fail, getSession, getSessionImpersonator, getSql, jsonBody, methodNotAllowed, readBody } from './_lib/server.js';
+import { ApiRequest, ApiResponse, fail, getSession, getSessionImpersonator, getSql, jsonBody, methodNotAllowed, readBody, setJsonBody } from './_lib/server.js';
 const AREAS = ['team','stats','journeys','rivals','boards','agenda'];
 import { validBoard } from '../src/tactical/model.js';
 import { saveLegacyBoards, saveTacticalBoard } from './_lib/tactical-store.js';
@@ -29,7 +29,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
     if (req.method !== 'PUT') return methodNotAllowed(res);
     const raw = await readBody(req);
-    req.body = raw.length ? JSON.parse(raw.toString('utf8')) : {};
+    setJsonBody(req, raw);
     const { area, data: requestedData } = jsonBody<{area:string;data:unknown}>(req);
     let data = requestedData;
     if (session.role === 'admin' && area === 'team' && data && typeof data === 'object' && (data as {operation?:string}).operation === 'addPlayer') {

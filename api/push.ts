@@ -1,4 +1,4 @@
-import { ApiRequest, ApiResponse, fail, getSession, getSessionImpersonator, getSql, jsonBody, methodNotAllowed, readBody, sessionTokenHash } from './_lib/server.js';
+import { ApiRequest, ApiResponse, fail, getSession, getSessionImpersonator, getSql, jsonBody, methodNotAllowed, readBody, setJsonBody, sessionTokenHash } from './_lib/server.js';
 import { ensurePushSchema, pushConfig, registerDevice, validSubscription } from './_lib/push.js';
 
 export const config = { api: { bodyParser: false } };
@@ -18,7 +18,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     if (!['POST', 'DELETE'].includes(req.method || '')) return methodNotAllowed(res);
     await ensurePushSchema();
     const raw = await readBody(req);
-    req.body = raw.length ? JSON.parse(raw.toString('utf8')) : {};
+    setJsonBody(req, raw);
     const body = jsonBody<{ subscription?: unknown; endpoint?: string }>(req);
     if (req.method === 'DELETE') {
       if (typeof body.endpoint !== 'string') { res.status(400).json({ error: 'Dispositivo no válido.' }); return }

@@ -8,6 +8,7 @@ import {
   jsonBody,
   methodNotAllowed,
   readBody,
+  setJsonBody,
 } from "./_lib/server.js";
 
 export const config = { api: { bodyParser: false } };
@@ -167,7 +168,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return;
     }
     const raw = await readBody(req);
-    req.body = raw.length ? JSON.parse(raw.toString('utf8')) : {};
+    setJsonBody(req, raw);
     const body = jsonBody<{
       action: "extract" | "save" | "replace" | "delete";
       fileName?: string;

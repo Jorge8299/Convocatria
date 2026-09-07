@@ -1,4 +1,4 @@
-import { ApiRequest, ApiResponse, ClubRole, fail, FootballStage, getSession, getSql, hashPin, jsonBody, mapAccount, methodNotAllowed, publicAccount, readBody, TrainingYear } from './_lib/server.js';
+import { ApiRequest, ApiResponse, ClubRole, fail, FootballStage, getSession, getSql, hashPin, jsonBody, mapAccount, methodNotAllowed, publicAccount, readBody, setJsonBody, TrainingYear } from './_lib/server.js';
 
 const footballStages: FootballStage[] = ['querubin', 'prebenjamin', 'benjamin', 'alevin'];
 const trainingYears: TrainingYear[] = ['primero', 'segundo', 'mixto'];
@@ -14,7 +14,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return;
     }
     const raw = await readBody(req);
-    req.body = raw.length ? JSON.parse(raw.toString('utf8')) : {};
+    setJsonBody(req, raw);
     const sql = getSql();
     const allowedRoles: ClubRole[] = session.role === 'superadmin'
       ? ['entrenador', 'coordinador', 'admin']
