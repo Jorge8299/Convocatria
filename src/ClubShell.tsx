@@ -2,6 +2,8 @@ import { ClubContext, useClub } from './ClubContext';
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { ClubsPanel } from './ClubsPanel';
 import { EconomyPanel } from './EconomyPanel';
+import { EnrollmentPanel } from './EnrollmentPanel';
+import { AdminNavigation, AdminOverview, type AdminSection } from './AdminWorkspace';
 import {
   BarChart3,
   Calendar,
@@ -375,6 +377,7 @@ export default function ClubShell() {
       <>
         {impersonationBanner}
         <AdminPanel
+          canPreviewEconomy={bootstrap.impersonator?.role === "superadmin"}
           account={session}
           accounts={accounts}
           stores={bootstrap.stores || []}
@@ -629,6 +632,7 @@ function LoginScreen({
 function AdminPanel({
   account,
   platformMode = false,
+  canPreviewEconomy = false,
   accounts,
   stores,
   auditLogs = [],
@@ -639,6 +643,7 @@ function AdminPanel({
 }: {
   account: ClubAccount;
   platformMode?: boolean;
+  canPreviewEconomy?: boolean;
   accounts: ClubAccount[];
   stores: StoreRow[];
   auditLogs?: LoginAuditEntry[];
@@ -648,6 +653,7 @@ function AdminPanel({
   onLogout: () => void;
 }) {
   const club = useClub();
+  const [adminSection, setAdminSection] = useState<AdminSection>('home');
   const [superadminSection, setSuperadminSection] = useState<'overview'|'clubs'|'access'|'security'|'status'|'tools'|'economy'>('overview');
   const [draft, setDraft] = useState({
     name: "",
@@ -992,13 +998,14 @@ function AdminPanel({
     }
   };
   return (
-    <div className="role-shell">
+    <div className={platformMode ? "role-shell" : "role-shell admin-workspace"}>
       <LocalDemoBanner />
-      <RoleHeader
+      {platformMode && <RoleHeader
         title={platformMode ? "Superadministración" : "Administración"}
         subtitle={platformMode ? "Control total de la aplicación" : club?.nombre || "Club"}
         onLogout={onLogout}
-      />
+      />}
+      {!platformMode && <AdminNavigation section={adminSection} onSection={setAdminSection} canPreviewEconomy={true} account={account} onLogout={onLogout}/>}
       {platformMode && <nav className="superadmin-nav" aria-label="Navegación de superadmin">
         <button className={superadminSection==='economy'?'active':''} onClick={()=>setSuperadminSection('economy')}>Gestión económica</button>
         <button className={superadminSection==='overview'?'active':''} onClick={()=>setSuperadminSection('overview')}>Resumen</button>
@@ -1008,8 +1015,10 @@ function AdminPanel({
         <button className={superadminSection==='status'?'active':''} onClick={()=>setSuperadminSection('status')}>Estado de la plataforma</button>
         <button className={superadminSection==='tools'?'active':''} onClick={()=>setSuperadminSection('tools')}>Herramientas técnicas</button>
       </nav>}
-      <main className="role-content admin-content">
+      <main id="admin-main" className="role-content admin-content">
+        {!platformMode && adminSection === 'home' && <AdminOverview accounts={accounts} playerCount={coaches.reduce((count, coach) => count + getStored<StoredTeam>(stores, coach.id, "team", {name: "", season: "", players: []}).players.length, 0)} onSection={setAdminSection} onTeam={id => {selectOverviewCoach(id); setAdminSection('teams');}}/>}
         {platformMode && superadminSection==='economy' && <EconomyPanel global />}
+        {!platformMode && adminSection === 'economy' && <EconomyPanel global={false}/>}
         {platformMode && superadminSection==='clubs' && <ClubsPanel onChanged={onRefresh} />}
         {platformMode && superadminSection==='overview' && (
           <section id="superadmin-resumen" className="superadmin-intro">
@@ -1068,7 +1077,7 @@ function AdminPanel({
             <div className="superadmin-coming-soon"><button disabled>Salud del sistema</button><button disabled>Registro de errores</button><button disabled>Notificaciones del sistema</button></div>
           </section>
         )}
-        {!platformMode && <>
+        {!platformMode && adminSection === 'access' && <>
         <section className="form-card admin-create-section">
           <div className="form-card-header">
             <div>
@@ -1080,6 +1089,7 @@ function AdminPanel({
           </div>
           <div className="form-card-body admin-create-grid">
             <input
+              aria-label="Nombre y apellidos"
               placeholder="Nombre y apellidos"
               value={draft.name}
               onChange={(event) =>
@@ -1090,6 +1100,7 @@ function AdminPanel({
               }
             />
             <select
+              aria-label="Tipo de acceso"
               value={draft.role}
               onChange={(event) =>
                 setDraft((current) => ({
@@ -1153,6 +1164,7 @@ function AdminPanel({
               inputMode="numeric"
               maxLength={4}
               placeholder="PIN · 4 números"
+              aria-label="PIN inicial de cuatro números"
               value={draft.pin}
               onChange={(event) =>
                 setDraft((current) => ({
@@ -1169,7 +1181,8 @@ function AdminPanel({
             </button>
           </div>
         </section>
-        <section className="team-overview-card">
+        </>}
+        {!platformMode && adminSection === 'teams' && <section className="team-overview-card">
           <div className="team-overview-heading">
             <div>
               <span className="eyebrow">DATOS DE LOS EQUIPOS</span>
@@ -1305,6 +1318,8 @@ function AdminPanel({
             </div>
           )}
         </section>
+        }
+        {!platformMode && adminSection === 'rivals' && <>
         <section className="calendar-import-card">
           <div className="calendar-import-heading">
             <span className="calendar-import-icon">
@@ -1501,7 +1516,7 @@ function AdminPanel({
           )}
         </section>
         </>}
-        {!IS_LOCAL_DEMO &&
+        {(platformMode ? superadminSection === 'tools' : adminSection === 'access') && !IS_LOCAL_DEMO &&
           accounts.filter((item) => !["admin", "superadmin"].includes(item.role)).length === 0 &&
           legacySnapshot.accounts.length > 1 && (
             <section className="cloud-migration">
@@ -1531,11 +1546,11 @@ function AdminPanel({
             </section>
           )}
         {message && (
-          <div className="admin-message">
+          <div className="admin-message" role="status">
             <Check size={16} /> {message}
           </div>
         )}
-        {(!platformMode || superadminSection==='access') && <section className="admin-accounts-section">
+        {((!platformMode && adminSection === 'access') || (platformMode && superadminSection==='access')) && <section className="admin-accounts-section">
           <div className="section-heading">
             <span className="eyebrow">{platformMode ? 'ADMINISTRADORES Y ACCESOS' : 'GESTIÓN DEL CLUB'}</span>
             <h2>
@@ -2259,6 +2274,7 @@ function CoordinatorPanel({
         onLogout={onLogout}
       />
       <main className="role-content coordinator-content">
+        <details className="enrollment-coordinator"><summary>Inscripciones · Jugadores pendientes de equipo</summary><EnrollmentPanel assignmentsOnly onAssigned={onRefresh}/></details>
         <section className="hero-card quote-card coordinator-quote">
           <div className="quote-copy">
             <span className="hero-label">FRASE DEL DÍA · COORDINACIÓN</span>

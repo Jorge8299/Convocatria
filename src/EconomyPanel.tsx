@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
 import './economy.css';
+import { EnrollmentPanel } from './EnrollmentPanel';
 
 type Data={settings:{scope:string;rate:number}[];clubs:{id:string;nombre:string}[];campaigns:{id:string;name:string;club_name:string;total_cents:number;fee_bps:number;installments:{date:string;amount:number}[]}[]};
 const euros=(c:number)=>new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(c/100);
 const cents=(s:string)=>Math.round(Number(s)*100);
 async function request(body?:unknown,previewClub?:string):Promise<Data>{const r=await fetch('/api/clubs?section=economy'+(previewClub?'&previewClub='+encodeURIComponent(previewClub):''),{method:body?'POST':'GET',credentials:'include',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error||'No se pudo guardar.');return data}
-export function EconomyPanel({global,previewClub}:{global:boolean;previewClub?:string}){
+export function EconomyPanel(props:{global:boolean;previewClub?:string}){
+ return props.global ? <LegacyEconomyPanel {...props}/> : <EnrollmentPanel clubId={props.previewClub}/>;
+}
+function LegacyEconomyPanel({global,previewClub}:{global:boolean;previewClub?:string}){
  const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
  const [campaignClub,setCampaignClub]=useState('');
  const [scope,setScope]=useState('global'),[rate,setRate]=useState('3'),[total,setTotal]=useState('340'),[vat,setVat]=useState('21'),[processor,setProcessor]=useState('0'),[fixed,setFixed]=useState('0');

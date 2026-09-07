@@ -91,9 +91,16 @@ export async function ensureSchema() {
   )`;
   await sql`CREATE INDEX IF NOT EXISTS club_login_audit_logged_at_idx ON club_login_audit (logged_at DESC)`;
   await ensureClubSchema(sql);
-  await sql`INSERT INTO club_accounts (id,name,role,team_label,pin_hash,active,club_id)
-    VALUES ('superadmin','Administrador','admin','Administración','c647f0ac',TRUE,'ud-oliva')
-    ON CONFLICT (id) DO UPDATE SET role='admin'`;
+  // Seed the legacy administrator once, never recreate it after permanent club deletion.
+  await sql.transaction([
+    sql`SELECT pg_advisory_xact_lock(718204)`,
+    sql`INSERT INTO club_accounts (id,name,role,team_label,pin_hash,active,club_id)
+      SELECT 'superadmin','Administrador','admin','Administración','c647f0ac',TRUE,'ud-oliva'
+      WHERE EXISTS (SELECT 1 FROM clubs WHERE id='ud-oliva')
+      AND NOT EXISTS (SELECT 1 FROM convo_migrations WHERE id='legacy-admin-seed-v1')
+      ON CONFLICT (id) DO UPDATE SET role='admin'`,
+    sql`INSERT INTO convo_migrations(id) VALUES('legacy-admin-seed-v1') ON CONFLICT DO NOTHING`,
+  ]);
   await sql`INSERT INTO club_accounts (id,name,role,team_label,pin_hash,active)
     VALUES ('platform-superadmin','Superadmin','superadmin','Control de la aplicación','f14e4628',TRUE)
     ON CONFLICT (id) DO UPDATE SET role='superadmin',pin_hash=EXCLUDED.pin_hash,active=TRUE`;
