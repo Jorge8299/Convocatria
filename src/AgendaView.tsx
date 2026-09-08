@@ -410,7 +410,7 @@ export function AgendaView({
     (!trainingSession.gameMoment || (OBJECTIVES[trainingSession.gameMoment] || []).includes(exercise.objective)) &&
     (!trainingSession.objective || exercise.objective === trainingSession.objective) &&
     (!trainingSession.taskType || exercise.taskType === trainingSession.taskType) &&
-    (!footballStage || exercise.stages.includes(footballStage === "querubin" ? "prebenjamin" : footballStage)) &&
+    (!footballStage || exercise.stages.includes(footballStage === "querubin" ? "prebenjamin" : footballStage === "infantil" || footballStage === "cadete" || footballStage === "juvenil" ? "alevin" : footballStage)) &&
     exercise.materials.every((material) => trainingSession.materials.includes(material)),
   ).sort((first, second) => exercisePlayerDistance(first, trainingSession.playerCount) - exercisePlayerDistance(second, trainingSession.playerCount)) : [];
   const plannedExercise = (exercise: Exercise): PlannedExercise => ({

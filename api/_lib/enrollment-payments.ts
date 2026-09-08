@@ -4,12 +4,15 @@ import { getSql } from './server.js';
 export function providerStatus(clubId:string) {
   let account='';try{account=JSON.parse(process.env.STRIPE_CLUB_ACCOUNTS||'{}')[clubId]||''}catch{}
   const origin=process.env.APP_ORIGIN||'';
-  const payments=Boolean(process.env.STRIPE_SECRET_KEY&&process.env.STRIPE_WEBHOOK_SECRET&&/^acct_[a-zA-Z0-9]+$/.test(account)&&/^https:\/\/[^/]+$/.test(origin));
+  const accountOk=account===''||/^acct_[a-zA-Z0-9]+$/.test(account);
+  const payments=Boolean(process.env.STRIPE_SECRET_KEY&&accountOk&&/^https:\/\/[^/]+$/.test(origin));
   const email=Boolean(process.env.RESEND_API_KEY&&process.env.ENROLLMENT_FROM_EMAIL);
-  return {payments,email,ready:payments&&email,account,origin};
+  return {payments,email,ready:payments,account,origin};
 }
 async function stripe(path:string,account:string,body?:URLSearchParams,key?:string) {
-  const response=await fetch(`https://api.stripe.com/v1/${path}`,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${process.env.STRIPE_SECRET_KEY}`,'Stripe-Account':account,...(body?{'Content-Type':'application/x-www-form-urlencoded','Idempotency-Key':key!}:{})},body,signal:AbortSignal.timeout(15000)});
+  const headers:Record<string,string>={Authorization:`Bearer ${process.env.STRIPE_SECRET_KEY}`,...(body?{'Content-Type':'application/x-www-form-urlencoded','Idempotency-Key':key!}:{})};
+  if(account)headers['Stripe-Account']=account;
+  const response=await fetch(`https://api.stripe.com/v1/${path}`,{method:body?'POST':'GET',headers,...(body?{body}:{}),signal:AbortSignal.timeout(15000)});
   const result=await response.json();if(!response.ok)throw new Error('La pasarela no está disponible. Inténtalo de nuevo más tarde.');return result;
 }
 export async function checkout(token:string) {
@@ -17,7 +20,7 @@ export async function checkout(token:string) {
   const due=(await sql`SELECT d.*,e.club_id,e.email,c.name FROM enrollment_dues d JOIN enrollments e ON e.id=d.enrollment_id JOIN enrollment_campaigns c ON c.id=e.campaign_id JOIN clubs cl ON cl.id=e.club_id WHERE d.token=${token} AND cl.activo=TRUE`)[0];
   if(!due)throw new Error('Enlace de pago no válido.');
   if(due.paid_at)return {paid:true};
-  const config=providerStatus(due.club_id);if(!config.ready)throw new Error('El club todavía no ha activado los pagos y los recibos.');
+  const config=providerStatus(due.club_id);if(!config.payments)throw new Error('El club todavía no ha activado la pasarela de pago.');
   // Reuse a live session: repeated clicks must not open independent charges.
   if(due.stripe_session){
     const existing=await stripe(`checkout/sessions/${encodeURIComponent(due.stripe_session)}`,due.stripe_account);
@@ -50,7 +53,7 @@ export async function confirmPayment(session:any,account:string,sql=getSql()) {
     sql`UPDATE enrollment_dues SET paid_at=COALESCE(paid_at,NOW()) WHERE id=${id} AND stripe_session=${session.id} AND stripe_account=${account} AND amount_cents=${session.amount_total} RETURNING enrollment_id`,
     sql`UPDATE enrollments e SET confirmed_at=COALESCE(confirmed_at,NOW()) WHERE EXISTS(SELECT 1 FROM enrollment_dues d WHERE d.enrollment_id=e.id AND d.id=${id} AND d.stripe_session=${session.id} AND d.stripe_account=${account} AND d.amount_cents=${session.amount_total} AND d.paid_at IS NOT NULL AND d.ordinal=1)`,
   ]);
-  if(results[0].length)await sendReceipt(id,sql);
+  if(results[0].length){try{await sendReceipt(id,sql)}catch{}}
 }
 const escapeHtml=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 export async function sendEmail(to:string,subject:string,html:string,key:string) {

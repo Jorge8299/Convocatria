@@ -3,19 +3,26 @@ import { test } from 'node:test';
 import { createHmac } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 import { classifyBirth, defaultCategories, validateCampaign, validateRegistration } from '../src/enrollment.ts';
+import { football8Stages, football11Stages, stagesInScope } from '../src/clubTypes.ts';
 import { verifyStripeEvent, confirmPayment, providerStatus } from '../api/_lib/enrollment-payments.ts';
 import { ensureEnrollmentSchema } from '../api/_lib/enrollment-schema.ts';
-import { assignEnrollment } from '../api/_lib/enrollment-api.ts';
+import { assignEnrollment, removeRegistrationPlayer } from '../api/_lib/enrollment-api.ts';
 
 test('category boundaries, invalid births and campaign validation',()=>{
   const categories=defaultCategories(2026);
+  assert.equal(categories.length,7);
   assert.equal(classifyBirth('2019-12-31',categories),'prebenjamin');
   assert.equal(classifyBirth('2018-01-01',categories),'benjamin');
   assert.equal(classifyBirth('2016-12-31',categories),'alevin');
+  assert.equal(classifyBirth('2014-06-01',categories),'infantil');
+  assert.equal(classifyBirth('2011-02-11',categories),'cadete');
+  assert.equal(classifyBirth('2009-08-08',categories),'juvenil');
   assert.equal(classifyBirth('2018-02-30',categories),null);
-  assert.equal(classifyBirth('2000-01-01',categories),null);
+  assert.equal(classifyBirth('2008-01-01',categories),null);
   const campaign={name:'Temporada',year:2026,total:34000,parts:[{date:'2026-09-01',amount:17000},{date:'2026-10-01',amount:17000}],categories,terms:'Condiciones de inscripción y contacto del club para los datos.'};
   validateCampaign(campaign);
+  validateCampaign({...campaign,payment_required:false});
+  assert.throws(()=>validateCampaign({...campaign,payment_required:'no'}),/pago/);
   assert.throws(()=>validateCampaign({...campaign,total:33000}),/sumar/);
   assert.throws(()=>validateCampaign({...campaign,categories:categories.map((r,i)=>i===1?{...r,from:2016}:r)}),/solaparse/);
   const registration={child_name:'Jugador de prueba',birth_date:'2018-01-01',guardian_name:'Tutor de prueba',email:'tutor@example.test',phone:'+34 600000000',consent:true,mode:'parts'};
@@ -23,6 +30,13 @@ test('category boundaries, invalid births and campaign validation',()=>{
   assert.throws(()=>validateRegistration({...registration,consent:false},categories));
   assert.throws(()=>validateRegistration({...registration,email:'invalid'},categories));
   assert.equal(providerStatus('unconfigured-test-club').ready,false);
+});
+
+test('coordinator scope maps to football stages',()=>{
+  assert.deepEqual(stagesInScope('f8'),football8Stages);
+  assert.deepEqual(stagesInScope('f11'),football11Stages);
+  assert.equal(stagesInScope('all'),null);
+  assert.equal(stagesInScope(null),null);
 });
 
 test('payment signatures reject tampering, stale events and malformed headers',()=>{
@@ -70,6 +84,17 @@ test('PostgreSQL: verified first payment activates registration; assignment pres
     const team=(await db.query<any>("SELECT data FROM club_stores WHERE account_id='coach'")).rows[0].data;
     assert.equal(team.name,'Existing team');assert.equal(team.players.length,2);assert.equal(team.players[0].id,'existing');assert.equal(team.players[1].id,'child');
     assert.equal(team.players[1].ownerCoachId,'coach');assert.equal(team.players[1].birthDate,'2018-01-01');
+    assert.equal((await db.query<any>("SELECT payment_required FROM enrollment_campaigns WHERE id='campaign'")).rows[0].payment_required,true);
+    await db.exec(`INSERT INTO enrollment_campaigns(id,club_id,name,season_year,total_cents,parts,categories,terms,payment_required,published) VALUES('campaign-free','club','Free season',2026,34000,'[]','[]','terms',false,true);
+      INSERT INTO enrollments(id,club_id,campaign_id,child_name,birth_date,category,guardian_name,email,phone,payment_mode,terms_snapshot,duplicate_key,confirmed_at) VALUES('child-free','club','campaign-free','Free player','2018-06-01','benjamin','Guardian Free','free@example.test','660000000','full','terms','free-key',NOW());`);
+    await assignEnrollment('club','child-free','coach',sql);
+    assert.equal((await db.query<any>("SELECT data->'players' AS players FROM club_stores WHERE account_id='coach'")).rows[0].players.length,3);
+    await removeRegistrationPlayer('club','coach','child-free',sql);
+    assert.equal((await db.query<any>("SELECT data->'players' AS players FROM club_stores WHERE account_id='coach'")).rows[0].players.length,2);
+    assert.equal((await db.query<any>("SELECT data->'players' AS players FROM club_stores WHERE account_id='coach'")).rows[0].players.some((p:any)=>p.id==='child'&&p.name==='New player'),true);
+    const deleted=(await db.query<any>("DELETE FROM enrollment_campaigns WHERE id='campaign-free' RETURNING id")).rows;
+    assert.equal(deleted.length,1);
+    assert.equal((await db.query<any>("SELECT * FROM enrollments WHERE id='child-free'")).rows.length,0);
     await db.exec("DELETE FROM club_stores; DELETE FROM club_accounts; DELETE FROM clubs WHERE id='club'");
     assert.equal((await db.query('SELECT * FROM enrollments')).rows.length,0);assert.equal((await db.query('SELECT * FROM enrollment_dues')).rows.length,0);
   }finally{await db.close()}

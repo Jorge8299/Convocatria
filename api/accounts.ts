@@ -1,7 +1,7 @@
-import { ApiRequest, ApiResponse, ClubRole, fail, FootballStage, getSession, getSql, hashPin, jsonBody, mapAccount, methodNotAllowed, publicAccount, readBody, setJsonBody, TrainingYear } from './_lib/server.js';
+import { ApiRequest, ApiResponse, ClubRole, CoordinatorScope, fail, FootballStage, getSession, getSql, hashPin, jsonBody, mapAccount, methodNotAllowed, publicAccount, readBody, setJsonBody, TrainingYear, footballStages } from './_lib/server.js';
 
-const footballStages: FootballStage[] = ['querubin', 'prebenjamin', 'benjamin', 'alevin'];
 const trainingYears: TrainingYear[] = ['primero', 'segundo', 'mixto'];
+const coordinatorScopes: CoordinatorScope[] = ['f8', 'f11', 'all'];
 type ManagedRole = 'entrenador' | 'coordinador' | 'admin';
 
 export const config = { api: { bodyParser: false } };
@@ -21,7 +21,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       : ['entrenador', 'coordinador'];
 
     if (req.method === 'POST') {
-      const body = jsonBody<{ name: string; role: ManagedRole; teamLabel?: string; footballStage?: FootballStage | null; trainingYear?: TrainingYear | null; pin: string }>(req);
+      const body = jsonBody<{ name: string; role: ManagedRole; teamLabel?: string; footballStage?: FootballStage | null; trainingYear?: TrainingYear | null; scope?: CoordinatorScope | null; pin: string }>(req);
       if (!body.name?.trim() || !/^\d{4}$/.test(body.pin) || !allowedRoles.includes(body.role)) {
         res.status(400).json({ error: 'Datos incompletos.' });
         return;
@@ -35,13 +35,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         : body.role === 'admin' ? 'Administración' : 'Coordinación';
       const footballStage = body.role === 'entrenador' && body.footballStage && footballStages.includes(body.footballStage) ? body.footballStage : null;
       const trainingYear = body.role === 'entrenador' && body.trainingYear && trainingYears.includes(body.trainingYear) ? body.trainingYear : null;
+      const scope = body.role === 'coordinador' && body.scope && coordinatorScopes.includes(body.scope) ? body.scope : null;
       if (body.role === 'entrenador' && (!teamLabel || !footballStage || !trainingYear)) {
         res.status(400).json({ error: 'Indica el equipo, la etapa y el año del entrenador.' });
         return;
       }
-      await sql`INSERT INTO club_accounts (id,name,role,team_label,football_stage,training_year,pin_hash,club_id) VALUES (${id},${body.name.trim()},${body.role},${teamLabel},${footballStage},${trainingYear},${hashPin(body.pin)},${clubId})`;
+      await sql`INSERT INTO club_accounts (id,name,role,team_label,football_stage,training_year,scope,pin_hash,club_id) VALUES (${id},${body.name.trim()},${body.role},${teamLabel},${footballStage},${trainingYear},${scope},${hashPin(body.pin)},${clubId})`;
     } else if (req.method === 'PATCH') {
-      const body = jsonBody<{ id: string; name?: string; role?: ManagedRole; teamLabel?: string; footballStage?: FootballStage | null; trainingYear?: TrainingYear | null; pin?: string; active?: boolean }>(req);
+      const body = jsonBody<{ id: string; name?: string; role?: ManagedRole; teamLabel?: string; footballStage?: FootballStage | null; trainingYear?: TrainingYear | null; scope?: CoordinatorScope | null; pin?: string; active?: boolean }>(req);
       const targetRows = body.id ? await sql`SELECT * FROM club_accounts WHERE id=${body.id} LIMIT 1` : [];
       const target = targetRows[0] ? mapAccount(targetRows[0]) : null;
       const canManage = target && (session.role === 'superadmin' || target.club_id === session.club_id) && target.role !== 'superadmin' && (session.role === 'superadmin' || ['entrenador', 'coordinador'].includes(target.role));
@@ -49,7 +50,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         res.status(400).json({ error: 'Usuario no válido.' });
         return;
       }
-      if (body.name !== undefined || body.role !== undefined || body.teamLabel !== undefined || body.footballStage !== undefined || body.trainingYear !== undefined) {
+      if (body.name !== undefined || body.role !== undefined || body.teamLabel !== undefined || body.footballStage !== undefined || body.trainingYear !== undefined || body.scope !== undefined) {
         if (!body.name?.trim() || !body.role || !allowedRoles.includes(body.role)) {
           res.status(400).json({ error: 'Nombre o tipo de acceso no válido.' });
           return;
@@ -59,11 +60,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           : body.role === 'admin' ? 'Administración' : 'Coordinación';
         const footballStage = body.role === 'entrenador' && body.footballStage && footballStages.includes(body.footballStage) ? body.footballStage : null;
         const trainingYear = body.role === 'entrenador' && body.trainingYear && trainingYears.includes(body.trainingYear) ? body.trainingYear : null;
+        const scope = body.role === 'coordinador' && body.scope && coordinatorScopes.includes(body.scope) ? body.scope : null;
         if (body.role === 'entrenador' && (!teamLabel || !footballStage || !trainingYear)) {
           res.status(400).json({ error: 'Indica el equipo, la etapa y el año del entrenador.' });
           return;
         }
-        await sql`UPDATE club_accounts SET name=${body.name.trim()},role=${body.role},team_label=${teamLabel},football_stage=${footballStage},training_year=${trainingYear} WHERE id=${body.id}`;
+        await sql`UPDATE club_accounts SET name=${body.name.trim()},role=${body.role},team_label=${teamLabel},football_stage=${footballStage},training_year=${trainingYear},scope=${scope} WHERE id=${body.id}`;
       }
       if (body.pin !== undefined) {
         if (!/^\d{4}$/.test(body.pin)) {

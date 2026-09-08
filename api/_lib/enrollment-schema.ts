@@ -4,7 +4,9 @@ export async function ensureEnrollmentSchema(sql:ReturnType<typeof getSql>) {
     id TEXT PRIMARY KEY,club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
     name TEXT NOT NULL,season_year INTEGER NOT NULL,total_cents INTEGER NOT NULL CHECK(total_cents>=50),
     parts JSONB NOT NULL,categories JSONB NOT NULL,terms TEXT NOT NULL,
+    payment_required BOOLEAN NOT NULL DEFAULT TRUE,
     published BOOLEAN NOT NULL DEFAULT FALSE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`;
+  await sql`ALTER TABLE enrollment_campaigns ADD COLUMN IF NOT EXISTS payment_required BOOLEAN NOT NULL DEFAULT TRUE`;
   await sql`CREATE TABLE IF NOT EXISTS enrollments (
     id TEXT PRIMARY KEY,club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
     campaign_id TEXT NOT NULL REFERENCES enrollment_campaigns(id) ON DELETE CASCADE,

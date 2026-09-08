@@ -1,4 +1,4 @@
-import type { ClubAccount, FootballStage, TrainingYear } from "./clubTypes";
+import type { ClubAccount, CoordinatorScope, FootballStage, TrainingYear } from "./clubTypes";
 import { INITIAL_CLUB, OLIVA_CLUB_ID, slugifyClub, validClubEdit, type Club } from './clubs';
 import { prepareBoard, validBoard, type TacticalBoard } from './tactical/model';
 
@@ -89,6 +89,7 @@ const localSeedAccounts = (): LocalAccount[] => [
     teamLabel: "Administración",
     footballStage: null,
     trainingYear: null,
+    scope: null,
     active: true,
     createdAt: new Date().toISOString(),
     pin: "1946",
@@ -100,6 +101,7 @@ const localSeedAccounts = (): LocalAccount[] => [
     teamLabel: "Control de la aplicación",
     footballStage: null,
     trainingYear: null,
+    scope: null,
     active: true,
     createdAt: new Date().toISOString(),
     pin: SUPERADMIN_PIN,
@@ -111,6 +113,7 @@ const localSeedAccounts = (): LocalAccount[] => [
     teamLabel: "Benjamín A",
     footballStage: "benjamin",
     trainingYear: "segundo",
+    scope: null,
     active: true,
     createdAt: new Date().toISOString(),
     pin: "1111",
@@ -137,6 +140,12 @@ function readLocalAccounts(): LocalAccount[] {
       superadmin.pin = SUPERADMIN_PIN;
       superadmin.role = "superadmin";
       changed = true;
+    }
+    for (const account of accounts) {
+      if (account.scope === undefined) {
+        account.scope = null;
+        changed = true;
+      }
     }
     if (changed) localStorage.setItem(LOCAL_ACCOUNTS_KEY, JSON.stringify(accounts));
     return accounts;
@@ -253,7 +262,7 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
       const slug=slugifyClub(String(body.nombre || ''));
       if(!slug || clubs.some(c=>c.slug===slug) || !validClubEdit(body) || !/^\d{4}$/.test(String(body.admin_pin || ''))) throw new Error('Revisa los datos del club y el administrador.');
       const now=new Date().toISOString(); const created={id:slug,nombre:String(body.nombre).trim(),slug,logo:String(body.logo),color_principal:String(body.color_principal),activo:true,created_at:now,updated_at:now};
-      clubs.push(created); accounts.push({id:crypto.randomUUID(),club_id:slug,name:String(body.admin_name),role:'admin',teamLabel:'Administración',footballStage:null,trainingYear:null,pin:String(body.admin_pin),active:true,createdAt:now});
+      clubs.push(created); accounts.push({id:crypto.randomUUID(),club_id:slug,name:String(body.admin_name),role:'admin',teamLabel:'Administración',footballStage:null,trainingYear:null,scope:null,pin:String(body.admin_pin),active:true,createdAt:now});
       localStorage.setItem('convo_clubs_v1',JSON.stringify(clubs)); localStorage.setItem(LOCAL_ACCOUNTS_KEY,JSON.stringify(accounts));
       return {club:created,admin:{name:body.admin_name},access_path:`/${slug}`} as T;
     }
@@ -310,6 +319,7 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
       teamLabel: body.role === "admin" ? "Administración" : String(body.teamLabel || ""),
       footballStage: (body.footballStage || null) as ClubAccount["footballStage"],
       trainingYear: (body.trainingYear || null) as ClubAccount["trainingYear"],
+      scope: (body.scope || null) as ClubAccount["scope"],
       active: true,
       createdAt: now,
       pin: String(body.pin || ""),
@@ -327,6 +337,9 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
               : {}),
             ...(body.trainingYear !== undefined
               ? { trainingYear: body.trainingYear as ClubAccount["trainingYear"] }
+              : {}),
+            ...(body.scope !== undefined
+              ? { scope: body.scope as ClubAccount["scope"] }
               : {}),
             ...(body.pin !== undefined ? { pin: String(body.pin) } : {}),
             ...(body.active !== undefined ? { active: Boolean(body.active) } : {}),
@@ -616,6 +629,7 @@ export const clubApi = {
     teamLabel: string;
     footballStage: FootballStage | null;
     trainingYear: TrainingYear | null;
+    scope: CoordinatorScope | null;
     pin: string;
   }) =>
     request<{ accounts: ClubAccount[] }>("/api/accounts", {
@@ -629,6 +643,7 @@ export const clubApi = {
     teamLabel?: string;
     footballStage?: FootballStage | null;
     trainingYear?: TrainingYear | null;
+    scope?: CoordinatorScope | null;
     pin?: string;
     active?: boolean;
   }) =>

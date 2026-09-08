@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { getSql, jsonBody, type ApiRequest, type ApiResponse, type AccountRow } from './server.js';
+import { getSql, jsonBody, stagesInScope, type ApiRequest, type ApiResponse, type AccountRow } from './server.js';
 import { ensureEnrollmentSchema } from './enrollment-schema.js';
 import { validateCampaign, validateRegistration } from '../../src/enrollment.js';
 import { checkout, providerStatus, paymentEmail, sendEmail, sendReceipt } from './enrollment-payments.js';
@@ -13,8 +13,8 @@ export async function enrollmentApi(req:ApiRequest,res:ApiResponse,session:Accou
       if(req.method==='GET'){
         const club=(await sql`SELECT id,nombre,logo,color_principal FROM clubs WHERE slug=${String(query.club||'')} AND activo=TRUE`)[0];
         if(!club){res.status(404).json({error:'Club no encontrado.'});return}
-        const campaigns=await sql`SELECT id,name,season_year,total_cents,parts,categories,terms FROM enrollment_campaigns WHERE club_id=${club.id} AND published=TRUE ORDER BY created_at DESC`;
-        res.status(200).json({club,campaigns,ready:providerStatus(club.id).ready});return;
+        const campaigns=await sql`SELECT id,name,season_year,total_cents,parts,categories,terms,payment_required FROM enrollment_campaigns WHERE club_id=${club.id} AND published=TRUE ORDER BY created_at DESC`;
+        res.status(200).json({club,campaigns,ready:providerStatus(club.id).ready||campaigns.some(c=>c.payment_required===false)});return;
       }
       if(req.method!=='POST'){res.status(405).json({error:'Método no permitido.'});return}
       // Persist the throttle across serverless invocations, without logging personal form data.
@@ -27,17 +27,23 @@ export async function enrollmentApi(req:ApiRequest,res:ApiResponse,session:Accou
         res.status(200).json(await checkout(body.token));return;
       }
       if(body.action==='payment-info'){
-        const due=(await sql`SELECT d.amount_cents,d.due_date,d.ordinal,d.paid_at,cl.nombre FROM enrollment_dues d JOIN enrollments e ON e.id=d.enrollment_id JOIN clubs cl ON cl.id=e.club_id WHERE d.token=${String(body.token||'')} AND cl.activo=TRUE`)[0];
-        if(!due)throw new Error('Enlace no válido.');res.status(200).json({due});return;
+        const due=(await sql`SELECT d.amount_cents,d.due_date,d.ordinal,d.paid_at,cl.nombre,e.club_id FROM enrollment_dues d JOIN enrollments e ON e.id=d.enrollment_id JOIN clubs cl ON cl.id=e.club_id WHERE d.token=${String(body.token||'')} AND cl.activo=TRUE`)[0];
+        if(!due)throw new Error('Enlace no válido.');res.status(200).json({due,email:providerStatus(due.club_id).email});return;
       }
       if(body.action!=='register')throw new Error('Operación no válida.');
       const campaign=(await sql`SELECT c.* FROM enrollment_campaigns c JOIN clubs cl ON cl.id=c.club_id WHERE c.id=${String(body.campaign||'')} AND c.published=TRUE AND cl.activo=TRUE`)[0];
       if(!campaign)throw new Error('La inscripción no está abierta.');
-      if(!providerStatus(campaign.club_id).ready)throw new Error('El club todavía no ha activado los pagos y los recibos.');
+      const noPayment=campaign.payment_required===false;
+      if(!noPayment&&!providerStatus(campaign.club_id).payments)throw new Error('El club todavía no ha activado la pasarela de pago.');
       const category=validateRegistration(body,campaign.categories);
       const duplicate=createHash('sha256').update([campaign.id,body.child_name.trim().toLowerCase().replace(/\s+/g,' '),body.birth_date,body.email.trim().toLowerCase()].join('|')).digest('hex');
       if((await sql`SELECT id FROM enrollments WHERE duplicate_key=${duplicate}`).length)throw new Error('Ya existe una solicitud con estos datos. Contacta con el club para recuperar el enlace de pago.');
-      const id=randomUUID();const firstToken=randomBytes(32).toString('base64url');
+      const id=randomUUID();
+      if(noPayment){
+        await sql`INSERT INTO enrollments(id,club_id,campaign_id,child_name,birth_date,category,guardian_name,email,phone,payment_mode,terms_snapshot,duplicate_key,confirmed_at) VALUES(${id},${campaign.club_id},${campaign.id},${body.child_name.trim()},${body.birth_date},${category},${body.guardian_name.trim()},${body.email.trim().toLowerCase()},${body.phone.trim()},${body.mode},${campaign.terms},${duplicate},NOW())`;
+        res.status(201).json({ok:true});return;
+      }
+      const firstToken=randomBytes(32).toString('base64url');
       const parts=body.mode==='full'?[{amount:campaign.total_cents,date:campaign.parts[0].date}]:campaign.parts;
       await sql.transaction([
         sql`INSERT INTO enrollments(id,club_id,campaign_id,child_name,birth_date,category,guardian_name,email,phone,payment_mode,terms_snapshot,duplicate_key) VALUES(${id},${campaign.club_id},${campaign.id},${body.child_name.trim()},${body.birth_date},${category},${body.guardian_name.trim()},${body.email.trim().toLowerCase()},${body.phone.trim()},${body.mode},${campaign.terms},${duplicate})`,
@@ -54,14 +60,25 @@ export async function enrollmentApi(req:ApiRequest,res:ApiResponse,session:Accou
       if(session.role==='coordinador'&&body.action!=='assign'){res.status(403).json({error:'Solo administración puede gestionar cuotas.'});return}
       if(body.action==='create-campaign'){
         validateCampaign(body);
-        await sql`INSERT INTO enrollment_campaigns(id,club_id,name,season_year,total_cents,parts,categories,terms) VALUES(${randomUUID()},${clubId},${body.name.trim()},${body.year},${body.total},${JSON.stringify(body.parts)}::jsonb,${JSON.stringify(body.categories)}::jsonb,${body.terms.trim()})`;
+        await sql`INSERT INTO enrollment_campaigns(id,club_id,name,season_year,total_cents,parts,categories,terms,payment_required) VALUES(${randomUUID()},${clubId},${body.name.trim()},${body.year},${body.total},${JSON.stringify(body.parts)}::jsonb,${JSON.stringify(body.categories)}::jsonb,${body.terms.trim()},${body.payment_required!==false})`;
       }else if(body.action==='publish'){
-        if(body.published===true&&!config.ready)throw new Error('Conecta la pasarela y el correo antes de abrir inscripciones.');
+        const target=(await sql`SELECT payment_required FROM enrollment_campaigns WHERE id=${String(body.id)} AND club_id=${clubId}`)[0];
+        if(body.published===true&&!config.payments&&target?.payment_required!==false)throw new Error('Conecta la pasarela de pago antes de abrir inscripciones con pago.');
         await sql`UPDATE enrollment_campaigns SET published=${body.published===true} WHERE id=${String(body.id)} AND club_id=${clubId}`;
+      }else if(body.action==='delete-campaign'){
+        const target=(await sql`SELECT count(*)::int AS n FROM enrollments WHERE campaign_id=${String(body.id)} AND club_id=${clubId}`)[0];
+        const result=await sql`DELETE FROM enrollment_campaigns WHERE id=${String(body.id)} AND club_id=${clubId} RETURNING id`;
+        if(!result.length)throw new Error('Temporada no encontrada.');
+        if(target.n)throw new Error(`La temporada tenía ${target.n} inscripciones que se han eliminado junto a ella.`);
+      }else if(body.action==='delete-registration'){
+        const row=(await sql`SELECT id,assigned_account_id FROM enrollments WHERE id=${String(body.id)} AND club_id=${clubId}`)[0];
+        if(!row)throw new Error('Inscripción no encontrada.');
+        await sql`DELETE FROM enrollments WHERE id=${row.id} AND club_id=${clubId}`;
+        await removeRegistrationPlayer(clubId,row.assigned_account_id,row.id,sql);
       }else if(body.action==='assign'){
         await assignEnrollment(clubId,String(body.id),String(body.accountId),sql);
       }else if(body.action==='send-links'){
-        if(!config.ready)throw new Error('Conecta pagos y correo antes de enviar enlaces.');
+        if(!config.email)throw new Error('Conecta el correo de recibos antes de enviar enlaces.');
         if(!Array.isArray(body.ids)||body.ids.length<1||body.ids.length>50||body.ids.some((id:any)=>typeof id!=='string')||typeof body.requestId!=='string'||!/^[a-f0-9-]{36}$/.test(body.requestId))throw new Error('Selecciona entre 1 y 50 cuotas.');
         const dues=await sql`SELECT d.*,e.child_name,e.email,c.name,cl.nombre FROM enrollment_dues d JOIN enrollments e ON e.id=d.enrollment_id JOIN enrollment_campaigns c ON c.id=e.campaign_id JOIN clubs cl ON cl.id=e.club_id WHERE e.club_id=${clubId} AND d.id=ANY(${body.ids}::text[]) AND d.paid_at IS NULL`;
         let sent=0,failed=0;
@@ -79,13 +96,19 @@ export async function enrollmentApi(req:ApiRequest,res:ApiResponse,session:Accou
       }else throw new Error('Operación no válida.');
     }else if(req.method!=='GET'){res.status(405).json({error:'Método no permitido.'});return}
     const assignments=session.role==='coordinador';
+    const scopeStages=assignments?stagesInScope(session.scope):null;
     const campaigns=assignments?[]:await sql`SELECT * FROM enrollment_campaigns WHERE club_id=${clubId} ORDER BY created_at DESC`;
-    const registrations=assignments?await sql`SELECT id,child_name,birth_date,category,confirmed_at,assigned_account_id FROM enrollments WHERE club_id=${clubId} AND confirmed_at IS NOT NULL ORDER BY created_at DESC`:await sql`SELECT * FROM enrollments WHERE club_id=${clubId} ORDER BY created_at DESC`;
+    const registrations=assignments?await sql`SELECT id,child_name,birth_date,category,confirmed_at,assigned_account_id FROM enrollments WHERE club_id=${clubId} AND confirmed_at IS NOT NULL${scopeStages?sql` AND category = ANY(${scopeStages}::text[])`:sql``} ORDER BY created_at DESC`:await sql`SELECT * FROM enrollments WHERE club_id=${clubId} ORDER BY created_at DESC`;
     const dues=assignments?[]:await sql`SELECT d.*,e.child_name,e.email,e.category,e.campaign_id,(SELECT status FROM enrollment_mail m WHERE m.due_id=d.id ORDER BY created_at DESC LIMIT 1) AS mail_status FROM enrollment_dues d JOIN enrollments e ON e.id=d.enrollment_id WHERE e.club_id=${clubId} ORDER BY d.due_date,e.child_name`;
-    const coaches=await sql`SELECT id,name,team_label,football_stage FROM club_accounts WHERE club_id=${clubId} AND role='entrenador' AND active=TRUE ORDER BY team_label`;
+    const coaches=assignments?await sql`SELECT id,name,team_label,football_stage FROM club_accounts WHERE club_id=${clubId} AND role='entrenador' AND active=TRUE${scopeStages?sql` AND football_stage = ANY(${scopeStages}::text[])`:sql``} ORDER BY team_label`:await sql`SELECT id,name,team_label,football_stage FROM club_accounts WHERE club_id=${clubId} AND role='entrenador' AND active=TRUE ORDER BY team_label`;
     const club=(await sql`SELECT nombre,slug FROM clubs WHERE id=${clubId}`)[0];
     res.status(200).json({campaigns,registrations,dues,coaches,club,providers:{payments:config.payments,email:config.email,ready:config.ready}});
   }catch(error){res.status(400).json({error:error instanceof Error?error.message:'No se pudo completar la operación.'})}
+}
+
+export async function removeRegistrationPlayer(clubId:string,accountId:string|null,enrollmentId:string,sql=getSql()) {
+  if(!accountId)return;
+  await sql`UPDATE club_stores SET data=jsonb_set(data,'{players}',(SELECT COALESCE(jsonb_agg(p),'[]'::jsonb) FROM jsonb_array_elements(data->'players') p WHERE p->>'id'<>${enrollmentId}),true),updated_at=NOW() WHERE account_id=${accountId} AND club_id=${clubId} AND area='team'`;
 }
 
 export async function assignEnrollment(clubId:string,enrollmentId:string,accountId:string,sql=getSql()) {

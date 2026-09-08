@@ -40,7 +40,7 @@ const cloneData = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 const TEAM_NAME = 'Equipo';
 const CREST_PATH = '/convocatria.png';
 const DEFAULT_TEAM: TeamData = { name: TEAM_NAME, season: '2026/27', players: [] };
-const FOOTBALL_STAGE_LABEL: Record<FootballStage, string> = { querubin: 'Querubín', prebenjamin: 'Prebenjamín', benjamin: 'Benjamín', alevin: 'Alevín' };
+const FOOTBALL_STAGE_LABEL: Record<FootballStage, string> = { querubin: 'Querubín', prebenjamin: 'Prebenjamín', benjamin: 'Benjamín', alevin: 'Alevín', infantil: 'Infantil', cadete: 'Cadete', juvenil: 'Juvenil' };
 const TRAINING_YEAR_LABEL: Record<TrainingYear, string> = { primero: 'Primer año', segundo: 'Segundo año', mixto: 'Primer y segundo año' };
 const makeInitialForm = (clubName = 'Convo'): Convocatoria => ({
   equipoPropio: clubName, tipoPartido: 'liga', rivalId: '', rivalManual: '', esCasa: true,

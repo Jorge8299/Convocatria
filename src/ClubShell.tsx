@@ -37,8 +37,11 @@ import type { AgendaEvent, MatchAgendaEvent } from "./AgendaView";
 import {
   ClubAccount,
   ClubRole,
+  CoordinatorScope,
   FootballStage,
   TrainingYear,
+  footballStages,
+  stagesInScope,
 } from "./clubTypes";
 import {
   BootstrapPayload,
@@ -72,13 +75,26 @@ const footballStageLabel: Record<FootballStage, string> = {
   prebenjamin: "Prebenjamín",
   benjamin: "Benjamín",
   alevin: "Alevín",
+  infantil: "Infantil",
+  cadete: "Cadete",
+  juvenil: "Juvenil",
 };
 const footballStageAgeOrder: Record<FootballStage, number> = {
   querubin: 0,
   prebenjamin: 1,
   benjamin: 2,
   alevin: 3,
+  infantil: 4,
+  cadete: 5,
+  juvenil: 6,
 };
+const scopeLabel: Record<Exclude<CoordinatorScope, "all">, string> = { f8: "Futbol 8", f11: "Futbol 11" };
+const scopeLabelForHint = (scope: CoordinatorScope | null | undefined): string =>
+  scope === "f8"
+    ? "Todavía no hay equipos de Futbol 8. El administrador debe crear entrenadores de Querubín a Alevín."
+    : scope === "f11"
+      ? "Todavía no hay equipos de Futbol 11. El administrador debe crear entrenadores de Infantil a Juvenil."
+      : "Todavía no hay equipos. El administrador puede crear el primer equipo.";
 const trainingYearAgeOrder: Record<TrainingYear, number> = {
   primero: 0,
   mixto: 1,
@@ -399,7 +415,7 @@ export default function ClubShell() {
           account={session}
           accounts={accounts}
           stores={bootstrap.stores || []}
-          canViewEnrollments={bootstrap.impersonator?.role === "superadmin"}
+          canViewEnrollments={true}
           onRefresh={refresh}
           onLogout={logout}
         />
@@ -662,6 +678,7 @@ function AdminPanel({
     teamLabel: "",
     footballStage: "" as FootballStage | "",
     trainingYear: "" as TrainingYear | "",
+    scope: "all" as CoordinatorScope,
     pin: "",
   });
   const [pinDrafts, setPinDrafts] = useState<Record<string, string>>({});
@@ -672,6 +689,7 @@ function AdminPanel({
     teamLabel: "",
     footballStage: "" as FootballStage | "",
     trainingYear: "" as TrainingYear | "",
+    scope: "all" as CoordinatorScope,
   });
   const [message, setMessage] = useState("");
   const [migrationPin, setMigrationPin] = useState("");
@@ -866,6 +884,7 @@ function AdminPanel({
           draft.role === "entrenador" ? draft.footballStage || null : null,
         trainingYear:
           draft.role === "entrenador" ? draft.trainingYear || null : null,
+        scope: draft.role === "coordinador" ? draft.scope : null,
         pin: draft.pin,
       });
       onAccounts(result.accounts);
@@ -875,6 +894,7 @@ function AdminPanel({
         teamLabel: "",
         footballStage: "",
         trainingYear: "",
+        scope: "all",
         pin: "",
       });
       setMessage("Usuario creado correctamente.");
@@ -909,6 +929,7 @@ function AdminPanel({
         item.role === "entrenador" ? item.footballStage || "" : "",
       trainingYear:
         item.role === "entrenador" ? item.trainingYear || "" : "",
+      scope: item.scope || "all",
     });
     setMessage("");
   };
@@ -938,6 +959,7 @@ function AdminPanel({
           editDraft.role === "entrenador"
             ? editDraft.trainingYear || null
             : null,
+        scope: editDraft.role === "coordinador" ? editDraft.scope : null,
       });
       onAccounts(result.accounts);
       setEditingId(null);
@@ -1056,7 +1078,7 @@ function AdminPanel({
       </nav>}
       <main id="admin-main" className="role-content admin-content">
         {!platformMode && adminSection === 'home' && <AdminOverview accounts={accounts} playerCount={coaches.reduce((count, coach) => count + getStored<StoredTeam>(stores, coach.id, "team", {name: "", season: "", players: []}).players.length, 0)} onSection={setAdminSection} onTeam={id => {selectOverviewCoach(id); setAdminSection('teams');}}/>}
-        {platformMode && superadminSection==='economy' && <EconomyPanel global />}
+        {platformMode && superadminSection==='economy' && <EconomyPanel global onImpersonate={onImpersonate}/>}
         {!platformMode && adminSection === 'economy' && <EconomyPanel global={false}/>}
         {platformMode && superadminSection==='clubs' && <ClubsPanel onChanged={onRefresh} />}
         {platformMode && superadminSection==='overview' && (
@@ -1176,10 +1198,7 @@ function AdminPanel({
                   }
                 >
                   <option value="">Etapa formativa</option>
-                  <option value="querubin">Querubín</option>
-                  <option value="prebenjamin">Prebenjamín</option>
-                  <option value="benjamin">Benjamín</option>
-                  <option value="alevin">Alevín</option>
+                  {footballStages.map((stage) => <option key={stage} value={stage}>{footballStageLabel[stage]}</option>)}
                 </select>
                 <select
                   aria-label="Año formativo"
@@ -1197,6 +1216,22 @@ function AdminPanel({
                   <option value="mixto">Primer y segundo año</option>
                 </select>
               </>
+            )}
+            {draft.role === "coordinador" && (
+              <select
+                aria-label="Ámbito del coordinador"
+                value={draft.scope}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    scope: event.target.value as CoordinatorScope,
+                  }))
+                }
+              >
+                <option value="all">Todo el club</option>
+                <option value="f8">Solo Futbol 8</option>
+                <option value="f11">Solo Futbol 11</option>
+              </select>
             )}
             <input
               type="password"
@@ -1688,10 +1723,7 @@ function AdminPanel({
                             }
                           >
                             <option value="">Etapa formativa</option>
-                            <option value="querubin">Querubín</option>
-                            <option value="prebenjamin">Prebenjamín</option>
-                            <option value="benjamin">Benjamín</option>
-                            <option value="alevin">Alevín</option>
+                            {footballStages.map((stage) => <option key={stage} value={stage}>{footballStageLabel[stage]}</option>)}
                           </select>
                           <select
                             aria-label="Año formativo"
@@ -1711,6 +1743,22 @@ function AdminPanel({
                             <option value="mixto">Primer y segundo año</option>
                           </select>
                         </>
+                      )}
+                      {editDraft.role === "coordinador" && (
+                        <select
+                          aria-label="Ámbito del coordinador"
+                          value={editDraft.scope}
+                          onChange={(event) =>
+                            setEditDraft((current) => ({
+                              ...current,
+                              scope: event.target.value as CoordinatorScope,
+                            }))
+                          }
+                        >
+                          <option value="all">Todo el club</option>
+                          <option value="f8">Solo Futbol 8</option>
+                          <option value="f11">Solo Futbol 11</option>
+                        </select>
                       )}
                       <div className="account-edit-actions">
                         <button
@@ -1732,6 +1780,9 @@ function AdminPanel({
                           {roleLabel[item.role]} · {item.teamLabel}
                           {item.role === "entrenador" && item.trainingYear
                             ? ` · ${trainingYearLabel[item.trainingYear]}`
+                            : ""}
+                          {item.role === "coordinador" && item.scope && item.scope !== "all"
+                            ? ` · Ámbito: ${scopeLabel[item.scope]}`
                             : ""}
                         </small>
                       </div>
@@ -1811,12 +1862,14 @@ function CoordinatorPanel({
   onLogout: () => void;
 }) {
   const club = useClub();
+  const scopeStages = stagesInScope(account.scope);
   const coaches = useMemo(
     () =>
       accounts
         .filter((item) => item.role === "entrenador" && item.active)
+        .filter((item) => !scopeStages || (item.footballStage && scopeStages.includes(item.footballStage)))
         .sort(compareCoachesByAge),
-    [accounts],
+    [accounts, scopeStages],
   );
   const [coachFilter, setCoachFilter] = useState("all");
   const [tab, setTab] = useState<
@@ -2355,7 +2408,9 @@ function CoordinatorPanel({
             <small>
               {selectedCoach
                 ? `Entrenador: ${firstName(selectedCoach.name)}`
-                : `${coaches.length} ${coaches.length === 1 ? "equipo" : "equipos"} en conjunto`}
+                : coaches.length > 0
+                  ? `${coaches.length} ${coaches.length === 1 ? "equipo" : "equipos"} en conjunto`
+                  : scopeLabelForHint(account.scope)}
             </small>
           </div>
           <div className="context-actions">

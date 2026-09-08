@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { getSql, getSessionImpersonator, jsonBody, type AccountRow, type ApiRequest, type ApiResponse } from './server.js';
+import { providerStatus } from './enrollment-payments.js';
+import { ensureEnrollmentSchema } from './enrollment-schema.js';
 
 export async function economy(req: ApiRequest, res: ApiResponse, session: AccountRow | null) {
   res.setHeader('Cache-Control','private, no-store');
@@ -33,8 +35,21 @@ export async function economy(req: ApiRequest, res: ApiResponse, session: Accoun
   } else if(req.method!=='GET'){res.status(405).json({error:'Método no permitido.'});return}
   const settings=await sql`SELECT scope,rate FROM economy_settings WHERE scope='global' OR scope=${session.club_id} OR ${session.role==='superadmin'}`;
   const campaigns=await sql`SELECT c.*,cl.nombre AS club_name FROM economy_campaigns c JOIN clubs cl ON cl.id=c.club_id WHERE ${session.role==='superadmin'} OR c.club_id=${session.club_id} ORDER BY c.created_at DESC`;
-  const clubs=await sql`SELECT id,nombre FROM clubs WHERE activo=TRUE AND (${session.role==='superadmin'} OR id=${session.club_id}) ORDER BY nombre`;
-  res.status(200).json({settings,campaigns,clubs});
+  const rawClubs=await sql`SELECT id,nombre,slug FROM clubs WHERE activo=TRUE AND (${session.role==='superadmin'} OR id=${session.club_id}) ORDER BY nombre`;
+  const clubs=rawClubs.map(c=>({id:c.id,nombre:c.nombre}));
+  let clubStatus:any[]=[];
+  if(session.role==='superadmin'){
+    await ensureEnrollmentSchema(sql);
+    const ids=rawClubs.map(c=>c.id);
+    const campaignRows=await sql`SELECT DISTINCT ON (club_id) club_id,name,total_cents,published,payment_required FROM enrollment_campaigns WHERE club_id=ANY(${ids}::text[]) ORDER BY club_id,created_at DESC`;
+    const countRows=await sql`SELECT club_id,count(*) FILTER (WHERE confirmed_at IS NOT NULL) AS confirmed,count(*) FILTER (WHERE confirmed_at IS NULL) AS pending FROM enrollments WHERE club_id=ANY(${ids}::text[]) GROUP BY club_id`;
+    const adminRows=await sql`SELECT club_id,id FROM club_accounts WHERE club_id=ANY(${ids}::text[]) AND role='admin' AND active=TRUE`;
+    const latest=Object.fromEntries(campaignRows.map(r=>[r.club_id,r]));
+    const counts=Object.fromEntries(countRows.map(r=>[r.club_id,r]));
+    const admins=Object.fromEntries(adminRows.map(r=>[r.club_id,r.id]));
+    clubStatus=rawClubs.map(c=>({id:c.id,nombre:c.nombre,slug:c.slug,providers:{payments:providerStatus(c.id).payments,email:providerStatus(c.id).email,ready:providerStatus(c.id).ready},campaign:latest[c.id]||null,confirmed:Number(counts[c.id]?.confirmed)||0,pending:Number(counts[c.id]?.pending)||0,adminId:admins[c.id]||''}));
+  }
+  res.status(200).json({settings,campaigns,clubs,clubStatus});
 }
 
 export async function ensureEconomySchema(sql: ReturnType<typeof getSql>) {

@@ -1,9 +1,9 @@
-export const categoryNames = {querubin:'Querubín',prebenjamin:'Prebenjamín',benjamin:'Benjamín',alevin:'Alevín'};
+export const categoryNames = {querubin:'Querubín',prebenjamin:'Prebenjamín',benjamin:'Benjamín',alevin:'Alevín',infantil:'Infantil',cadete:'Cadete',juvenil:'Juvenil'};
 export type Category = keyof typeof categoryNames;
 export type CategoryRule = {category:Category; from:number; to:number};
 export type Installment = {date:string; amount:number};
 export function defaultCategories(year:number):CategoryRule[] {
-  return [{category:'querubin',from:year-5,to:year-4},{category:'prebenjamin',from:year-7,to:year-6},{category:'benjamin',from:year-9,to:year-8},{category:'alevin',from:year-11,to:year-10}];
+  return [{category:'querubin',from:year-5,to:year-4},{category:'prebenjamin',from:year-7,to:year-6},{category:'benjamin',from:year-9,to:year-8},{category:'alevin',from:year-11,to:year-10},{category:'infantil',from:year-13,to:year-12},{category:'cadete',from:year-15,to:year-14},{category:'juvenil',from:year-17,to:year-16}];
 }
 export function validDate(value:unknown):value is string {
   return typeof value==='string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10)===value;
@@ -18,9 +18,10 @@ export function validateCampaign(body:any) {
   if(!Number.isInteger(body.year)||body.year<2020||body.year>2100)throw new Error('Año de temporada no válido.');
   if(!Number.isSafeInteger(body.total)||body.total<50||body.total>1000000)throw new Error('La cuota debe estar entre 0,50 y 10.000 euros.');
   if(!Array.isArray(body.parts)||body.parts.length<1||body.parts.length>12||body.parts.some((p:any,i:number)=>!validDate(p.date)||!Number.isSafeInteger(p.amount)||p.amount<50||(i>0&&p.date<=body.parts[i-1].date))||body.parts.reduce((s:number,p:any)=>s+p.amount,0)!==body.total)throw new Error('Los plazos deben sumar la cuota, tener al menos 0,50 € y fechas en orden.');
-  if(!Array.isArray(body.categories)||body.categories.length!==4||new Set(body.categories.map((r:any)=>r.category)).size!==4||body.categories.some((r:any)=>!Object.hasOwn(categoryNames,r.category)||!Number.isInteger(r.from)||!Number.isInteger(r.to)||r.from>r.to||r.from<body.year-20||r.to>body.year))throw new Error('Revisa los años de nacimiento de cada categoría.');
+  if(!Array.isArray(body.categories)||body.categories.length<1||new Set(body.categories.map((r:any)=>r.category)).size!==body.categories.length||body.categories.some((r:any)=>!Object.hasOwn(categoryNames,r.category)||!Number.isInteger(r.from)||!Number.isInteger(r.to)||r.from>r.to||r.from<body.year-20||r.to>body.year))throw new Error('Revisa los años de nacimiento de cada categoría.');
   for(let i=0;i<body.categories.length;i++)for(let j=i+1;j<body.categories.length;j++)if(body.categories[i].from<=body.categories[j].to&&body.categories[j].from<=body.categories[i].to)throw new Error('Los años de nacimiento no pueden solaparse.');
   if(typeof body.terms!=='string'||body.terms.trim().length<30||body.terms.length>12000)throw new Error('Añade las condiciones y la información sobre el uso de los datos (mínimo 30 caracteres).');
+  if(body.payment_required!==undefined&&typeof body.payment_required!=='boolean')throw new Error('Indica si la temporada requiere pago online.');
 }
 export function validateRegistration(body:any,rules:CategoryRule[]) {
   for(const key of ['child_name','guardian_name'])if(typeof body[key]!=='string'||body[key].trim().length<3||body[key].length>120)throw new Error('Completa los nombres y apellidos.');
