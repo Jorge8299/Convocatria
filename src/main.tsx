@@ -3,10 +3,11 @@ import {createRoot} from 'react-dom/client';
 import ClubShell from './ClubShell.tsx';
 import './index.css';
 import PublicEnrollment from './PublicEnrollment';
+import PublicCallup from './PublicCallup';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {location.pathname.startsWith('/inscripcion/') || location.pathname === '/pago' ? <PublicEnrollment/> : <ClubShell />}
+    {location.pathname.startsWith('/e/') ? <PublicCallup/> : location.pathname.startsWith('/inscripcion/') || location.pathname === '/pago' ? <PublicEnrollment/> : <ClubShell />}
   </StrictMode>,
 );
 
