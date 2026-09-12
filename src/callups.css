@@ -4,3 +4,40 @@
 /* These cards use light backgrounds in both system themes. Keep inherited
    player names and confirmation text dark when the global body turns white. */
 .callups-card{color:#14213a}
+
+/* Club palette, with explicit readable surfaces for both system themes. */
+.callups-workspace{--callups-accent:#147eaa}
+.callups-toolbar{padding:16px 20px;border:1px solid #cfe3f0;border-radius:16px;background:linear-gradient(110deg,#eaf5fc,#f5fbf8)}
+.callups-toolbar p{color:#365771;margin:0}
+.callups-card{box-shadow:0 8px 28px #15395808}
+.callups-group{border-top:4px solid #229b78}
+.callups-group.is-closed{border-top-color:#7890b2;background:#f8faff}
+.callups-group h2{display:flex;align-items:center;gap:10px}
+.callups-group h2:before{content:'';width:10px;height:10px;border-radius:50%;background:#229b78}
+.callups-group.is-closed h2:before{background:#7890b2}
+.callups-list>button{background:linear-gradient(110deg,#f2f9ff,#fff);border-color:#d6e6f2;transition:border-color .15s,box-shadow .15s}
+.callups-list>button:hover{border-color:#4896bb;box-shadow:0 4px 14px #204f7510}
+.callups-list>button>svg{color:#178466;background:#e2f5ed;box-sizing:content-box;padding:10px;border-radius:12px;flex-shrink:0}
+.is-closed .callups-list>button>svg{background:#e9edf8;color:#597397}
+.callups-counts .count-PENDIENTE{background:#fff4d9;color:#865c0b}
+.callups-roster>li{padding:14px 12px;border:1px solid #e1e9f2;border-left:4px solid #dfb653;border-radius:13px;margin-bottom:9px;background:#fffcf4}
+.callups-roster>.response-SI{border-left-color:#21936b;background:#f2fbf6}
+.callups-roster>.response-NO{border-left-color:#d87480;background:#fff7f8}
+.callups-public{min-height:100dvh;background:radial-gradient(ellipse at top right,#dceefa 0,transparent 52%),#f3f7fc;color:#172f4c}
+.callups-public-brand{padding:12px 8px 24px}
+.callups-public-brand strong{font-size:19px}
+.callups-public-brand img{background:#fff;padding:5px;box-shadow:0 4px 16px #17345a12}
+.callups-public .callups-match-hero{position:relative;overflow:hidden;border:0;background:linear-gradient(125deg,var(--callups-brand),#16385e);color:#fff;padding:28px}
+.callups-match-hero:after{content:'';position:absolute;width:170px;height:170px;right:-70px;top:-60px;border:25px solid #ffffff0c;border-radius:50%;pointer-events:none}
+.callups-public .callups-match-hero h1,.callups-public .callups-match-hero .eyebrow,.callups-public .callups-match-hero>p{color:#fff;text-shadow:0 1px 3px #0007}
+.callups-public .callups-match-hero>p{width:fit-content;max-width:100%;padding:8px 12px;border-radius:10px;background:#10274366;overflow-wrap:anywhere}
+.callups-match-hero>p svg{flex-shrink:0}
+.callups-public-roster>li{padding:18px;border:1px solid #dee7f1;border-radius:16px;background:#f7faff;margin-bottom:14px}
+.callups-public-roster>.response-SI{background:#f0faf5;border-color:#b7dfca}
+.callups-public-roster>.response-NO{background:#fff5f6;border-color:#eed0d5}
+.callups-public-roster .callups-number{background:#deebfa;color:#214d7a;width:42px;height:42px}
+.callups-answer-actions .callups-yes{background:#19754f;box-shadow:0 3px 0 #105538}
+.callups-answer-actions .callups-no{background:#fff;color:#9b3647;border:1px solid #debcc4;box-shadow:0 3px 0 #eedee2}
+.callups-confirm{border:1px solid #c9daec;background:#fff}
+.callups-public footer{text-align:center;color:#516780}
+@media(max-width:620px){.callups-public .callups-match-hero{padding:22px}.callups-public-roster>li{padding:14px}.callups-public .callups-card{border-radius:18px}}

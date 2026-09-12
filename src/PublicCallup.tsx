@@ -9,10 +9,10 @@ export default function PublicCallup(){
  return <main className="callups-public" style={{'--callups-brand':data?.club.color_principal||'#0b2344'} as CSSProperties}>
  <header className="callups-public-brand">{data?.club.logo?<img src={data.club.logo} alt={'Escudo de '+data.club.nombre}/>:<ShieldCheck size={36}/>}<div><strong>{data?.club.nombre||'Convocatria'}</strong><span>CONFIRMACIÓN DE ASISTENCIA</span></div></header>
  {!data&&!error&&<p role="status">Cargando convocatoria…</p>}{error&&<p role="alert" className="callups-error">{error}</p>}
- {data&&<><section className="callups-card"><span className="eyebrow">CONVOCATORIA</span><h1>{data.title}</h1><p><Clock size={17}/> {data.match_date.split('-').reverse().join('/')} · {data.match_time}</p><p><MapPin size={17}/> {data.field}</p></section>
+ {data&&<><section className="callups-card callups-match-hero"><span className="eyebrow">CONVOCATORIA</span><h1>{data.title}</h1><p><Clock size={17}/> {data.match_date.split('-').reverse().join('/')} · {data.match_time}</p><p><MapPin size={17}/> {data.field}</p></section>
  {data.closed?<section className="callups-card"><h2>Convocatoria cerrada</h2><p>El entrenador ha cerrado las respuestas. Para cualquier cambio, contacta con él.</p></section>:<section className="callups-card"><h2>Confirma por tu hijo</h2><p>Busca su dorsal y nombre. Si no puede asistir, puedes indicar el motivo; solo lo verá el entrenador.</p>
  {success&&<p className="callups-success" role="status"><Check size={20}/> ¡Confirmado! {success}</p>}
-<ul className="callups-public-roster">{data.players.map(p=><li key={p.jugador_id}>
+<ul className="callups-public-roster">{data.players.map(p=><li key={p.jugador_id} className={`response-${p.estado}`}>
   <h3><span className="callups-number">{p.dorsal||'—'}</span>{p.nombre}</h3>
   {p.estado==='SI'&&<span className="callups-answered yes"><Check size={14}/> Confirmado: va al partido</span>}
   {p.estado==='NO'&&<span className="callups-answered no">No puede asistir</span>}

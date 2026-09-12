@@ -93,6 +93,7 @@ export interface TrainingSession {
 
 export interface MatchAgendaEvent extends AgendaEventBase {
   type: "match";
+  rest?: boolean;
   matchType: "liga" | "amistoso" | "torneo";
   home: boolean;
   rivalId: string;

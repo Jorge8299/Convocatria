@@ -1,3 +1,4 @@
+import { matchWeek } from './matchWeek';
 import type { ClubAccount, CoordinatorScope, FootballStage, TrainingYear } from "./clubTypes";
 import { INITIAL_CLUB, OLIVA_CLUB_ID, slugifyClub, validClubEdit, type Club } from './clubs';
 import { prepareBoard, validBoard, type TacticalBoard } from './tactical/model';
@@ -454,7 +455,11 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
     const accountId = String(body.accountId || "");
     const now = new Date().toISOString();
     let newEvents: Array<Record<string, unknown>>;
-    if (body.training) {
+    if (body.rest) {
+      const rest = body.rest as unknown as {date:string};
+      matchWeek(rest.date);
+      newEvents = [{id:crypto.randomUUID(),type:'match',rest:true,date:rest.date,startTime:'',notes:'',rivalName:'Descansa',field:'',assignedByCoordinator:true}];
+    } else if (body.training) {
       const training = body.training as unknown as CoordinatorTrainingInput;
       const seriesId = crypto.randomUUID();
       const slots = Array.isArray(training.slots) ? training.slots : [];
@@ -482,6 +487,10 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
     const agendaStore = stores.find(
       (store) => store.account_id === accountId && store.area === "agenda",
     );
+    if (newEvents[0]?.type === 'match') {
+      const week = matchWeek(String(newEvents[0].date));
+      if ((agendaStore?.data as Array<Record<string,unknown>> || []).some(event => event.type === 'match' && String(event.date) >= week.start && String(event.date) <= week.end && (newEvents[0].rest || event.rest))) throw new Error('El descanso y los partidos no pueden coincidir en la misma semana. Desactiva Descansa o elimina el partido.');
+    }
     if (agendaStore) agendaStore.data = [...(agendaStore.data as unknown[]), ...newEvents];
     else stores.push({ account_id: accountId, area: "agenda", data: newEvents });
     localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores));
@@ -532,6 +541,11 @@ async function localDemoRequest<T>(path: string, init?: RequestInit): Promise<T>
       const accountId = String(body.accountId || "");
       const eventId = String(body.eventId || "");
       const agendaStore = stores.find((store) => store.account_id === accountId && store.area === "agenda");
+      const changedMatch = body.match as unknown as CoordinatorMatchInput | undefined;
+      if (changedMatch) {
+        const week = matchWeek(changedMatch.date);
+        if ((agendaStore?.data as Array<Record<string,unknown>> || []).some(event => event.rest && String(event.date)>=week.start && String(event.date)<=week.end)) throw new Error('Desactiva Descansa antes de asignar un partido esa semana.');
+      }
       agendaStore && (agendaStore.data = (agendaStore.data as Array<Record<string, unknown>>).map((event) =>
         event.id === eventId && event.type === "match" && event.assignedByCoordinator === true
           ? { ...event, ...(body.match as object), ...(body.coordinatorStatus ? { coordinatorStatus: body.coordinatorStatus } : {}) }
@@ -665,6 +679,7 @@ export const clubApi = {
     request<{ ok: true; removed: number; accounts: number }>("/api/data", {
       method: "DELETE",
     }),
+  setCoordinatorRest: (accountId: string, date: string) => request('/api/coordinator-agenda', { method: 'POST', body: JSON.stringify({accountId, rest: {date}}) }),
   assignCoordinatorMatch: (accountId: string, match: CoordinatorMatchInput) =>
     request<{ event: CoordinatorMatchInput & { id: string } }>(
       "/api/coordinator-agenda",

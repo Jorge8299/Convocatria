@@ -64,7 +64,9 @@ await assert.rejects(deleteCallup(sql,owner,c.id)); // open callups cannot be de
   assert.equal((await publicCallup(sql,c.token)).closed,true);
   await assert.rejects(respondCallup(sql,c.token,{jugador_id:'p1',estado:'SI'}));
   await assert.rejects(createCallup(sql,owner,{eventId:'event1',message:'No reopen'}));
+  await db.query("UPDATE club_stores SET data=data || $3::jsonb WHERE account_id=$1 AND club_id=$2 AND area='journeys'",[owner.id,owner.club_id,JSON.stringify([{id:c.id,attendanceId:c.id}])]);
   await deleteCallup(sql,owner,c.id);
+  assert.deepEqual((await db.query<{data:unknown}>("SELECT data FROM club_stores WHERE area='journeys'")).rows[0].data,[{id:'legacy',message:'unchanged'}]);
   assert.deepEqual(await listCallups(sql,owner),[]);
   const fresh=await createCallup(sql,owner,{eventId:'event1',message:'Nueva convocatoria'});
   assert.notEqual(fresh.token,c.token);assert.equal(fresh.closed,false);

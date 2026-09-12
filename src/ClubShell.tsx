@@ -1,3 +1,5 @@
+import { MatchExportDialog } from './MatchExportDialog';
+import { matchWeek } from './matchWeek';
 import { ClubContext, useClub } from './ClubContext';
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { ClubsPanel } from './ClubsPanel';
@@ -1899,6 +1901,8 @@ function CoordinatorPanel({
   );
   const [editingMatch, setEditingMatch] = useState<{ accountId: string; eventId: string } | null>(null);
   const [matchSaving, setMatchSaving] = useState(false);
+  const [exportScope, setExportScope] = useState<"all" | "f8" | "f11">("all");
+  const [showExportOptions, setShowExportOptions] = useState(false);
   const [exportingMatches, setExportingMatches] = useState(false);
   const [matchMessage, setMatchMessage] = useState("");
   const [sortBy, setSortBy] = useState<
@@ -1943,7 +1947,7 @@ function CoordinatorPanel({
   const agendaMatches = filtered
     .flatMap((item) =>
       item.agenda
-        .filter((event): event is MatchAgendaEvent => event.type === "match")
+        .filter((event): event is MatchAgendaEvent => event.type === "match" && !event.rest)
         .map((event) => ({
           ...event,
           coach: item.coach,
@@ -2134,7 +2138,22 @@ function CoordinatorPanel({
     setMatchMessage("");
     setTab("agenda");
   };
+  const draftWeek = matchDraft.date ? matchWeek(matchDraft.date) : null;
+  const weekRest = matchCoachData?.agenda.find(event => event.type === 'match' && event.rest && draftWeek && event.date >= draftWeek.start && event.date <= draftWeek.end);
+  const weekHasMatch = matchCoachData?.agenda.some(event => event.type === 'match' && !event.rest && draftWeek && event.date >= draftWeek.start && event.date <= draftWeek.end);
+  const toggleRest = async () => {
+    if (!matchCoach || !draftWeek || matchSaving) return;
+    setMatchSaving(true);
+    try {
+      if (weekRest) await clubApi.deleteCoordinatorAgendaEvent(matchCoach.id, weekRest.id, 'match');
+      else await clubApi.setCoordinatorRest(matchCoach.id, matchDraft.date);
+      await onRefresh();
+      setMatchMessage(weekRest ? 'Descanso desactivado. Ya puedes asignar un partido.' : 'El equipo descansa esta semana.');
+    } catch (error) { setMatchMessage((error as Error).message); }
+    finally { setMatchSaving(false); }
+  };
   const saveCoordinatorMatch = async () => {
+    if (weekRest) { setMatchMessage("Desactiva Descansa antes de asignar un partido esta semana."); return; }
     if (!matchCoach || !matchDraft.date || !matchDraft.startTime || !matchDraft.rivalName.trim() || (matchDraft.matchType !== "amistoso" && !matchDraft.rivalId) || !matchDraft.field) {
       setMatchMessage("Completa fecha, hora, rival y campo.");
       return;
@@ -2202,15 +2221,16 @@ function CoordinatorPanel({
     }
   };
   const exportMatchQuadrantPdf = async () => {
-    const monthStart = coordinatorIsoDate(agendaCursor.getFullYear(), agendaCursor.getMonth(), 1);
-    const monthEnd = coordinatorIsoDate(agendaCursor.getFullYear(), agendaCursor.getMonth() + 1, 0);
-    const monthMatches = agendaMatches
-      .filter((match) => match.date >= monthStart && match.date <= monthEnd)
+    const { start: weekStart, end: weekEnd } = matchWeek(selectedAgendaDate);
+    const weekMatches = agendaMatches
+      .filter((match) => match.date >= weekStart && match.date <= weekEnd)
       .sort((left, right) => `${left.date}T${left.startTime || "00:00"}`.localeCompare(`${right.date}T${right.startTime || "00:00"}`));
     const rows = filtered
+      .filter(item => !stagesInScope(exportScope) || stagesInScope(exportScope)!.includes(item.coach.footballStage!))
       .map((item) => ({
         coach: item.coach,
-        matches: monthMatches.filter((match) => match.coach.id === item.coach.id),
+        resting: item.agenda.some(event => event.type === "match" && event.rest && event.date >= weekStart && event.date <= weekEnd),
+        matches: weekMatches.filter((match) => match.coach.id === item.coach.id),
       }))
       .sort((left, right) => {
         const leftMatch = left.matches[0];
@@ -2258,13 +2278,9 @@ function CoordinatorPanel({
         }
         return `${text.slice(0, Math.max(1, start)).trim()}...`;
       };
-      const valueList = (matches: typeof monthMatches, getValue: (match: typeof monthMatches[number]) => string) =>
+      const valueList = (matches: typeof weekMatches, getValue: (match: typeof weekMatches[number]) => string) =>
         matches.map(getValue).filter(Boolean).join(" / ");
-      const isRestMatch = (match: typeof monthMatches[number]) =>
-        /descans[ao]/i.test(`${match.rivalName} ${match.notes} ${match.field}`);
-      const regularMatches = (row: typeof rows[number]) =>
-        row.matches.filter((match) => !isRestMatch(match));
-      const meetingText = (match: typeof monthMatches[number]) => {
+      const meetingText = (match: typeof weekMatches[number]) => {
         const place = match.callupPlace?.trim() || "Morer";
         const time = match.callupTime || subtractMatchMinutes(match.startTime, 45);
         return `${shortFieldName(place)} ${pdfTime(time)}`.trim();
@@ -2275,13 +2291,12 @@ function CoordinatorPanel({
       const selectedWeekEnd = new Date(selectedWeekStart);
       selectedWeekEnd.setDate(selectedWeekStart.getDate() + 6);
       const weekTitle = `${new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "long" }).format(selectedWeekStart)} - ${new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "long", year: "numeric" }).format(selectedWeekEnd)}`;
-      const monthTitle = coordinatorMonthFormatter.format(agendaCursor).toUpperCase();
 
       drawMagicPdfHeader(doc, {
         title: "Cuadrante de partidos",
         period: `Semana del ${weekTitle}`,
-        scope: `${selectedCoach?.teamLabel || "Todo el club"} | Mes: ${monthTitle}`,
-        phrase: getDailyFootballPhrase(monthStart),
+        scope: `${selectedCoach?.teamLabel || "Todo el club"} | ${exportScope === "all" ? "F8 y F11" : exportScope.toUpperCase()}`,
+        phrase: getDailyFootballPhrase(weekStart),
         crestDataUrl: await getClubCrestDataUrl(club?.logo),
         width: pageWidth,
         margin,
@@ -2304,9 +2319,9 @@ function CoordinatorPanel({
       rows.forEach((row, rowIndex) => {
         let cellX = margin;
         const y = tableTop + headerHeight + rowIndex * rowHeight;
-        const matchesToShow = regularMatches(row);
+        const matchesToShow = row.matches;
         const playsAtHome = matchesToShow[0]?.home === true;
-        const emptyLabel = row.matches.length ? "DESCANSO" : "PENDIENTE";
+        const emptyLabel = row.resting ? "DESCANSA" : "PENDIENTE";
         const values = [
           `${row.coach.teamLabel} ${firstName(row.coach.name)}`.toUpperCase(),
           matchesToShow.length ? valueList(matchesToShow, (match) => match.rivalName.toUpperCase()) : emptyLabel,
@@ -2329,14 +2344,14 @@ function CoordinatorPanel({
           else if (columnIndex === 2 && value) doc.setFillColor(245, 39, 172);
           else if ((columnIndex === 6 || columnIndex === 7) && /2/.test(value)) doc.setFillColor(22, 111, 170);
           else if ((columnIndex === 6 || columnIndex === 7) && value) doc.setFillColor(255, 16, 10);
-          else if (columnIndex === 1 && value === "DESCANSO") doc.setFillColor(232, 247, 239);
+          else if (columnIndex === 1 && value === "DESCANSA") doc.setFillColor(232, 247, 239);
           else if (columnIndex === 1 && value === "PENDIENTE") doc.setFillColor(255, 247, 226);
           else doc.setFillColor(rowIndex % 2 === 0 ? 255 : 248, rowIndex % 2 === 0 ? 255 : 251, rowIndex % 2 === 0 ? 255 : 254);
           doc.rect(cellX, y, column.width, rowHeight, "FD");
           if (columnIndex === 1 && matchesToShow.length) doc.setTextColor(255, 255, 255);
           else if (columnIndex === 3 && value) doc.setTextColor(255, 255, 255);
           else if ((columnIndex === 6 || columnIndex === 7) && value) doc.setTextColor(255, 255, 255);
-          else if (columnIndex === 1 && value === "DESCANSO") doc.setTextColor(8, 116, 82);
+          else if (columnIndex === 1 && value === "DESCANSA") doc.setTextColor(8, 116, 82);
           else if (columnIndex === 1 && value === "PENDIENTE") doc.setTextColor(173, 112, 11);
           else doc.setTextColor(...pdfBrand.ink);
           doc.setFont("helvetica", "bold");
@@ -2349,7 +2364,7 @@ function CoordinatorPanel({
       doc.setFont("helvetica", "normal");
       doc.setFontSize(5.8);
       doc.setTextColor(...pdfBrand.muted);
-      doc.text("Cuadrante compacto: una fila por equipo; si un equipo tiene varios partidos en el mes, aparecen juntos en la misma línea.", margin, 207);
+      doc.text("Cuadrante compacto: una fila por equipo; si un equipo tiene varios partidos en la semana, aparecen juntos en la misma línea.", margin, 207);
       doc.text("Página 1 de 1", pageWidth - margin, 207, { align: "right" });
       const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist");
       const pdfWorkerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default;
@@ -2369,7 +2384,7 @@ function CoordinatorPanel({
       const imageUrl = URL.createObjectURL(imageBlob);
       const downloadLink = document.createElement("a");
       downloadLink.href = imageUrl;
-      downloadLink.download = `cuadrante-partidos-${monthStart}.png`;
+      downloadLink.download = `cuadrante-partidos-${exportScope}-${weekStart}.png`;
       downloadLink.click();
       URL.revokeObjectURL(imageUrl);
       await renderedPdf.destroy();
@@ -2492,6 +2507,7 @@ function CoordinatorPanel({
               <button type="button" className={showTrainingCreator ? "active training" : "training"} onClick={() => { setAgendaView("trainings"); setShowMatchCreator(false); setShowTeamPicker(false); setMatchMessage(""); setShowTrainingCreator(true); }}><Plus size={17} /> Añadir entrenamiento</button>
             </div>
           </section>
+          {showExportOptions && <MatchExportDialog date={selectedAgendaDate} scope={exportScope} onScope={setExportScope} onClose={()=>setShowExportOptions(false)} onExport={()=>{setShowExportOptions(false);void exportMatchQuadrantPdf();}}/>}
           {matchMessage && <div className="coordinator-match-message" role="status">{matchMessage}</div>}
           {showMatchCreator && (
             <section className="coordinator-match-form">
@@ -2506,6 +2522,12 @@ function CoordinatorPanel({
                 </div>
                 <button type="button" aria-label="Cerrar formulario" onClick={() => { setShowMatchCreator(false); setEditingMatch(null); }}><X size={18} /></button>
               </header>
+              <div className="coordinator-match-grid">
+                <label><span>Equipo</span><select value={matchCoachId} disabled={Boolean(editingMatch)} onChange={(event) => { setMatchCoachId(event.target.value); setMatchDraft((current) => ({ ...current, rivalId: "", rivalName: "", field: "" })); }}><option value="">Selecciona equipo</option>{coaches.map((coach) => <option value={coach.id} key={coach.id}>{coach.teamLabel} · {coach.name}</option>)}</select></label>
+                <label><span>Fecha</span><input type="date" value={matchDraft.date} onChange={(event) => setMatchDraft((current) => ({ ...current, date: event.target.value }))} /></label>
+              </div>
+              <label className="coordinator-rest-toggle"><input type="checkbox" checked={Boolean(weekRest)} disabled={matchSaving || !matchCoach || !draftWeek || (!weekRest && weekHasMatch)} onChange={() => void toggleRest()} /><span><strong>Descansa esta semana</strong><small>{draftWeek ? `${draftWeek.start.split('-').reverse().join('/')} — ${draftWeek.end.split('-').reverse().join('/')}` : 'Selecciona una fecha'} · {weekRest ? 'Desactívalo para poder asignar un partido.' : weekHasMatch ? 'Elimina el partido de esta semana antes de activar el descanso.' : 'Se guardará al activar la opción.'}</small></span></label>
+              <fieldset className="coordinator-match-details" disabled={Boolean(weekRest) || matchSaving}>
               <div className="coordinator-match-type">
                 {(["liga", "amistoso", "torneo"] as const).map((type) => (
                   <button type="button" className={matchDraft.matchType === type ? "active" : ""} key={type} onClick={() => setMatchDraft((current) => ({ ...current, matchType: type }))}>
@@ -2518,8 +2540,7 @@ function CoordinatorPanel({
                 <button type="button" className={!matchDraft.home ? "active" : ""} onClick={() => { const rival = matchCoachData?.rivals.find((item) => item.id === matchDraft.rivalId); setMatchDraft((current) => ({ ...current, home: false, field: rival?.campo || current.field, callupTime: !current.callupTime || current.callupTime === subtractMatchMinutes(current.startTime, current.home ? 60 : 90) ? subtractMatchMinutes(current.startTime, 90) : current.callupTime })); }}><Plane size={17} /> Fuera</button>
               </div>
               <div className="coordinator-match-grid">
-                <label><span>Equipo</span><select value={matchCoachId} disabled={Boolean(editingMatch)} onChange={(event) => { setMatchCoachId(event.target.value); setMatchDraft((current) => ({ ...current, rivalId: "", rivalName: "", field: "" })); }}><option value="">Selecciona equipo</option>{coaches.map((coach) => <option value={coach.id} key={coach.id}>{coach.teamLabel} · {coach.name}</option>)}</select></label>
-                <label><span>Fecha</span><input type="date" value={matchDraft.date} onChange={(event) => setMatchDraft((current) => ({ ...current, date: event.target.value }))} /></label>
+
                 <label><span>Rival</span>{matchDraft.matchType === "amistoso" ? <input value={matchDraft.rivalName} onChange={(event) => setMatchDraft((current) => ({ ...current, rivalId: "", rivalName: event.target.value }))} placeholder="Escribe el rival" /> : <select value={matchDraft.rivalId} disabled={!matchCoachData} onChange={(event) => updateCoordinatorRival(event.target.value)}><option value="">Selecciona rival</option>{(matchCoachData?.rivals || []).map((rival) => <option key={rival.id} value={rival.id}>{rival.nombre}</option>)}</select>}</label>
                 <div className="coordinator-time-field"><span>Hora del partido</span><QuickTimeInput value={matchDraft.startTime} onChange={(startTime) => setMatchDraft((current) => ({ ...current, startTime, callupTime: !current.callupTime || current.callupTime === subtractMatchMinutes(current.startTime, current.home ? 60 : 90) ? subtractMatchMinutes(startTime, current.home ? 60 : 90) : current.callupTime }))} /></div>
                 {matchDraft.home ? (
@@ -2540,9 +2561,10 @@ function CoordinatorPanel({
                   <strong>Añadir en observaciones: JUGAMOS DE BLANCO</strong>
                 </label>
               </div>
+              </fieldset>
               <footer>
                 <button type="button" className="secondary-button" onClick={() => { setShowMatchCreator(false); setEditingMatch(null); }}>Cancelar</button>
-                <button type="button" className="primary-button" disabled={matchSaving || !matchCoach || (matchDraft.matchType !== "amistoso" && !matchCoachData?.rivals.length)} onClick={() => void saveCoordinatorMatch()}><Save size={17} /> {matchSaving ? "Guardando…" : editingMatch ? "Guardar cambios" : "Guardar en su agenda"}</button>
+                <button type="button" className="primary-button" disabled={Boolean(weekRest) || matchSaving || !matchCoach || (matchDraft.matchType !== "amistoso" && !matchCoachData?.rivals.length)} onClick={() => void saveCoordinatorMatch()}><Save size={17} /> {matchSaving ? "Guardando…" : editingMatch ? "Guardar cambios" : "Guardar en su agenda"}</button>
               </footer>
             </section>
           )}
@@ -2559,7 +2581,7 @@ function CoordinatorPanel({
               onRefresh={onRefresh}
               formOpen={showTrainingCreator}
               onFormOpenChange={setShowTrainingCreator}
-              onExportMatches={() => void exportMatchQuadrantPdf()}
+              onExportMatches={() => setShowExportOptions(true)}
               exportingMatches={exportingMatches}
               hideCommand
             />
@@ -2605,7 +2627,7 @@ function CoordinatorPanel({
                 </button>
               </header>
               <div className="coordinator-match-calendar-actions">
-                <button type="button" className="training-export-button matches" disabled={exportingMatches} onClick={() => void exportMatchQuadrantPdf()}><Download size={15} /> {exportingMatches ? "Exportando..." : "Exportar partidos"}</button>
+                <button type="button" className="training-export-button matches" disabled={exportingMatches} onClick={() => setShowExportOptions(true)}><Download size={15} /> {exportingMatches ? "Exportando..." : "Exportar partidos"}</button>
               </div>
               <button
                 type="button"

@@ -43,7 +43,7 @@ export async function createCallup(sql:Sql,owner:Owner,input:Row){
  if(prompt.length>200)throw new CallupError('El texto de confirmación supera los 200 caracteres.');
  const rows=await sql.query(`SELECT e,cl.nombre FROM club_stores s JOIN clubs cl ON cl.id=s.club_id,
  jsonb_array_elements(CASE WHEN jsonb_typeof(s.data)='array' THEN s.data ELSE '[]'::jsonb END) e
- WHERE s.account_id=$1 AND s.club_id=$2 AND s.area='agenda' AND e->>'id'=$3 AND e->>'type'='match'`,[owner.id,owner.club_id,input.eventId]);
+ WHERE s.account_id=$1 AND s.club_id=$2 AND s.area='agenda' AND e->>'id'=$3 AND e->>'type'='match' AND COALESCE(e->>'rest','false')<>'true'`,[owner.id,owner.club_id,input.eventId]);
  if(!rows[0])throw new CallupError('El partido ya no está en tu agenda.',404);
  const event=rows[0].e as Row;
  if(!/^\d{4}-\d{2}-\d{2}$/.test(event.date)||!/^\d{2}:\d{2}$/.test(event.startTime))throw new CallupError('El partido necesita fecha y hora.');
@@ -74,7 +74,12 @@ export async function closeCallup(sql:Sql,owner:Owner,id:string){
 export async function deleteCallup(sql:Sql,owner:Owner,id:string){
  ownerCheck(owner);
  if(!/^[a-f0-9-]{36}$/i.test(id))throw new CallupError('Convocatoria no válida.');
- const rows=await sql.query('DELETE FROM club_callups WHERE id=$1 AND account_id=$2 AND club_id=$3 AND closed_at IS NOT NULL RETURNING id',[id,owner.id,owner.club_id]);
+ const rows=await sql.query(`WITH deleted AS (
+ DELETE FROM club_callups WHERE id=$1 AND account_id=$2 AND club_id=$3 AND closed_at IS NOT NULL RETURNING id
+ ), cleaned AS (
+ UPDATE club_stores SET data=COALESCE((SELECT jsonb_agg(item) FROM jsonb_array_elements(data) item WHERE COALESCE(item->>'attendanceId','')<>$1::text AND COALESCE(item->>'id','')<>$1::text),'[]'::jsonb)
+ WHERE account_id=$2 AND club_id=$3 AND area='journeys' AND EXISTS(SELECT 1 FROM deleted)
+ ) SELECT id FROM deleted`,[id,owner.id,owner.club_id]);
  if(!rows.length)throw new CallupError('Solo puedes eliminar una convocatoria cerrada.',404);
 }
 export async function respondCallup(sql:Sql,token:string,input:Row){

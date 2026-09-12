@@ -1,3 +1,4 @@
+import { saveScheduledMatch } from './_lib/match-scheduling.js';
 import { randomUUID } from 'node:crypto';
 import { notifyMatch } from './_lib/push.js';
 import { ApiRequest, ApiResponse, fail, getSession, getSql, jsonBody, methodNotAllowed, readBody, setJsonBody } from './_lib/server.js';
@@ -53,10 +54,17 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     if (req.method === 'POST') {
       if (session.role !== 'coordinador') { res.status(403).json({ error: 'Solo coordinación puede asignar actividades.' }); return }
-      const body = jsonBody<{ accountId?: string; match?: MatchInput; training?: TrainingInput }>(req);
+      const body = jsonBody<{ accountId?: string; match?: MatchInput; training?: TrainingInput; rest?: { date: string } }>(req);
       if (!body.accountId) { res.status(400).json({ error: 'Selecciona un equipo.' }); return }
       const targets = await sql`SELECT id FROM club_accounts WHERE id=${body.accountId} AND club_id=${session.club_id} AND role='entrenador' AND active=TRUE LIMIT 1`;
       if (!targets[0]) { res.status(404).json({ error: 'El entrenador seleccionado no está disponible.' }); return }
+
+      if (body.rest) {
+        if (!DATE_PATTERN.test(body.rest.date || '')) { res.status(400).json({ error: 'Selecciona una fecha válida.' }); return }
+        const event = { id: randomUUID(), type: 'match', rest: true, date: body.rest.date, startTime: '', rivalName: 'Descansa', notes: '', field: '', assignedByCoordinator: true };
+        if (!await saveScheduledMatch(sql, body.accountId, event)) { res.status(409).json({ error: 'Ya hay un partido o descanso esa semana. Elimínalo antes de marcar Descansa.' }); return }
+        res.status(201).json({ event }); return;
+      }
 
       if (body.training) {
         const training = body.training;
@@ -133,10 +141,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         assignedAt: now,
         acknowledgedAt: null,
       };
-      await sql`INSERT INTO club_stores (account_id,area,data)
-        VALUES (${body.accountId},'agenda',jsonb_build_array(${JSON.stringify(event)}::jsonb))
-        ON CONFLICT (account_id,area) DO UPDATE
-        SET data=COALESCE(club_stores.data,'[]'::jsonb) || EXCLUDED.data,updated_at=NOW()`;
+      if (!await saveScheduledMatch(sql, body.accountId, event)) { res.status(409).json({ error: 'Este equipo descansa esa semana. Desactiva Descansa antes de asignar un partido.' }); return }
       await notifyMatch(body.accountId, session.name, event);
       res.status(201).json({ event }); return;
     }
@@ -220,12 +225,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           changes.coordinatorStatus = body.coordinatorStatus;
         }
         if (!Object.keys(changes).length) { res.status(400).json({ error: 'No hay cambios para guardar.' }); return }
-        const rows = await sql`UPDATE club_stores
-          SET data=(SELECT jsonb_agg(CASE WHEN item->>'id'=${body.eventId} AND item->>'type'='match' AND item->>'assignedByCoordinator'='true' THEN item || ${JSON.stringify(changes)}::jsonb ELSE item END) FROM jsonb_array_elements(data) AS item),updated_at=NOW()
-          WHERE account_id=${body.accountId} AND club_id=${session.club_id} AND area='agenda'
-            AND EXISTS (SELECT 1 FROM jsonb_array_elements(data) AS item WHERE item->>'id'=${body.eventId} AND item->>'type'='match' AND item->>'assignedByCoordinator'='true')
-          RETURNING account_id`;
-        if (!rows[0]) { res.status(404).json({ error: 'No se encontró el partido.' }); return }
+        const existing = await sql`SELECT item FROM club_stores, jsonb_array_elements(data) item WHERE account_id=${body.accountId} AND club_id=${session.club_id} AND area='agenda' AND item->>'id'=${body.eventId} AND item->>'type'='match' AND item->>'assignedByCoordinator'='true' AND COALESCE(item->>'rest','false')<>'true'`;
+        if (!existing[0]) { res.status(404).json({ error: 'No se encontró el partido.' }); return }
+        if (!await saveScheduledMatch(sql, body.accountId, { ...existing[0].item, ...changes }, body.eventId)) { res.status(409).json({ error: 'Este equipo descansa esa semana. Desactiva Descansa antes de asignar un partido.' }); return }
         res.status(200).json({ ok: true }); return;
       }
       if (session.role === 'coordinador' && body.action === 'updateTrainingOccurrence') {
