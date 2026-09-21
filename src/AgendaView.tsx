@@ -29,6 +29,8 @@ import {
   X,
 } from "lucide-react";
 import { FieldZoneDialog, fieldZoneLabel } from "./fieldZones";
+import { TrainingAIWizard } from "./TrainingAIWizard";
+import type { TrainingAISession } from "./trainingAI";
 
 export type AgendaEvent = TrainingAgendaEvent | MatchAgendaEvent;
 
@@ -55,7 +57,7 @@ export interface TrainingAgendaEvent extends AgendaEventBase {
 }
 
 export interface TrainingBlock {
-  id: "activation" | "main" | "game" | "cooldown";
+  id: string;
   title: string;
   minutes: number;
   task: string;
@@ -79,6 +81,11 @@ export interface PlannedExercise {
   steps: string[];
   minPlayers?: number;
   maxPlayers?: number;
+  objective?: string;
+  space?: string;
+  materials?: string[];
+  variants?: string[];
+  coachingPoints?: string[];
 }
 
 export interface TrainingSession {
@@ -89,6 +96,10 @@ export interface TrainingSession {
   focus: string;
   materials: string[];
   blocks: TrainingBlock[];
+  title?: string;
+  summary?: string;
+  objectives?: string[];
+  generationSource?: "ai" | "manual";
 }
 
 export interface MatchAgendaEvent extends AgendaEventBase {
@@ -249,6 +260,16 @@ const defaultSession = (playerCount: number): TrainingSession => ({
   focus: "",
   materials: ["Balones", "Conos pequeños", "Petos"],
   blocks: defaultBlocks(),
+});
+const trainingMinutes = (start: string, end: string) => {
+  const [startHour,startMinute]=start.split(':').map(Number),[endHour,endMinute]=end.split(':').map(Number);
+  const total=(endHour*60+endMinute)-(startHour*60+startMinute);
+  return total>0?total:90;
+};
+const aiSessionToTrainingSession = (session: TrainingAISession): TrainingSession => ({
+  playerCount:session.players,gameMoment:'',objective:session.objectives.join(', '),taskType:'',focus:session.summary,materials:session.totalMaterial,
+  title:session.title,summary:session.summary,objectives:session.objectives,generationSource:'ai',
+  blocks:session.exercises.map((exercise,index)=>({id:`ai-block-${index}-${exercise.id}`,title:exercise.block,minutes:exercise.duration,task:'',exercises:[{id:exercise.id,instanceId:exercise.id,minutes:exercise.duration,title:exercise.name,taskType:exercise.objective,description:exercise.development,organization:exercise.organization,coaching:exercise.coachingPoints.join(' · '),ageBenefit:'Sesión generada y revisada para este equipo.',board:[],actions:[],steps:exercise.instructions,minPlayers:exercise.players,maxPlayers:exercise.players,objective:exercise.objective,space:exercise.space,materials:exercise.material,variants:exercise.variants,coachingPoints:exercise.coachingPoints}] }))
 });
 
 const isoDate = (year: number, month: number, day: number) =>
@@ -700,6 +721,7 @@ export function AgendaView({
               <small>{fieldZoneLabel(draft.fieldId, draft.zoneIds)} · {draft.recurrenceLabel || "Horario habitual"}</small>
             </div>
             {draft.notes && <p className="assigned-match-notes">{draft.notes}</p>}
+            <TrainingAIWizard eventId={draft.id} teamName={tacticalTeam?.name || "Equipo"} category={categoryLabel} format={footballStage && ['infantil','cadete','juvenil'].includes(footballStage) ? 'F11' : 'F8'} initialPlayers={trainingSession?.playerCount || defaultPlayerCount} initialGoalkeepers={tacticalTeam?.players.filter(player=>player.active&&player.role==='portero').length || 0} initialDuration={trainingMinutes(draft.startTime,draft.endTime)} onApply={(generated)=>{setDraft({...draft,session:aiSessionToTrainingSession(generated)});setTrainingView('planner');setTrainingMessage('Sesión generada. Revísala y pulsa Guardar ejercicios para conservarla.')}} />
             {tacticalAccount && tacticalTeam && tacticalDocuments && onTacticalSaved && <div className="training-tactical-section"><div className="training-session-heading"><div><span className="eyebrow">PREPARACIÓN TÁCTICA</span><h3>Pizarra de esta sesión</h3></div></div><TacticalWorkspace account={tacticalAccount} team={tacticalTeam} documents={tacticalDocuments} context={{ kind: 'training', id: draft.id, label: `${draft.date} · ${draft.startTime}` }} onSaved={onTacticalSaved} onLegacy={() => undefined} /></div>}
             {draft.fieldId && draft.zoneIds?.length ? <button type="button" className="agenda-zone-button large" onClick={() => setZonePreview(draft)}><MapPin size={17} /> Ver zona del campo</button> : null}
             {trainingMessage && <div className="training-save-message" role="status">{trainingMessage}</div>}
