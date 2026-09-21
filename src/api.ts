@@ -618,7 +618,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const clubApi = {
   generateTraining: (input: {eventId:string;action:'session'|'exercise'|'adapt';context:TrainingAIContext;category:string;format:'F8'|'F11';currentSession?:TrainingAISession;exercise?:TrainingAIExercise;instruction?:string}) =>
-    request<{session:TrainingAISession}>('/api/training-ai',{method:'POST',body:JSON.stringify(input)}),
+    request<{session:TrainingAISession}>('/api/data?section=training-ai',{method:'POST',body:JSON.stringify(input)}),
   clubs: () => request<{clubs:Club[]}>('/api/clubs'),
   deleteClub: (id:string, confirmation:string) => request<{clubs:Club[]}>('/api/clubs',{method:'DELETE',body:JSON.stringify({id,confirmation})}),
   updateClub: (club: Club) => request<{clubs:Club[]}>('/api/clubs',{method:'PATCH',body:JSON.stringify({id:club.id,nombre:club.nombre,logo:club.logo,color_principal:club.color_principal})}),

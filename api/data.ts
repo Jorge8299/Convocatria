@@ -4,11 +4,13 @@ import { validBoard } from '../src/tactical/model.js';
 import { saveLegacyBoards, saveTacticalBoard } from './_lib/tactical-store.js';
 import { addAdminPlayer, deleteAdminPlayer } from './_lib/admin-player.js';
 import {handleCallups} from './_lib/callups.js';
+import {handleTrainingAI} from './_lib/training-ai-route.js';
 
 export const config = { api: { bodyParser: false } };
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if(req.query?.section==='callups')return handleCallups(req,res,getSql());
+  if(req.query?.section==='training-ai')return handleTrainingAI(req,res);
   try {
     const session = await getSession(req);
     if (!session) { res.status(401).json({error:'Sesión caducada.'}); return }

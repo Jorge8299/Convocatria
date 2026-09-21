@@ -1,11 +1,10 @@
-import { ApiRequest, ApiResponse, getSession, getSessionImpersonator, getSql, jsonBody, readBody, setJsonBody } from './_lib/server.js';
-import { AITrainingService, ensureAITrainingSchema, GeminiTrainingProvider, logAIGeneration, type AITrainingAction } from './_lib/ai-training.js';
-import { validateTrainingAIContext, validateTrainingAISession, type TrainingAIExercise } from '../src/trainingAI.js';
+import { ApiRequest, ApiResponse, getSession, getSessionImpersonator, getSql, jsonBody, readBody, setJsonBody } from './server.js';
+import { AITrainingService, ensureAITrainingSchema, GeminiTrainingProvider, logAIGeneration, type AITrainingAction } from './ai-training.js';
+import { validateTrainingAIContext, validateTrainingAISession, type TrainingAIExercise } from '../../src/trainingAI.js';
 
-export const config={api:{bodyParser:false}};
 const errorMessage=(code:string)=>code==='limit'?'Se ha alcanzado el límite temporal del servicio de IA. Inténtalo más tarde.':code==='timeout'?'La generación está tardando demasiado. Puedes volver a intentarlo.':code==='invalid_response'||code==='invalid_json'||code==='empty'?'La IA no devolvió una sesión válida. Vuelve a intentarlo.':code==='missing_key'?'La generación con IA todavía no está configurada.':'El servicio de IA no está disponible ahora mismo. Inténtalo de nuevo.';
 
-export default async function handler(req:ApiRequest,res:ApiResponse){
+export async function handleTrainingAI(req:ApiRequest,res:ApiResponse){
   res.setHeader('Cache-Control','private, no-store');
   try{
     if(req.method!=='POST'){res.status(405).json({error:'Método no permitido.'});return}
