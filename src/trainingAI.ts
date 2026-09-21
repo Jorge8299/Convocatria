@@ -1,6 +1,11 @@
 export type TrainingAILevel = 'iniciacion' | 'medio' | 'avanzado';
 export type TrainingAIIntensity = 'baja' | 'media' | 'alta';
 export type TrainingAIGenerationType = 'session' | 'exercise' | 'adapt';
+export type TrainingAIBoardPieceKind = 'attacker' | 'defender' | 'ball' | 'cone';
+export type TrainingAIBoardActionKind = 'pass' | 'run' | 'dribble' | 'press';
+
+export interface TrainingAIBoardPiece { id: string; kind: TrainingAIBoardPieceKind; x: number; y: number; label?: string }
+export interface TrainingAIBoardAction { id: string; kind: TrainingAIBoardActionKind; from: { x: number; y: number }; to: { x: number; y: number }; curve?: number; order?: number }
 
 export interface TrainingAIExercise {
   id: string;
@@ -17,6 +22,8 @@ export interface TrainingAIExercise {
   instructions: string[];
   variants: string[];
   coachingPoints: string[];
+  board: TrainingAIBoardPiece[];
+  actions: TrainingAIBoardAction[];
 }
 
 export interface TrainingAISession {
@@ -47,12 +54,15 @@ export interface TrainingAIContext {
 }
 
 const text = (value: unknown, max = 1200) => typeof value === 'string' ? value.trim().slice(0, max) : '';
-const list = (value: unknown, maxItems = 12, maxLength = 240) => Array.isArray(value)
-  ? value.map((item) => text(item, maxLength)).filter(Boolean).slice(0, maxItems)
-  : [];
+const list = (value: unknown, maxItems = 12, maxLength = 240) => (Array.isArray(value) ? value : typeof value === 'string' ? value.split(/\r?\n|,\s*/) : [])
+  .map((item) => text(item, maxLength)).filter(Boolean).slice(0, maxItems);
 const integer = (value: unknown, min: number, max: number) => {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed >= min && parsed <= max ? parsed : null;
+};
+const coordinate = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 4 && parsed <= 96 ? Math.round(parsed * 10) / 10 : null;
 };
 
 export function validateTrainingAIContext(value: unknown): TrainingAIContext | null {
@@ -85,7 +95,36 @@ export function validateTrainingAISession(value: unknown, expected?: { players?:
     const organization = text(item.organization);
     const development = text(item.development);
     if (duration === null || players === null || !name || !block || !objective || !organization || !development) return null;
-    exercises.push({ id: text(item.id, 100) || `ai-${index + 1}`, order: index + 1, block, name, duration, objective, players, space: text(item.space, 160), material: list(item.material), organization, development, instructions: list(item.instructions), variants: list(item.variants), coachingPoints: list(item.coachingPoints) });
+    if (!Array.isArray(item.board) || item.board.length < 2 || item.board.length > 40 || !Array.isArray(item.actions) || item.actions.length > 24) return null;
+    const board = item.board.map((rawPiece, pieceIndex) => {
+      if (typeof rawPiece === 'string') {
+        const [rawKind,rawX,rawY,rawLabel='']=rawPiece.split('|').map(part=>part.trim());
+        const kind=['attacker','defender','ball','cone'].includes(rawKind)?rawKind as TrainingAIBoardPieceKind:null,x=coordinate(rawX),y=coordinate(rawY);
+        return kind&&x!==null&&y!==null?{id:`ai-${index+1}-piece-${pieceIndex+1}`,kind,x,y,label:text(rawLabel,3)||undefined}:null;
+      }
+      if (!rawPiece || typeof rawPiece !== 'object') return null;
+      const piece = rawPiece as Record<string, unknown>, kind = ['attacker','defender','ball','cone'].includes(String(piece.kind)) ? piece.kind as TrainingAIBoardPieceKind : null;
+      const x = coordinate(piece.x), y = coordinate(piece.y);
+      return kind && x !== null && y !== null ? { id: text(piece.id, 80) || `ai-${index + 1}-piece-${pieceIndex + 1}`, kind, x, y, label: text(piece.label, 3) || undefined } : null;
+    });
+    const actions = item.actions.map((rawAction, actionIndex) => {
+      if(typeof rawAction==='string'){
+        const [rawKind,rawFromX,rawFromY,rawToX,rawToY,rawOrder='',rawCurve='']=rawAction.split('|').map(part=>part.trim());
+        const kind=['pass','run','dribble','press'].includes(rawKind)?rawKind as TrainingAIBoardActionKind:null,fromX=coordinate(rawFromX),fromY=coordinate(rawFromY),toX=coordinate(rawToX),toY=coordinate(rawToY);
+        if(!kind||fromX===null||fromY===null||toX===null||toY===null)return null;
+        const order=integer(rawOrder,1,24),curve=Number(rawCurve);
+        return {id:`ai-${index+1}-action-${actionIndex+1}`,kind,from:{x:fromX,y:fromY},to:{x:toX,y:toY},order:order||undefined,curve:Number.isFinite(curve)&&Math.abs(curve)<=30?curve:undefined};
+      }
+      if (!rawAction || typeof rawAction !== 'object') return null;
+      const action=rawAction as Record<string,unknown>,from=action.from as Record<string,unknown>|undefined,to=action.to as Record<string,unknown>|undefined;
+      const kind=['pass','run','dribble','press'].includes(String(action.kind))?action.kind as TrainingAIBoardActionKind:null;
+      const fromX=coordinate(from?.x??action.fromX),fromY=coordinate(from?.y??action.fromY),toX=coordinate(to?.x??action.toX),toY=coordinate(to?.y??action.toY);
+      if(!kind||fromX===null||fromY===null||toX===null||toY===null)return null;
+      const order=integer(action.order,1,24),curve=Number(action.curve);
+      return {id:text(action.id,80)||`ai-${index+1}-action-${actionIndex+1}`,kind,from:{x:fromX,y:fromY},to:{x:toX,y:toY},order:order||undefined,curve:Number.isFinite(curve)&&Math.abs(curve)<=30?curve:undefined};
+    });
+    if(board.some(piece=>!piece)||actions.some(action=>!action))return null;
+    exercises.push({ id: text(item.id, 100) || `ai-${index + 1}`, order: index + 1, block, name, duration, objective, players, space: text(item.space, 160), material: list(item.material), organization, development, instructions: list(item.instructions), variants: list(item.variants), coachingPoints: list(item.coachingPoints), board: board as TrainingAIBoardPiece[], actions: actions as TrainingAIBoardAction[] });
   }
   const totalDuration = exercises.reduce((sum, item) => sum + item.duration, 0);
   const players = integer(input.players, 1, 40);

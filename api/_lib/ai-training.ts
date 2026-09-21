@@ -6,18 +6,7 @@ export type AITrainingAction = 'session' | 'exercise' | 'adapt';
 export interface AITrainingRequest { action: AITrainingAction; context: TrainingAIContext; category: string; format: 'F8'|'F11'; currentSession?: TrainingAISession; exercise?: TrainingAIExercise; instruction?: string }
 export interface AITrainingProvider { name: string; model: string; generate(input: AITrainingRequest): Promise<unknown> }
 
-const sessionSchema = {
-  type: 'object', required: ['title','category','format','players','goalkeepers','objectives','totalMaterial','summary','exercises'],
-  properties: {
-    title:{type:'string'}, category:{type:'string'}, format:{type:'string',enum:['F8','F11']}, players:{type:'integer'}, goalkeepers:{type:'integer'},
-    objectives:{type:'array',items:{type:'string'}}, totalMaterial:{type:'array',items:{type:'string'}}, summary:{type:'string'},
-    exercises:{type:'array',minItems:1,maxItems:12,items:{type:'object',required:['block','name','duration','objective','players','space','material','organization','development','instructions','variants','coachingPoints'],properties:{
-      block:{type:'string'},name:{type:'string'},duration:{type:'integer'},objective:{type:'string'},players:{type:'integer'},space:{type:'string'},material:{type:'array',items:{type:'string'}},organization:{type:'string'},development:{type:'string'},instructions:{type:'array',items:{type:'string'}},variants:{type:'array',items:{type:'string'}},coachingPoints:{type:'array',items:{type:'string'}}
-    }}}
-  }
-};
-
-const SYSTEM_PROMPT = `Eres el asistente de planificación de fútbol base de CONVO. Diseña sesiones seguras, realistas y apropiadas para la edad. Prioriza participación alta, poco tiempo de espera, mucho contacto con balón, diversión en edades tempranas, toma de decisiones y situaciones parecidas al juego. Evita tareas demasiado complejas. La suma de minutos debe coincidir con la duración solicitada (tolerancia máxima 5 minutos). Usa español claro para entrenadores. Cada ejercicio debe poder realizarse con los jugadores, porteros, espacio y material indicados. No incluyas explicaciones fuera del objeto JSON.`;
+const SYSTEM_PROMPT = `Eres el asistente de planificación de fútbol base de CONVO. Diseña sesiones seguras, realistas y apropiadas para la edad. Prioriza participación alta, poco tiempo de espera, mucho contacto con balón, diversión en edades tempranas, toma de decisiones y situaciones parecidas al juego. Evita tareas demasiado complejas. La suma de minutos debe coincidir con la duración solicitada (tolerancia máxima 5 minutos). Usa español claro para entrenadores. Cada ejercicio debe poder realizarse con los jugadores, porteros, espacio y material indicados. Devuelve exclusivamente JSON con title, summary y exercises. Cada ejercicio debe incluir block, name, duration, objective, players, space, material, organization, development, instructions, variants, coachingPoints, board y actions. Para cada ejercicio crea una pizarra táctica clara con coordenadas porcentuales entre 4 y 96. En board, cada cadena debe usar kind|x|y|label, donde kind es attacker, defender, ball o cone y label tiene máximo 3 caracteres. En actions, cada cadena debe usar kind|fromX|fromY|toX|toY|order|curve, donde kind es pass, run, dribble o press. Las acciones deben coincidir exactamente con la explicación. Representa una organización útil, no todos los jugadores si repetir grupos hace la imagen ilegible. No incluyas explicaciones fuera del objeto JSON.`;
 
 function userPrompt(input: AITrainingRequest) {
   const base = `Categoría: ${input.category}. Formato: ${input.format}. Jugadores: ${input.context.players}, porteros: ${input.context.goalkeepers}. Duración: ${input.context.duration} minutos. Nivel: ${input.context.level}. Modalidad: ${input.context.mode}. Objetivos: ${input.context.objectives.join(', ')}. Material: ${input.context.material.join(', ') || 'no indicado'}. Campo: ${input.context.fieldSize || 'no indicado'}. Intensidad: ${input.context.intensity}. Observaciones: ${input.context.observations || 'ninguna'}.`;
@@ -37,7 +26,7 @@ export class GeminiTrainingProvider implements AITrainingProvider {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent`, {
           method:'POST', signal:controller.signal, headers:{'Content-Type':'application/json','x-goog-api-key':this.apiKey},
-          body:JSON.stringify({ systemInstruction:{parts:[{text:SYSTEM_PROMPT}]}, contents:[{role:'user',parts:[{text:userPrompt(input)}]}], generationConfig:{responseMimeType:'application/json',responseJsonSchema:sessionSchema,thinkingConfig:{thinkingLevel:'low'}} })
+          body:JSON.stringify({ systemInstruction:{parts:[{text:SYSTEM_PROMPT}]}, contents:[{role:'user',parts:[{text:userPrompt(input)}]}], generationConfig:{responseMimeType:'application/json',thinkingConfig:{thinkingLevel:'low'}} })
         });
         if (response.status >= 500 && attempt === 0) {
           await new Promise(resolve => setTimeout(resolve, 750));
@@ -61,7 +50,9 @@ export class AITrainingService {
   constructor(private provider: AITrainingProvider) {}
   async generate(input: AITrainingRequest) {
     const raw = await this.provider.generate(input);
-    const session = validateTrainingAISession(raw,{players:input.context.players,duration:input.context.duration});
+    const source=raw as Record<string,unknown>;
+    const enriched = raw && typeof raw === 'object' ? {...source,category:input.category,format:input.format,players:input.context.players,goalkeepers:input.context.goalkeepers,objectives:input.context.objectives,totalMaterial:input.context.material,exercises:Array.isArray(source.exercises)?source.exercises.map(exercise=>exercise&&typeof exercise==='object'?{...exercise,players:input.context.players}:exercise):source.exercises} : raw;
+    const session = validateTrainingAISession(enriched,{players:input.context.players,duration:input.context.duration});
     if (!session) throw new Error('invalid_response');
     return session;
   }
