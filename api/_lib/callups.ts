@@ -13,7 +13,7 @@ const eventJoin=`LEFT JOIN LATERAL (
  WHERE s.account_id=c.account_id AND s.club_id=c.club_id AND s.area='agenda' AND e->>'id'=c.event_id AND e->>'type'='match' LIMIT 1
 ) a ON true`.replace('CROSS_PLACEHOLDER ','');
 const projection=`SELECT c.*,cl.nombre AS club_name,cl.logo,cl.color_principal,a.e AS event,
- (c.closed_at IS NOT NULL) AS closed
+ (c.closed_at IS NOT NULL OR COALESCE(NULLIF(a.e->>'date','')::date,NULLIF(c.match_date,'')::date)<=(CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Madrid')::date) AS closed
  FROM club_callups c JOIN clubs cl ON cl.id=c.club_id AND cl.activo=TRUE
  JOIN club_accounts coach ON coach.id=c.account_id AND coach.active=TRUE AND coach.club_id=c.club_id
  ${eventJoin}`;
@@ -56,7 +56,7 @@ const roster=(await sql.query("SELECT data FROM club_stores WHERE account_id=$1 
  INSERT INTO club_callups(club_id,account_id,event_id,token,title,message,match_date,match_time,field,prompt)
  SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10
  ON CONFLICT(account_id,event_id) DO UPDATE SET message=EXCLUDED.message,title=EXCLUDED.title,match_date=EXCLUDED.match_date,match_time=EXCLUDED.match_time,field=EXCLUDED.field,prompt=EXCLUDED.prompt,updated_at=now()
- WHERE club_callups.closed_at IS NULL RETURNING *
+ WHERE club_callups.closed_at IS NULL AND NULLIF(EXCLUDED.match_date,'')::date>(CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Madrid')::date RETURNING *
  ), p AS (
  INSERT INTO convocatoria_respuestas(convocatoria_id,jugador_id,nombre,dorsal)
  SELECT c.id,x.id,x.name,COALESCE(x.number,'') FROM c,jsonb_to_recordset($11::jsonb) x(id text,name text,number text)
@@ -75,7 +75,10 @@ export async function deleteCallup(sql:Sql,owner:Owner,id:string){
  ownerCheck(owner);
  if(!/^[a-f0-9-]{36}$/i.test(id))throw new CallupError('Convocatoria no válida.');
  const rows=await sql.query(`WITH deleted AS (
- DELETE FROM club_callups WHERE id=$1 AND account_id=$2 AND club_id=$3 AND closed_at IS NOT NULL RETURNING id
+ DELETE FROM club_callups c WHERE id=$1 AND account_id=$2 AND club_id=$3 AND (closed_at IS NOT NULL OR NULLIF(match_date,'')::date<=(CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Madrid')::date OR EXISTS (
+   SELECT 1 FROM club_stores s,jsonb_array_elements(CASE WHEN jsonb_typeof(s.data)='array' THEN s.data ELSE '[]'::jsonb END) e
+   WHERE s.account_id=c.account_id AND s.club_id=c.club_id AND s.area='agenda' AND e->>'id'=c.event_id AND NULLIF(e->>'date','')::date<=(CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Madrid')::date
+ )) RETURNING id
  ), cleaned AS (
  UPDATE club_stores SET data=COALESCE((SELECT jsonb_agg(item) FROM jsonb_array_elements(data) item WHERE COALESCE(item->>'attendanceId','')<>$1::text AND COALESCE(item->>'id','')<>$1::text),'[]'::jsonb)
  WHERE account_id=$2 AND club_id=$3 AND area='journeys' AND EXISTS(SELECT 1 FROM deleted)
@@ -89,6 +92,7 @@ export async function respondCallup(sql:Sql,token:string,input:Row){
  JOIN club_accounts coach ON coach.id=c.account_id AND coach.active=TRUE AND coach.club_id=c.club_id
  ${eventJoin}
  WHERE r.convocatoria_id=c.id AND c.token=$3 AND r.jugador_id=$4 AND c.closed_at IS NULL
+ AND COALESCE(NULLIF(a.e->>'date','')::date,NULLIF(c.match_date,'')::date)>(CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Madrid')::date
  RETURNING r.estado,r.updated_at`,[input.estado,input.estado==='NO'?(input.motivo||'').trim():null,token,input.jugador_id]);
  if(!rows[0])throw new CallupError('No se pudo guardar: convocatoria cerrada o jugador no disponible.',409);
  return rows[0];

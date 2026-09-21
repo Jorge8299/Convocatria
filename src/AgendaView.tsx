@@ -110,6 +110,8 @@ export interface MatchAgendaEvent extends AgendaEventBase {
   assignedAt?: string;
   acknowledgedAt?: string | null;
   coordinatorStatus?: "scheduled" | "cancelled";
+  cancellationReason?: string;
+  cancelledByCoach?: boolean;
 }
 
 interface MatchSummary {
@@ -265,6 +267,7 @@ export function AgendaView({
   onOpenBoard,
   onOpenStats,
   onOpenCallup,
+  onSuspendMatch,
   categoryLabel,
   footballStage,
   defaultPlayerCount,
@@ -281,6 +284,7 @@ export function AgendaView({
   onOpenBoard: (event: MatchAgendaEvent) => void;
   onOpenStats: (event: MatchAgendaEvent) => void;
   onOpenCallup: (event: MatchAgendaEvent) => void;
+  onSuspendMatch: (event: MatchAgendaEvent, reason: string) => Promise<MatchAgendaEvent>;
   categoryLabel: string;
   footballStage: FootballStage | null;
   defaultPlayerCount: number;
@@ -304,6 +308,9 @@ export function AgendaView({
   const [trainingView, setTrainingView] = useState<"summary" | "planner">("planner");
   const [trainingSaving, setTrainingSaving] = useState(false);
   const [trainingMessage, setTrainingMessage] = useState("");
+  const [suspensionReason, setSuspensionReason] = useState("");
+  const [suspensionSaving, setSuspensionSaving] = useState(false);
+  const [suspensionMessage, setSuspensionMessage] = useState("");
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [exercisePreview, setExercisePreview] = useState<{
     exercise: PlannedExercise;
@@ -315,6 +322,22 @@ export function AgendaView({
   const chooseExerciseBlock = (blockId: TrainingBlock["id"]) => {
     setPreviewTargetBlock(blockId);
     requestAnimationFrame(() => trainingFiltersRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
+  const suspendMatch = async (event: MatchAgendaEvent) => {
+    const reason = suspensionReason.trim();
+    if (!reason) { setSuspensionMessage("Escribe el motivo de la suspensión."); return; }
+    setSuspensionSaving(true);
+    setSuspensionMessage("");
+    try {
+      const updated = await onSuspendMatch(event, reason);
+      setDraft(updated);
+      setSuspensionReason("");
+      setSuspensionMessage("Partido suspendido. El motivo ha quedado guardado.");
+    } catch (error) {
+      setSuspensionMessage(error instanceof Error ? error.message : "No se pudo suspender el partido.");
+    } finally {
+      setSuspensionSaving(false);
+    }
   };
 
   const cells = useMemo(() => {
@@ -543,7 +566,7 @@ export function AgendaView({
                             ? "CANCELADO"
                             : null
                         : event.coordinatorStatus === "cancelled"
-                          ? "CANCELADO"
+                          ? event.cancelledByCoach ? "SUSPENDIDO" : "CANCELADO"
                           : null;
                       return (
                         <small className={`${event.type}${event.type === "match" && event.assignedByCoordinator ? " coordinator-assigned" : ""}${calendarStatus === "FESTIVO" ? " holiday" : calendarStatus ? " cancelled" : ""}`} key={event.id}>
@@ -583,13 +606,13 @@ export function AgendaView({
           <>
             <div className="agenda-event-list">
               {selectedEvents.map((event) => (
-                <article className={`${event.type}${event.assignedByCoordinator ? " coordinator-assigned" : ""}${event.type === "training" && event.exceptionStatus !== "scheduled" && event.exceptionStatus ? " cancelled" : ""}${event.type === "match" && event.coordinatorStatus === "cancelled" ? " cancelled" : ""}`} data-cancellation-label={event.type === "training" && event.exceptionStatus === "holiday" ? "FESTIVO" : event.type === "training" && event.exceptionStatus === "cancelled" || event.type === "match" && event.coordinatorStatus === "cancelled" ? "CANCELADO" : undefined} key={event.id}>
+                <article className={`${event.type}${event.assignedByCoordinator ? " coordinator-assigned" : ""}${event.type === "training" && event.exceptionStatus !== "scheduled" && event.exceptionStatus ? " cancelled" : ""}${event.type === "match" && event.coordinatorStatus === "cancelled" ? " cancelled" : ""}`} data-cancellation-label={event.type === "training" && event.exceptionStatus === "holiday" ? "FESTIVO" : event.type === "training" && event.exceptionStatus === "cancelled" ? "CANCELADO" : event.type === "match" && event.coordinatorStatus === "cancelled" ? event.cancelledByCoach ? "SUSPENDIDO" : "CANCELADO" : undefined} key={event.id}>
                   <button className="agenda-event-main" onClick={() => event.type === "training" ? openTraining(event) : setDraft({ ...event })}>
                     <span className="agenda-event-icon" aria-hidden="true">
                       {event.type === "training" ? <Dumbbell size={22} /> : <Trophy size={22} />}
                     </span>
                     <span className="agenda-event-copy">
-                      <em>{event.type === "training" ? event.exceptionStatus === "holiday" ? "FESTIVO · SIN ENTRENAMIENTO" : event.exceptionStatus === "cancelled" ? "ENTRENAMIENTO CANCELADO" : "SESIÓN DE ENTRENAMIENTO" : event.coordinatorStatus === "cancelled" ? "PARTIDO CANCELADO" : `${event.matchType} · ${event.home ? "EN CASA" : "A DOMICILIO"}`}</em>
+                      <em>{event.type === "training" ? event.exceptionStatus === "holiday" ? "FESTIVO · SIN ENTRENAMIENTO" : event.exceptionStatus === "cancelled" ? "ENTRENAMIENTO CANCELADO" : "SESIÓN DE ENTRENAMIENTO" : event.coordinatorStatus === "cancelled" ? event.cancelledByCoach ? "PARTIDO SUSPENDIDO" : "PARTIDO CANCELADO" : `${event.matchType} · ${event.home ? "EN CASA" : "A DOMICILIO"}`}</em>
                       {event.assignedByCoordinator && (
                         <span className="coordinator-origin"><ShieldCheck size={12} /> Coordinación</span>
                       )}
@@ -797,12 +820,15 @@ export function AgendaView({
         )}
 
         {draft?.type === "match" && draft.assignedByCoordinator && (
-          <div className={`agenda-form assigned-match-detail${draft.coordinatorStatus === "cancelled" ? " cancelled" : ""}`} data-cancellation-label={draft.coordinatorStatus === "cancelled" ? "CANCELADO" : undefined}>
+          <div className={`agenda-form assigned-match-detail${draft.coordinatorStatus === "cancelled" ? " cancelled" : ""}`} data-cancellation-label={draft.coordinatorStatus === "cancelled" ? draft.cancelledByCoach ? "SUSPENDIDO" : "CANCELADO" : undefined}>
             <div className="assigned-match-heading">
               <span><ShieldCheck size={16} /> PARTIDO ASIGNADO POR COORDINACIÓN</span>
-              <strong>{draft.coordinatorStatus === "cancelled" ? `CANCELADO · ${draft.rivalName}` : draft.rivalName}</strong>
+              <strong>{draft.coordinatorStatus === "cancelled" ? `${draft.cancelledByCoach ? "SUSPENDIDO" : "CANCELADO"} · ${draft.rivalName}` : draft.rivalName}</strong>
               <small>{draft.assignedByName ? `Añadido por ${draft.assignedByName}` : "Añadido por coordinación"}</small>
             </div>
+            {draft.coordinatorStatus === "cancelled" && draft.cancellationReason && <div className="match-suspension-reason"><strong>Motivo</strong><p>{draft.cancellationReason}</p></div>}
+            {draft.coordinatorStatus !== "cancelled" && <div className="match-suspension-form"><label><span>Suspender partido</span><textarea maxLength={200} rows={2} value={suspensionReason} onChange={(event) => setSuspensionReason(event.target.value)} placeholder="Motivo, por ejemplo: lluvia o campo impracticable" /></label><button type="button" disabled={suspensionSaving || !suspensionReason.trim()} onClick={() => void suspendMatch(draft)}><X size={16} /> {suspensionSaving ? "Guardando…" : "Suspender partido"}</button></div>}
+            {suspensionMessage && <p className="agenda-save-message">{suspensionMessage}</p>}
             <div className="assigned-match-ticket">
               <div><span>Fecha</span><strong>{new Intl.DateTimeFormat("es-ES", { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${draft.date}T12:00:00`))}</strong></div>
               <div><span>Hora</span><strong>{draft.startTime}</strong></div>
@@ -821,9 +847,9 @@ export function AgendaView({
               </div>
             )}
             <div className="agenda-linked-actions">
-              <button type="button" onClick={() => onOpenCallup(draft)}><ClipboardList size={17} /> Citación</button>
-              <button onClick={() => onOpenStats(draft)}><BarChart3 size={17} /> Estadísticas</button>
-              <button onClick={() => onOpenBoard(draft)}><PencilRuler size={17} /> Abrir alineación</button>
+              <button type="button" disabled={draft.coordinatorStatus === "cancelled"} onClick={() => onOpenCallup(draft)}><ClipboardList size={17} /> Citación</button>
+              <button disabled={draft.coordinatorStatus === "cancelled"} onClick={() => onOpenStats(draft)}><BarChart3 size={17} /> Estadísticas</button>
+              <button disabled={draft.coordinatorStatus === "cancelled"} onClick={() => onOpenBoard(draft)}><PencilRuler size={17} /> Abrir alineación</button>
             </div>
           </div>
         )}

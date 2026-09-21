@@ -2760,6 +2760,7 @@ function CoordinatorPanel({
                           <span><Clock size={14} /> {match.startTime || "Hora pendiente"}</span>
                           <span><MapPin size={14} /> {match.field || "Campo pendiente"}</span>
                         </div>
+                        {match.coordinatorStatus === "cancelled" && match.cancellationReason && <div className="coordinator-match-cancellation-reason"><strong>{match.cancelledByCoach ? "Suspendido por el entrenador" : "Motivo"}</strong><span>{match.cancellationReason}</span></div>}
                         {match.assignedByCoordinator && (
                           <div className="coordinator-match-management-actions">
                             <button type="button" disabled={matchSaving} onClick={() => editCoordinatorMatch(match)}><Pencil size={14} /> Editar</button>

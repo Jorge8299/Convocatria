@@ -718,6 +718,11 @@ export const clubApi = {
       method: "PATCH",
       body: JSON.stringify({ action: "updateMatch", accountId, eventId, coordinatorStatus }),
     }),
+  suspendOwnMatch: (eventId: string, reason: string) =>
+    request<{ ok: true; event: import('./AgendaView').MatchAgendaEvent }>("/api/coordinator-agenda", {
+      method: "PATCH",
+      body: JSON.stringify({ action: "suspendOwnMatch", eventId, reason }),
+    }),
   acknowledgeCoordinatorMatch: (eventId: string) =>
     request<{ ok: true; acknowledgedAt: string }>("/api/coordinator-agenda", {
       method: "PATCH",

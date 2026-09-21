@@ -16,7 +16,7 @@ test('WhatsApp preserves original content except private notice; numeric shirt s
  assert.equal(confirmationMessage(custom,'https://example.com/e/token','Para confirmar asistencia pulse aquí'),custom);
  assert.deepEqual(sortAttendancePlayers([{dorsal:'10',nombre:'A'},{dorsal:'',nombre:'B'},{dorsal:'2',nombre:'C'}]).map(p=>p.dorsal),['2','10','']);
 });
-test('Postgres: additive migration, idempotent share, club boundaries, private reasons, manual-only close',async()=>{
+test('Postgres: additive migration, idempotent share, club boundaries, private reasons, manual and automatic close',async()=>{
  const db=new PGlite();
  const sql={query:async(text:string,values:unknown[]=[])=> (await db.query(text,values)).rows} as any;
  const owner={id:'coach',club_id:'club',role:'entrenador'} as const;
@@ -27,7 +27,7 @@ test('Postgres: additive migration, idempotent share, club boundaries, private r
  CREATE TABLE club_stores(account_id text,club_id text,area text,data jsonb);
  INSERT INTO clubs VALUES('club','Club','/crest.png','#123456',true),('otherclub','Other','/crest.png','#123456',true);
  INSERT INTO club_accounts VALUES('coach','club',true),('other','otherclub',true);
- INSERT INTO club_stores VALUES('coach','club','agenda','[{"id":"event1","type":"match","date":"2020-09-01","startTime":"10:00","home":true,"rivalName":"Rival","field":"Campo"}]'),
+ INSERT INTO club_stores VALUES('coach','club','agenda','[{"id":"event1","type":"match","date":"2099-09-01","startTime":"10:00","home":true,"rivalName":"Rival","field":"Campo"}]'),
  ('coach','club','team','{"players":[{"id":"p1","name":"Nombre Apellidos","number":"10","active":true},{"id":"p2","name":"Segundo Apellidos","number":"2","active":true},{"id":"p3","name":"Inactivo","number":"1","active":false}]}'),
  ('coach','club','journeys','[{"id":"legacy","message":"unchanged"}]');
  `);
@@ -36,7 +36,7 @@ test('Postgres: additive migration, idempotent share, club boundaries, private r
  for(const query of callupMigration)await db.exec(query);
  assert.deepEqual((await db.query('SELECT * FROM club_stores')).rows,before);
  const c=await createCallup(sql,owner,{eventId:'event1',message:'Mensaje original',prompt:'Para confirmar, pulsa aquí.'});
- assert.ok(c);assert.equal(c.closed,false); // Past match stays open until manual close.
+ assert.ok(c);assert.equal(c.closed,false);
  assert.equal(c.prompt,'Para confirmar, pulsa aquí.');
  assert.deepEqual(c.players.map(p=>p.dorsal),['2','10']);
  await respondCallup(sql,c.token,{jugador_id:'p1',estado:'NO',motivo:'Motivo privado'});
@@ -84,11 +84,35 @@ test('Postgres: sharing works without a configured roster',async()=>{
   CREATE TABLE club_stores(account_id text,club_id text,area text,data jsonb);
   INSERT INTO clubs VALUES('club','Club','/crest.png','#123456',true);
   INSERT INTO club_accounts VALUES('coach','club',true);
-  INSERT INTO club_stores VALUES('coach','club','agenda','[{"id":"event1","type":"match","date":"2020-09-02","startTime":"12:00","home":true,"rivalName":"Rival","field":"Campo"}]');`);
+  INSERT INTO club_stores VALUES('coach','club','agenda','[{"id":"event1","type":"match","date":"2099-09-02","startTime":"12:00","home":true,"rivalName":"Rival","field":"Campo"}]');`);
   for(const query of callupMigration)await db.exec(query);
   const c=await createCallup(sql,owner,{eventId:'event1',message:'Sin plantilla aún'});
   assert.ok(c);assert.equal(c.closed,false);assert.deepEqual(c.players,[]);
   const c2=await createCallup(sql,owner,{eventId:'event1',message:'Sigue disponible'});
   assert.equal(c2.token,c.token);
+ }finally{await db.close();}
+});
+
+test('Postgres: callups close automatically on the match day in Europe/Madrid',async()=>{
+ const db=new PGlite();
+ const sql={query:async(text:string,values:unknown[]=[])=> (await db.query(text,values)).rows} as any;
+ const owner={id:'coach',club_id:'club',role:'entrenador'} as const;
+ try{
+  await db.exec(`CREATE TABLE clubs(id text PRIMARY KEY,nombre text,logo text,color_principal text,activo boolean);
+  CREATE TABLE club_accounts(id text PRIMARY KEY,club_id text,active boolean);
+  CREATE TABLE club_stores(account_id text,club_id text,area text,data jsonb);
+  INSERT INTO clubs VALUES('club','Club','/crest.png','#123456',true);
+  INSERT INTO club_accounts VALUES('coach','club',true);
+  INSERT INTO club_stores VALUES
+   ('coach','club','agenda','[{"id":"event1","type":"match","date":"2099-09-02","startTime":"12:00","home":true,"rivalName":"Rival","field":"Campo"}]'),
+   ('coach','club','team','{"players":[{"id":"p1","name":"Jugador","number":"7","active":true}]}');`);
+  for(const query of callupMigration)await db.exec(query);
+  const callup=await createCallup(sql,owner,{eventId:'event1',message:'Mensaje'});
+  await db.query(`UPDATE club_stores SET data=jsonb_set(data,'{0,date}','"2000-01-01"'::jsonb) WHERE area='agenda'`);
+  assert.equal((await publicCallup(sql,callup.token)).closed,true);
+  assert.equal((await listCallups(sql,owner))[0].closed,true);
+  await assert.rejects(respondCallup(sql,callup.token,{jugador_id:'p1',estado:'SI'}));
+  await deleteCallup(sql,owner,callup.id);
+  assert.deepEqual(await listCallups(sql,owner),[]);
  }finally{await db.close();}
 });

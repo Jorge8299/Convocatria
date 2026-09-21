@@ -186,7 +186,21 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
 
     if (req.method === 'PATCH') {
-      const body = jsonBody<{ action?: string; accountId?: string; eventId?: string; changes?: Record<string, unknown>; selections?: Array<{ accountId?: string; eventId?: string }>; exceptionStatus?: string; match?: MatchInput; coordinatorStatus?: string }>(req);
+      const body = jsonBody<{ action?: string; accountId?: string; eventId?: string; reason?: string; changes?: Record<string, unknown>; selections?: Array<{ accountId?: string; eventId?: string }>; exceptionStatus?: string; match?: MatchInput; coordinatorStatus?: string }>(req);
+      if (session.role === 'entrenador' && body.action === 'suspendOwnMatch') {
+        const eventId = String(body.eventId || '');
+        const reason = String(body.reason || '').trim();
+        if (!eventId || !reason || reason.length > 200) { res.status(400).json({ error: 'Escribe un motivo de hasta 200 caracteres.' }); return }
+        const rows = await sql`UPDATE club_stores
+          SET data=(SELECT jsonb_agg(CASE WHEN item->>'id'=${eventId} AND item->>'type'='match' AND item->>'assignedByCoordinator'='true'
+            THEN item || jsonb_build_object('coordinatorStatus','cancelled','cancellationReason',${reason}::text,'cancelledByCoach',true)
+            ELSE item END) FROM jsonb_array_elements(data) AS item),updated_at=NOW()
+          WHERE account_id=${session.id} AND club_id=${session.club_id} AND area='agenda'
+            AND EXISTS (SELECT 1 FROM jsonb_array_elements(data) AS item WHERE item->>'id'=${eventId} AND item->>'type'='match' AND item->>'assignedByCoordinator'='true' AND COALESCE(item->>'coordinatorStatus','scheduled')='scheduled')
+          RETURNING (SELECT item FROM jsonb_array_elements(data) AS item WHERE item->>'id'=${eventId}) AS event`;
+        if (!rows[0]) { res.status(404).json({ error: 'No se encontró un partido vigente para suspender.' }); return }
+        res.status(200).json({ ok: true, event: rows[0].event }); return;
+      }
       if (session.role === 'coordinador' && body.action === 'batchTrainingStatus') {
         const selections = Array.isArray(body.selections) ? body.selections.slice(0, 100) : [];
         if (!selections.length || !['scheduled', 'holiday', 'cancelled'].includes(body.exceptionStatus || '') || selections.some((item) => !item.accountId || !item.eventId)) {
@@ -223,6 +237,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         if (body.coordinatorStatus) {
           if (!['scheduled', 'cancelled'].includes(body.coordinatorStatus)) { res.status(400).json({ error: 'Estado de partido no válido.' }); return }
           changes.coordinatorStatus = body.coordinatorStatus;
+          changes.cancelledByCoach = false;
+          changes.cancellationReason = '';
         }
         if (!Object.keys(changes).length) { res.status(400).json({ error: 'No hay cambios para guardar.' }); return }
         const existing = await sql`SELECT item FROM club_stores, jsonb_array_elements(data) item WHERE account_id=${body.accountId} AND club_id=${session.club_id} AND area='agenda' AND item->>'id'=${body.eventId} AND item->>'type'='match' AND item->>'assignedByCoordinator'='true' AND COALESCE(item->>'rest','false')<>'true'`;

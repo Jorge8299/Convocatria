@@ -761,6 +761,7 @@ input,select,textarea{min-height:48px;font-size:13px;font-weight:600}textarea{li
 
 /* Direct actions for matches assigned by coordination */
 .assigned-match-detail .agenda-linked-actions{grid-template-columns:repeat(3,minmax(0,1fr))}
+.match-suspension-form{padding:13px;border:1px solid #e3b1b7;border-radius:14px;background:#fff7f8;display:grid;gap:9px}.match-suspension-form label{display:grid;gap:6px}.match-suspension-form label>span,.match-suspension-reason>strong{color:#963545;font-size:8px;font-weight:950;text-transform:uppercase;letter-spacing:.08em}.match-suspension-form textarea{width:100%;resize:vertical}.match-suspension-form button{min-height:40px;border:1px solid #d99aa4;border-radius:11px;background:#a52f40;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;font-size:9px;font-weight:900}.match-suspension-form button:disabled{opacity:.55}.match-suspension-reason,.coordinator-match-cancellation-reason{padding:11px 13px;border:1px solid #e3b1b7;border-radius:12px;background:#fff1f2;color:#772736;display:grid;gap:4px}.match-suspension-reason p{margin:0;font-size:10px;line-height:1.45}.coordinator-match-cancellation-reason strong{font-size:8px;text-transform:uppercase}.coordinator-match-cancellation-reason span{font-size:10px}.agenda-linked-actions button:disabled{cursor:not-allowed;opacity:.45}
 @media(max-width:620px){.assigned-match-detail .agenda-linked-actions{grid-template-columns:1fr}}
 
 /* Compact, directly editable match time */
