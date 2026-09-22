@@ -24,4 +24,7 @@ test('AI training response must be structured and match requested context',()=>{
  assert.equal(aligned?.exercises[1].board.filter(piece=>piece.kind==='attacker').length,5);
  assert.equal(aligned?.exercises[1].board.filter(piece=>piece.kind==='defender').length,4);
  assert.equal(aligned?.exercises[1].board.filter(piece=>piece.kind==='cone').length,4);
+ const sixVsSix=validateTrainingAISession({...raw,players:12,exercises:[raw.exercises[0],{...raw.exercises[1],players:12,name:'Partido condicionado',organization:'Dos equipos.',development:'Partido 6vs6 con presión tras pérdida.',duration:40},raw.exercises[2]]},{players:12,duration:90});
+ assert.equal(sixVsSix?.exercises[1].board.filter(piece=>piece.kind==='attacker').length,6);
+ assert.equal(sixVsSix?.exercises[1].board.filter(piece=>piece.kind==='defender').length,6);
 });

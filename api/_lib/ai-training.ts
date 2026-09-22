@@ -60,7 +60,13 @@ export class AITrainingService {
       session=validate(await this.provider.generate({...input,instruction:[input.instruction,correction].filter(Boolean).join(' ')}));
     }
     if (!session) throw new Error('invalid_response');
-    return session;
+    const reviewInstruction='Audita la relación entre texto y pizarra ejercicio por ejercicio. Conserva exactamente el número, orden, nombres, organización y desarrollo de los ejercicios. Corrige únicamente board y actions para representar literalmente participantes, distribución, material, inicio y movimientos explicados. No añadas movimientos que el texto no mencione.';
+    const reviewed=validate(await this.provider.generate({...input,action:'adapt',currentSession:session,instruction:reviewInstruction}));
+    if(!reviewed||reviewed.exercises.length!==session.exercises.length)throw new Error('invalid_response');
+    const combined={...session,exercises:session.exercises.map((exercise,index)=>({...exercise,board:reviewed.exercises[index].board,actions:reviewed.exercises[index].actions}))};
+    const finalSession=validateTrainingAISession(combined,{players:input.context.players,duration:input.context.duration});
+    if(!finalSession)throw new Error('invalid_response');
+    return finalSession;
   }
   metadata(){ return {provider:this.provider.name,model:this.provider.model} }
 }

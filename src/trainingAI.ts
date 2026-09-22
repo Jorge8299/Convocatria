@@ -65,7 +65,7 @@ const coordinate = (value: unknown) => {
   return Number.isFinite(parsed) && parsed >= 4 && parsed <= 96 ? Math.round(parsed * 10) / 10 : null;
 };
 const versusCounts = (value: string) => {
-  const match=value.match(/\b(\d{1,2})\s*(?:v(?:s)?\.?|contra)\s*(\d{1,2})\b/i);
+  const match=value.match(/\b(\d{1,2})\s*(?:v(?:s)?\.?|x|contra)\s*(\d{1,2})\b/i);
   if(!match)return null;
   const attackers=Number(match[1]),defenders=Number(match[2]);
   return attackers>0&&defenders>0&&attackers+defenders<=40?{attackers,defenders}:null;
@@ -75,7 +75,7 @@ const generatedPiece=(exerciseIndex:number,kind:TrainingAIBoardPieceKind,index:n
   return {id:`ai-${exerciseIndex+1}-${kind}-${index+1}`,kind,x:(side?58:18)+column*5,y:20+(row+1)*(60/(rows+1)),label:`${kind==='attacker'?'A':'D'}${index+1}`.slice(0,3)};
 };
 function alignExerciseBoard(input:{index:number;name:string;organization:string;development:string;objective:string;material:string[];board:TrainingAIBoardPiece[];actions:TrainingAIBoardAction[]}){
-  const description=`${input.name} ${input.organization}`;
+  const description=`${input.name} ${input.organization} ${input.development} ${input.objective}`;
   const counts=versusCounts(description);
   let board=[...input.board];
   if(counts){
@@ -126,7 +126,7 @@ export function validateTrainingAISession(value: unknown, expected?: { players?:
     const organization = text(item.organization);
     const development = text(item.development);
     if (duration === null || players === null || !name || !block || !objective || !organization || !development) return null;
-    const explicitCounts=versusCounts(`${name} ${organization}`);
+    const explicitCounts=versusCounts(`${name} ${organization} ${development} ${objective}`);
     if(explicitCounts&&explicitCounts.attackers+explicitCounts.defenders>players)return null;
     if (!Array.isArray(item.board) || item.board.length < 2 || item.board.length > 40 || !Array.isArray(item.actions) || item.actions.length > 24) return null;
     const board = item.board.map((rawPiece, pieceIndex) => {
@@ -157,11 +157,6 @@ export function validateTrainingAISession(value: unknown, expected?: { players?:
       return {id:text(action.id,80)||`ai-${index+1}-action-${actionIndex+1}`,kind,from:{x:fromX,y:fromY},to:{x:toX,y:toY},order:order||undefined,curve:Number.isFinite(curve)&&Math.abs(curve)<=30?curve:undefined};
     });
     if(board.some(piece=>!piece)||actions.some(action=>!action))return null;
-    const actionText=`${name} ${objective} ${development}`.toLowerCase(),actionKinds=new Set((actions as TrainingAIBoardAction[]).map(action=>action.kind));
-    if(/presi/.test(actionText)&&!actionKinds.has('press'))return null;
-    if(/\b(pase|pasar|posesión|circulación)\b/.test(actionText)&&!actionKinds.has('pass'))return null;
-    if(/condu/.test(actionText)&&!actionKinds.has('dribble'))return null;
-    if(/desmar|carrera/.test(actionText)&&!actionKinds.has('run'))return null;
     const material=list(item.material),aligned=alignExerciseBoard({index,name,organization,development,objective,material,board:board as TrainingAIBoardPiece[],actions:actions as TrainingAIBoardAction[]});
     exercises.push({ id: text(item.id, 100) || `ai-${index + 1}`, order: index + 1, block, name, duration, objective, players, space: text(item.space, 160), material, organization, development, instructions: list(item.instructions), variants: list(item.variants), coachingPoints: list(item.coachingPoints), board: aligned.board, actions: aligned.actions });
   }
