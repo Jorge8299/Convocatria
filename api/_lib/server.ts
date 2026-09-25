@@ -55,7 +55,7 @@ export async function ensureSchema() {
   $$`;
   await sql`CREATE TABLE IF NOT EXISTS club_stores (
     account_id TEXT NOT NULL REFERENCES club_accounts(id) ON DELETE CASCADE,
-    area TEXT NOT NULL CHECK (area IN ('team','stats','journeys','rivals','boards','agenda')),
+    area TEXT NOT NULL CHECK (area IN ('team','stats','journeys','rivals','boards','agenda','captacion')),
     data JSONB NOT NULL DEFAULT 'null'::jsonb,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (account_id, area)
@@ -65,7 +65,7 @@ export async function ensureSchema() {
       IF EXISTS (
         SELECT 1 FROM pg_constraint
         WHERE conname='club_stores_area_check'
-          AND pg_get_constraintdef(oid) NOT LIKE '%agenda%'
+          AND pg_get_constraintdef(oid) NOT LIKE '%captacion%'
       ) THEN
         ALTER TABLE club_stores DROP CONSTRAINT club_stores_area_check;
       END IF;
@@ -73,7 +73,7 @@ export async function ensureSchema() {
         SELECT 1 FROM pg_constraint WHERE conname='club_stores_area_check'
       ) THEN
         ALTER TABLE club_stores ADD CONSTRAINT club_stores_area_check
-          CHECK (area IN ('team','stats','journeys','rivals','boards','agenda'));
+          CHECK (area IN ('team','stats','journeys','rivals','boards','agenda','captacion'));
       END IF;
     END
   $$`;

@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import {
   BarChart3, Calendar, Check, ChevronDown, ChevronRight, ClipboardList, Clock,
   Copy, Home, MapPin, Maximize2, PencilRuler, Plane, Plus,
-  Save, Send, Settings2, Trash2, Users, X, Archive, UserPlus, Star, Share2, ArrowLeft, LogOut, Search,
+  Save, Send, Settings2, Trash2, Users, X, Archive, UserPlus, Star, Share2, ArrowLeft, LogOut, Search, UserSearch,
 } from 'lucide-react';
 import type { ClubAccount, FootballStage, TrainingYear } from './clubTypes';
 import { clubApi, getStored, StoreArea, StoreRow } from './api';
@@ -14,8 +14,9 @@ import { randomFootballPhrase } from './motivational';
 import { AgendaEvent, AgendaView, MatchAgendaEvent, TrainingAgendaEvent } from './AgendaView';
 import { PushNotificationControl } from './PushNotificationControl';
 import type { TacticalBoard } from './tactical/model';
+import { CoachCaptacionPanel, type ScoutedPlayer } from './CaptacionPanel';
 
-type View = 'confirmaciones' | 'inicio' | 'agenda' | 'equipo' | 'convocatoria' | 'pizarra' | 'estadisticas' | 'guardados' | 'jugador';
+type View = 'confirmaciones' | 'inicio' | 'agenda' | 'equipo' | 'captacion' | 'convocatoria' | 'pizarra' | 'estadisticas' | 'guardados' | 'jugador';
 type BoardMode = 'libre' | 'partido';
 type SavedTab = 'equipo' | 'convocatorias' | 'pizarras' | 'estadisticas';
 type MatchType = 'liga' | 'amistoso' | 'torneo';
@@ -56,6 +57,7 @@ const formatDate = (value: string) => value
 const navItems: Array<{ id: View; label: string; icon: React.ElementType }> = [
   { id: 'agenda', label: 'Agenda', icon: Calendar },
   { id: 'equipo', label: 'Equipo', icon: Users },
+  { id: 'captacion', label: 'Captación', icon: UserSearch },
   { id: 'confirmaciones', label: 'Convocatorias', icon: ClipboardList },
   { id: 'guardados', label: 'Guardados', icon: Archive },
 ];
@@ -98,12 +100,14 @@ export function CoachApp({ account, accounts, stores, canPreviewTrainingPlanner,
   const [stats, setStats] = useState<MatchStat[]>(() => getStored(stores, account.id, 'stats', []));
   const [boards, setBoards] = useState<BoardState>(() => getStored(stores, account.id, 'boards', {lineups:[]}));
   const [agendaEvents, setAgendaEvents] = useState<AgendaEvent[]>(() => getStored(stores, account.id, 'agenda', []));
+  const [scoutedPlayers, setScoutedPlayers] = useState<ScoutedPlayer[]>(() => getStored(stores, account.id, 'captacion', []));
   const saveTimer = React.useRef<Record<string,ReturnType<typeof setTimeout>>>({});
   const queueSave = (area:StoreArea,data:unknown) => { clearTimeout(saveTimer.current[area]); saveTimer.current[area]=setTimeout(()=>void onDataChange(area,data),450) };
   useEffect(() => queueSave('rivals',rivales), [rivales]);
   useEffect(() => queueSave('journeys',journeys), [journeys]);
   useEffect(() => queueSave('team',team), [team]);
   useEffect(() => queueSave('stats',stats), [stats]);
+  useEffect(() => queueSave('captacion',scoutedPlayers), [scoutedPlayers]);
 
   useEffect(() => {
     const listener = (event: MessageEvent) => {
@@ -255,6 +259,7 @@ export function CoachApp({ account, accounts, stores, canPreviewTrainingPlanner,
     inicio: [(club?.nombre || 'CONVO').toUpperCase(), 'Hola, míster', 'Todo lo necesario para el próximo partido, sin complicaciones.'],
     agenda: ['TEMPORADA', 'Agenda', 'Entrenamientos y partidos asignados por coordinación.'],
     equipo: ['TU EQUIPO', 'Equipo y plantilla', 'Configura una vez los jugadores que utilizarás en toda la app.'],
+    captacion: ['SEGUIMIENTO', 'Captación', 'Anota jugadores interesantes de forma rápida y sencilla.'],
     convocatoria: ['ANTES DEL PARTIDO', 'Citación', 'Completa los datos del partido y comparte el mensaje con el equipo.'],
     pizarra: ['HERRAMIENTA DE CAMPO', 'Pizarra táctica', 'Prepara el juego con tu equipo, sobre tu propio campo.'],
     estadisticas: ['DESPUÉS DEL PARTIDO', 'Registrar estadísticas', 'Resultado, goles, asistencias y valoración de cada jugador.'],
@@ -276,6 +281,7 @@ export function CoachApp({ account, accounts, stores, canPreviewTrainingPlanner,
         {view === 'agenda' && <AgendaView initialEventId={notificationEventId} events={agendaEvents.filter(event=>event.type!=='match'||!event.rest)} matches={stats} footballStage={account.footballStage} categoryLabel={`${account.footballStage ? FOOTBALL_STAGE_LABEL[account.footballStage] : 'Categoría pendiente'}${account.trainingYear ? ` · ${TRAINING_YEAR_LABEL[account.trainingYear]}` : ''}`} defaultPlayerCount={team.players.filter((player) => player.active).length} trainingPlannerEnabled={canPreviewTrainingPlanner} tacticalAccount={account} tacticalTeam={{name:team.name, players:team.players.map(p=>({id:p.id,name:p.name,number:p.number,role:p.role,active:p.active}))}} tacticalDocuments={boards.tacticalById || {}} onTacticalSaved={board => setBoards(current => ({ ...current, tacticalById: { ...current.tacticalById, [board.id]: board } }))} onSaveTraining={saveAgendaTraining} onSuspendMatch={suspendAgendaMatch} onOpenCallup={openAgendaCallup} onOpenBoard={openAgendaBoard} onOpenStats={(event) => { const completed = stats.some((match) => match.date === event.date && match.rival === event.rivalName && match.home === event.home); if (completed) { setSavedTab('estadisticas'); goToView('guardados') } else { setSelectedAgendaMatch(event); goToView('estadisticas') } }} />}
         {view === 'confirmaciones' && <ConvocatoriasPanel onDeleted={id=>setJourneys(list=>list.filter(j=>j.attendanceId!==id&&j.id!==id))} journeys={journeys} onOpenLegacy={id=>{const j=journeys.find(item=>item.id===id);if(j)loadSavedJourney(j);}}/>}
         {view === 'equipo' && <TeamView team={team} setTeam={setTeam} account={account} accounts={accounts} stores={stores} onPlayer={(id) => { setSelectedPlayerId(id); goToView('jugador') }} />}
+        {view === 'captacion' && <CoachCaptacionPanel players={scoutedPlayers} onChange={setScoutedPlayers} />}
         {view === 'convocatoria' && <>{callupBusy&&<p role="status" className="callups-success">Guardando convocatoria y preparando el enlace…</p>}{callupError&&<p role="alert" className="callups-error">{callupError}</p>}{!callupEventId&&<p className="callups-toolbar">Mensaje anterior guardado. Para activar confirmaciones, abre su partido desde la Agenda.</p>}<ConvocatoriaView form={form} setForm={setForm} rivales={rivales} rivalName={rivalName} fieldName={fieldName} message={displayMessage} copySuccess={copySuccess} onCopy={copyMessage} onWhatsApp={()=>void shareCallup('whatsapp')} onSave={saveJourney} onMatchTime={updateTime} onHomeAway={updateHome} /></>}
         {view === 'estadisticas' && <StatsView team={team} rivales={rivales} initialMatch={selectedAgendaMatch} onSave={(match) => { setStats((list) => [match, ...list]); setSelectedAgendaMatch(null); setSavedTab('estadisticas'); goToView('guardados') }} />}
         {view === 'guardados' && <SavedView tab={savedTab} setTab={setSavedTab} team={team} rivales={rivales} journeys={journeys.filter(j=>!j.attendanceId)} stats={stats} boards={boards} onTeam={() => goToView('equipo')} onOpenBoard={() => { openBoard('libre'); setLegacyBoard(true); }} onLoadJourney={loadSavedJourney} onDeleteJourney={(id) => setJourneys((list) => list.filter((j) => j.id !== id))} onDeleteStat={(id) => setStats((list) => list.filter((m) => m.id !== id))} onUpdateStat={(match) => setStats((list) => list.map((item) => item.id === match.id ? match : item))} onOpenPlayer={(id) => { setSelectedPlayerId(id); goToView('jugador') }} />}

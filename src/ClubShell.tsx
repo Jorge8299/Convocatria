@@ -34,6 +34,8 @@ import {
   X,
 } from "lucide-react";
 import { CoachApp } from "./App";
+import { ScoutingList, type ScoutedPlayer } from './CaptacionPanel';
+import { UpdateNotice } from './UpdateNotice';
 import { disablePush } from "./pushNotifications";
 import type { AgendaEvent, MatchAgendaEvent } from "./AgendaView";
 import {
@@ -437,7 +439,7 @@ export default function ClubShell() {
     </>
   );
   })();
-  return <ClubContext.Provider value={presentedClub}>{content}</ClubContext.Provider>;
+  return <ClubContext.Provider value={presentedClub}>{content}{bootstrap?.session && <UpdateNotice accountId={bootstrap.session.id} />}</ClubContext.Provider>;
 }
 
 function ImpersonationBanner({
@@ -1875,7 +1877,7 @@ function CoordinatorPanel({
   );
   const [coachFilter, setCoachFilter] = useState("all");
   const [tab, setTab] = useState<
-    "agenda" | "resumen" | "jugadores" | "partidos"
+    "agenda" | "resumen" | "jugadores" | "partidos" | "captacion"
   >(
     "resumen",
   );
@@ -1921,6 +1923,7 @@ function CoordinatorPanel({
         stats: getStored<StoredMatch[]>(stores, coach.id, "stats", []),
         rivals: getStored<StoredRival[]>(stores, coach.id, "rivals", []),
         agenda: getStored<AgendaEvent[]>(stores, coach.id, "agenda", []),
+        captacion: getStored<ScoutedPlayer[]>(stores, coach.id, "captacion", []),
       })),
     [coaches, stores],
   );
@@ -2103,6 +2106,10 @@ function CoordinatorPanel({
         ? selectedCoach
           ? `Jugadores de ${selectedCoach.teamLabel}`
           : "Jugadores de todo el club"
+        : tab === "captacion"
+          ? selectedCoach
+            ? `Captación de ${selectedCoach.teamLabel}`
+            : "Captación de todo el club"
         : selectedCoach
           ? `Partidos de ${selectedCoach.teamLabel}`
           : "Partidos de todo el club";
@@ -2478,7 +2485,7 @@ function CoordinatorPanel({
           )}
         </section>
         <div className="coordinator-tabs">
-          {(["resumen", "agenda", "jugadores", "partidos"] as const).map((value) => (
+          {(["resumen", "agenda", "jugadores", "partidos", "captacion"] as const).map((value) => (
             <button
               key={value}
               className={tab === value ? "active" : ""}
@@ -2907,6 +2914,11 @@ function CoordinatorPanel({
               <div className="inline-empty">No hay partidos registrados.</div>
             )}
           </div>
+        )}
+        {tab === "captacion" && (
+          <section className="coordinator-panel scouting-coordinator">
+            <ScoutingList players={filtered.flatMap(item => item.captacion)} />
+          </section>
         )}
       </main>
     </div>

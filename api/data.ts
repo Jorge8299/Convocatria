@@ -1,5 +1,5 @@
 import { ApiRequest, ApiResponse, fail, getSession, getSessionImpersonator, getSql, jsonBody, methodNotAllowed, readBody, setJsonBody } from './_lib/server.js';
-const AREAS = ['team','stats','journeys','rivals','boards','agenda'];
+const AREAS = ['team','stats','journeys','rivals','boards','agenda','captacion'];
 import { validBoard } from '../src/tactical/model.js';
 import { saveLegacyBoards, saveTacticalBoard } from './_lib/tactical-store.js';
 import { addAdminPlayer, deleteAdminPlayer } from './_lib/admin-player.js';

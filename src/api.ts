@@ -4,7 +4,7 @@ import { INITIAL_CLUB, OLIVA_CLUB_ID, slugifyClub, validClubEdit, type Club } fr
 import { prepareBoard, validBoard, type TacticalBoard } from './tactical/model';
 import type { TrainingAIContext, TrainingAIExercise, TrainingAISession } from './trainingAI';
 
-export type StoreArea = "team" | "stats" | "journeys" | "rivals" | "boards" | "agenda";
+export type StoreArea = "team" | "stats" | "journeys" | "rivals" | "boards" | "agenda" | "captacion";
 export interface CoordinatorMatchInput {
   date: string;
   startTime: string;
@@ -804,7 +804,7 @@ export function buildLegacySnapshot() {
   const stores: Array<{ accountId: string; area: StoreArea; data: unknown }> =
     [];
   for (const account of accounts) {
-    for (const area of ["team", "stats", "journeys", "rivals", "agenda"] as StoreArea[]) {
+    for (const area of ["team", "stats", "journeys", "rivals", "agenda", "captacion"] as StoreArea[]) {
       const raw = localStorage.getItem(`convo_account_${account.id}_${area}`);
       if (raw)
         stores.push({ accountId: account.id, area, data: JSON.parse(raw) });

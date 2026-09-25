@@ -409,6 +409,25 @@ export function AgendaView({
     }
   };
 
+  const saveGeneratedTraining = async (generated: TrainingAISession) => {
+    if (!draft || draft.type !== "training") return;
+    const generatedDraft: TrainingAgendaEvent = {
+      ...draft,
+      session: aiSessionToTrainingSession(generated),
+    };
+    setDraft(generatedDraft);
+    setTrainingSaving(true);
+    setTrainingMessage("");
+    try {
+      await onSaveTraining(generatedDraft);
+      setTrainingMessage("Entrenamiento con IA guardado correctamente.");
+    } catch (error) {
+      setTrainingMessage(error instanceof Error ? error.message : "No se pudo guardar el entrenamiento con IA.");
+    } finally {
+      setTrainingSaving(false);
+    }
+  };
+
   const matchIsCompleted = (event: MatchAgendaEvent) =>
     matches.some(
       (match) =>
@@ -714,6 +733,29 @@ export function AgendaView({
         )}
 
         {draft?.type === "training" && draft.assignedByCoordinator && (!draft.exceptionStatus || draft.exceptionStatus === "scheduled") && trainingPlannerEnabled && (
+          <div className="agenda-form">
+            <div className="assigned-training-heading">
+              <span><ShieldCheck size={16} /> ENTRENAMIENTO ASIGNADO POR COORDINACIÓN</span>
+              <strong>{draft.startTime}–{draft.endTime} · {draft.fieldName || "Campo pendiente"}</strong>
+              <small>{fieldZoneLabel(draft.fieldId, draft.zoneIds)} · {draft.recurrenceLabel || "Horario habitual"}</small>
+            </div>
+            {draft.notes && <p className="assigned-match-notes">{draft.notes}</p>}
+            <TrainingAIWizard
+              eventId={draft.id}
+              teamName={tacticalTeam?.name || "Equipo"}
+              category={categoryLabel}
+              format={footballStage && ["infantil", "cadete", "juvenil"].includes(footballStage) ? "F11" : "F8"}
+              initialPlayers={trainingSession?.playerCount || defaultPlayerCount}
+              initialGoalkeepers={tacticalTeam?.players.filter((player) => player.active && player.role === "portero").length || 0}
+              initialDuration={trainingMinutes(draft.startTime, draft.endTime)}
+              onApply={(generated) => void saveGeneratedTraining(generated)}
+            />
+            {trainingSaving && <div className="training-save-message" role="status">Guardando entrenamiento…</div>}
+            {!trainingSaving && trainingMessage && <div className="training-save-message" role="status">{trainingMessage}</div>}
+          </div>
+        )}
+
+        {false && draft?.type === "training" && draft.assignedByCoordinator && (!draft.exceptionStatus || draft.exceptionStatus === "scheduled") && trainingPlannerEnabled && (
           <div className="agenda-form">
             <div className="assigned-training-heading">
               <span><ShieldCheck size={16} /> ENTRENAMIENTO ASIGNADO POR COORDINACIÓN</span>
